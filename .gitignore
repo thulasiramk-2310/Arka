@@ -1,8 +1,13 @@
 CLAUDE.md
 output/
+OVMF_CODE_4M_f42.qcow2
+OVMF_VARS_4M_f42.qcow2
 OVMF_VARS_*_boot.qcow2
 OVMF_VARS.4m.fd
+OVMF_VARS.4m.fd.bak
 *.ppm
 sway-screenshot*
 sway-foot*
 config.toml
+arkad/target/
+.claude/
