@@ -1,0 +1,101 @@
+# ArkaOS Hyprland config
+
+# Monitor — auto-detect preferred resolution (works for QEMU virtio-vga and real hardware)
+monitor=,preferred,auto,1
+
+# Startup
+exec-once = swaybg -c #0f0f14
+exec-once = waybar
+
+# Environment
+env = WLR_NO_HARDWARE_CURSORS,1
+env = WLR_RENDERER_ALLOW_SOFTWARE,1
+env = MOZ_ENABLE_WAYLAND,1
+env = XCURSOR_SIZE,24
+
+# Input
+input {
+    kb_layout = us
+    follow_mouse = 1
+    sensitivity = 0
+    touchpad {
+        natural_scroll = false
+    }
+}
+
+# General
+general {
+    gaps_in = 4
+    gaps_out = 8
+    border_size = 2
+    col.active_border = rgba(1a3a5cee)
+    col.inactive_border = rgba(0f0f1444)
+    layout = dwindle
+    resize_on_border = true
+}
+
+# Decoration
+decoration {
+    rounding = 8
+    active_opacity = 1.0
+    inactive_opacity = 0.95
+    blur {
+        enabled = false
+    }
+    shadow {
+        enabled = true
+        range = 8
+        render_power = 2
+        color = rgba(00000088)
+    }
+}
+
+# Animations
+animations {
+    enabled = true
+    bezier = overshot, 0.05, 0.9, 0.1, 1.1
+    animation = windows,    1, 5, overshot, slide
+    animation = windowsOut, 1, 4, default,  popin 80%
+    animation = border,     1, 8, default
+    animation = fade,       1, 6, default
+    animation = workspaces, 1, 5, overshot, slidevert
+}
+
+# Layout
+dwindle {
+    pseudotile = true
+    preserve_split = true
+}
+
+# Keybinds
+$mod = SUPER
+bind = $mod,       Return,    exec,         foot
+bind = $mod,       B,         exec,         firefox
+bind = $mod SHIFT, Q,         killactive
+bind = $mod SHIFT, E,         exit
+bind = $mod,       V,         togglefloating
+bind = $mod,       F,         fullscreen
+
+# Focus
+bind = $mod, left,  movefocus, l
+bind = $mod, right, movefocus, r
+bind = $mod, up,    movefocus, u
+bind = $mod, down,  movefocus, d
+
+# Move windows
+bind = $mod SHIFT, left,  movewindow, l
+bind = $mod SHIFT, right, movewindow, r
+bind = $mod SHIFT, up,    movewindow, u
+bind = $mod SHIFT, down,  movewindow, d
+
+# Workspaces
+bind = $mod,       1, workspace,       1
+bind = $mod,       2, workspace,       2
+bind = $mod,       3, workspace,       3
+bind = $mod SHIFT, 1, movetoworkspace, 1
+bind = $mod SHIFT, 2, movetoworkspace, 2
+bind = $mod SHIFT, 3, movetoworkspace, 3
+
+# Mouse
+bindm = $mod, mouse:272, movewindow
+bindm = $mod, mouse:273, resizewindow

@@ -1,0 +1,30 @@
+* {
+    font-family: monospace;
+    font-size: 12px;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+}
+window#waybar {
+    background-color: #0f0f14;
+    color: #cccccc;
+}
+#workspaces button {
+    padding: 0 6px;
+    background-color: transparent;
+    color: #666666;
+    border-bottom: 2px solid transparent;
+}
+#workspaces button.active {
+    color: #ffffff;
+    background-color: #1a3a5c;
+    border-bottom: 2px solid #4a9eff;
+}
+#workspaces button:hover {
+    background-color: #1a1a24;
+    color: #cccccc;
+}
+#clock {
+    padding: 0 10px;
+    color: #cccccc;
+}

@@ -52,18 +52,20 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox
 
-# Graphical session: sway Wayland compositor
-RUN dnf install -y sway foot xorg-x11-server-Xwayland pipewire wireplumber \
-    pipewire-pulseaudio
+# Graphical session: Hyprland Wayland compositor
+RUN dnf install -y hyprland waybar swaybg foot xorg-x11-server-Xwayland \
+    pipewire wireplumber pipewire-pulseaudio
 
 # Autologin ram on tty1
 RUN mkdir -p /etc/systemd/system/getty@tty1.service.d && \
     printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin ram --noclear %%I $TERM\n' \
       > /etc/systemd/system/getty@tty1.service.d/autologin.conf
 
-# Sway config + autostart via /etc/skel (copied to home on first login)
-RUN mkdir -p /etc/skel/.config/sway
-COPY arkaos-sway-config /etc/skel/.config/sway/config
-COPY sway-autostart     /etc/skel/.bash_profile
+# Hyprland config + waybar + autostart via /etc/skel
+RUN mkdir -p /etc/skel/.config/hypr /etc/skel/.config/waybar
+COPY arkaos-hyprland-config    /etc/skel/.config/hypr/hyprland.conf
+COPY arkaos-waybar-config      /etc/skel/.config/waybar/config.jsonc
+COPY arkaos-waybar-style       /etc/skel/.config/waybar/style.css
+COPY sway-autostart            /etc/skel/.bash_profile
 
 RUN bootc container lint
