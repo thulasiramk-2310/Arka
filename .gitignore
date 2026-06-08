@@ -8,6 +8,6 @@ OVMF_VARS.4m.fd.bak
 *.ppm
 sway-screenshot*
 sway-foot*
-config.toml
+# config.toml tracked — remove from ignore
 arkad/target/
 .claude/

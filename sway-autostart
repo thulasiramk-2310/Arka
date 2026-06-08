@@ -1,7 +1,9 @@
 # Launch Hyprland on tty1 login
 if [[ $(tty) == /dev/tty1 ]]; then
     export WLR_NO_HARDWARE_CURSORS=1
+    export WLR_RENDERER=pixman
     export WLR_RENDERER_ALLOW_SOFTWARE=1
+    export LIBGL_ALWAYS_SOFTWARE=1
     export MOZ_ENABLE_WAYLAND=1
-    exec Hyprland
+    Hyprland
 fi

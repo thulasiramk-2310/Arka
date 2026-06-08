@@ -212,7 +212,7 @@ else
 fi
 printf "\n"
 
-spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
+spin "Creating user account" useradd -m -G wheel,video,input -s /bin/bash "$username"
 
 ( printf '%s:%s\n' "$username" "$password" | chpasswd ) &>/dev/null &
 spin_pid $! "Setting password"
@@ -224,7 +224,11 @@ if [[ "${al_choice,,}" != "n" ]]; then
             > /etc/systemd/system/getty@tty1.service.d/autologin.conf"
     al_note="${G}Autologin ON${E}  -- desktop loads automatically on boot"
 else
-    al_note="${Y}Autologin OFF${E} -- password required on every boot"
+    spin "Configuring login prompt" bash -c "
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --noclear -n -o $username %%I \$TERM\n' \
+            > /etc/systemd/system/getty@tty1.service.d/prefill.conf"
+    al_note="${Y}Autologin OFF${E} -- login prompt will ask only for your password"
 fi
 
 spin "Finalising" touch /var/lib/arkaos-firstboot-done

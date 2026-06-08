@@ -1,0 +1,5 @@
+# bootc-image-builder config
+# No users here — arkaos-firstboot.service handles account creation on first boot.
+
+[customizations.kernel]
+append = "quiet loglevel=1"
