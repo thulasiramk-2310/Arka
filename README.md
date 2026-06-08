@@ -16,7 +16,7 @@ Built on the [bootc](https://containers.github.io/bootc/) image model — the OS
 | Base | `fedora-bootc:42` — immutable rootfs via composefs/ostree |
 | Privacy daemon | `arkad` — Rust, static musl. Enforces 4 privacy controls on boot and re-enforces every 60 s |
 | Browser sandbox | Firefox wrapped in bubblewrap — home, /etc, D-Bus hidden; only ~/Downloads exposed |
-| Desktop | sway Wayland compositor, autologin on tty1, foot terminal |
+| Desktop | Hyprland Wayland compositor, firstboot wizard → autologin, foot terminal |
 | Boot integrity | TPM2 PCRs 0–10 measured (firmware → GRUB → shim). PCRs 11–15 blocked — see Limitations |
 
 **arkad enforces:**
@@ -43,7 +43,8 @@ Built on the [bootc](https://containers.github.io/bootc/) image model — the OS
 │                                                                               │
 ├───────────────────────────── sway desktop ───────────────────────────────────┤
 │                                                                               │
-│  tty1 autologin → .bash_profile → exec sway                                 │
+│  first boot: setup wizard → useradd + autologin config → reboot
+  tty1 autologin → .bash_profile → exec Hyprland                                 │
 │  Super+Return = foot terminal    Super+B = sandboxed Firefox                │
 │                                                                               │
 ├──────────────────────────────── arkad ───────────────────────────────────────┤
@@ -198,7 +199,9 @@ qemu-system-x86_64 \
   -no-reboot
 ```
 
-The GTK window shows the sway desktop. Serial console: `telnet localhost 4445` — login `ram` / `arkaos`.
+The GTK window opens. On **first boot** the setup wizard runs on tty1 — enter your username and password. The system reboots into your Hyprland desktop automatically.
+
+> **Note:** omit `-no-reboot` on first boot so the wizard reboot works. Add it back for subsequent boots if you want QEMU to exit on shutdown.
 
 ---
 
@@ -265,8 +268,12 @@ arkad/
   arkad.service          systemd unit
   arkad.toml             /etc/arkad/arkad.toml defaults
 arkaos-firefox           bwrap wrapper (IS /usr/bin/firefox in the deployed image)
-arkaos-sway-config       sway config → /etc/skel/.config/sway/config
-sway-autostart           .bash_profile → /etc/skel/.bash_profile
+arkaos-hyprland-config   Hyprland config → /etc/skel/.config/hypr/hyprland.conf
+arkaos-waybar-config     waybar config → /etc/skel/.config/waybar/config.jsonc
+arkaos-waybar-style      waybar CSS → /etc/skel/.config/waybar/style.css
+sway-autostart           .bash_profile → /etc/skel/.bash_profile (launches Hyprland)
+arkaos-firstboot         first-boot setup wizard (username/password prompt)
+arkaos-firstboot.service systemd unit — runs wizard once before getty@tty1
 config.toml              bootc-image-builder config (qcow2, XFS rootfs)
 PHASE3-FINDINGS.md       measured-boot investigation — what's live, what's blocked
 PHASE4-SANDBOX.md        sandbox model, isolation proof, scope
