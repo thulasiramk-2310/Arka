@@ -18,13 +18,35 @@ Built on bootc immutable image model. Stack: NASM/C/Rust over a Linux LTS base.
 Build runs INSIDE the podman machine (virtiofs mounts /home/Ram at /var/home/Ram):
 1. `podman machine ssh podman-machine-default "podman build --pull=newer -t localhost/arkaos:dev /var/home/Ram/arkaos/"`
 2. `podman machine ssh ... podman run --rm --privileged -v /var/lib/containers/storage:/var/lib/containers/storage -v .../config.toml:/config.toml:ro -v .../output:/output quay.io/centos-bootc/bootc-image-builder:latest --type qcow2 --rootfs xfs localhost/arkaos:dev`
-3. Boot test: `qemu-system-x86_64 -enable-kvm -m 2048 -cpu host -smp 2 -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd -drive if=pflash,format=raw,file=OVMF_VARS.4m.fd -drive file=output/qcow2/disk.qcow2,format=qcow2,if=virtio -nographic -serial telnet::4445,server,nowait -monitor telnet::4444,server,nowait -no-reboot`
+3. Boot test (graphical):
+   ```
+   cp OVMF_VARS_4M_f42.qcow2 OVMF_VARS_4M_f42_boot.qcow2
+   qemu-system-x86_64 -enable-kvm -m 4096 -cpu host -smp 2 -machine q35 \
+     -drive if=pflash,format=qcow2,readonly=on,file=OVMF_CODE_4M_f42.qcow2 \
+     -drive if=pflash,format=qcow2,file=OVMF_VARS_4M_f42_boot.qcow2 \
+     -drive file=output/qcow2/disk.qcow2,format=qcow2,if=virtio \
+     -device virtio-vga -display gtk -usb -device usb-tablet \
+     -serial telnet::4445,server,nowait -monitor telnet::4444,server,nowait -no-reboot
+   ```
 4. Serial console: `telnet localhost 4445` — login ram/arkaos
+
+### One-time OVMF setup
+Fedora 42 GRUB crashes Arch's edk2. Extract Fedora's OVMF once:
+```
+podman machine ssh podman-machine-default \
+  "podman run --rm docker.io/fedora:42 bash -c \
+  'dnf install -y edk2-ovmf -q &>/dev/null; base64 /usr/share/edk2/ovmf/OVMF_CODE_4M.qcow2'" \
+  | base64 -d > OVMF_CODE_4M_f42.qcow2
+podman machine ssh podman-machine-default \
+  "podman run --rm docker.io/fedora:42 bash -c \
+  'dnf install -y edk2-ovmf -q &>/dev/null; base64 /usr/share/edk2/ovmf/OVMF_VARS_4M.qcow2'" \
+  | base64 -d > OVMF_VARS_4M_f42.qcow2
+```
 
 ## Containerfile structure
 Multi-stage build:
 - Stage 1: `rust:alpine` — compiles arkad statically (musl, `x86_64-unknown-linux-musl`)
-- Stage 2: `centos-bootc:stream10` — installs arkad binary + unit, applies privacy configs
+- Stage 2: `fedora-bootc:42` — installs arkad binary + unit, sway compositor, Firefox sandbox
 
 ## arkad (Phase 2 — complete, verified)
 Rust privacy daemon at `arkad/`. Four enforcers, all verified active in booted VM:
@@ -43,7 +65,8 @@ Config: /etc/arkad/arkad.toml — serde+toml with secure defaults baked in (work
 - bootc-image-builder needs /var/lib/containers/storage mount
 - Missing DefaultRootFs -> /usr/lib/bootc/install/00-defaults.toml with [install.filesystem.root] type="xfs"
 - Output dir perms: clean from HOST side (virtiofs mount, can't chmod from inside machine)
-- GRUB/edk2 page-fault: Fedora 42 GRUB crashes Arch's May 2026 edk2. Fixed by switching base to centos-bootc:stream10 — no bootloader override needed.
+- GRUB/edk2 page-fault: Fedora 42 GRUB crashes Arch's edk2 (202605). Fixed by using Fedora's own edk2-ovmf (OVMF_CODE_4M_f42.qcow2 + OVMF_VARS_4M_f42.qcow2) extracted via podman container — see One-time OVMF setup above. smm=off does NOT fix it.
+- sway outputs stuck active=false: `-device virtio-gpu` doesn't auto-connect outputs in wlroots. Fix: use `-device virtio-vga` instead. Also add `output * mode 1280x800 pos 0 0` to sway config.
 - `bootloader = "systemd"` in 00-defaults.toml fails in bootc-image-builder (bootupd must be in the osbuild env, not just the image). Default GRUB works fine on CentOS Stream 10.
 - podman machine dies under memory pressure (two QEMU VMs + image build). Kill boot-test VMs before running bootc-image-builder.
 - Multi-stage build: can't use sudo on host for musl toolchain; build arkad inside rust:alpine container instead.
@@ -106,6 +129,25 @@ config, no machine-id), /run tmpfs (no D-Bus), ~/Downloads bind-only re-exposure
 Verified: sentinel ~/secret.txt unreadable inside sandbox; /etc/NetworkManager and
 /etc/arkad absent inside sandbox; arkad active; composefs ro.
 See PHASE4-SANDBOX.md for full proof output.
+
+## Phase 5 — Graphical Desktop (complete, verified)
+
+Approach: sway Wayland compositor + autologin on tty1. Base switched from
+centos-bootc:stream10 to fedora-bootc:42 (sway available in Fedora repos).
+
+Components installed: `sway foot xorg-x11-server-Xwayland pipewire wireplumber pipewire-pulseaudio`
+
+Autologin: `getty@tty1.service.d/autologin.conf` — agetty `--autologin ram`
+Autostart: `~/.bash_profile` (from /etc/skel) — `if tty == /dev/tty1; exec sway`
+Sway config: `~/.config/sway/config` (from /etc/skel) — Super+Return=foot, Super+B=firefox
+
+QEMU requirements:
+- `-device virtio-vga` (NOT virtio-gpu — that leaves outputs active=false in wlroots)
+- Fedora's OVMF firmware (Arch's edk2 202605 crashes Fedora 42 GRUB)
+- `-display gtk` for graphical window
+
+Verified: sway PID active, Virtual-1 output active=true, 1280x800 mode, swaybg + swaybar running.
+Firefox bwrap sandbox passes Wayland socket through `/run/user/UID/wayland-0`.
 
 ## Style
 Ram wants senior-level judgment calls, no hand-holding, brief direct answers.

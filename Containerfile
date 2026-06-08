@@ -6,7 +6,7 @@ WORKDIR /build
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Stage 2: bootc image
-FROM quay.io/centos-bootc/centos-bootc:stream10
+FROM quay.io/fedora/fedora-bootc:42
 
 RUN echo "arkaos-dev" > /etc/arkaos-release
 
@@ -44,13 +44,24 @@ RUN chmod 755 /usr/bin/arkad && \
     systemctl enable arkad.service
 
 # Phase 4: bubblewrap-sandboxed Firefox
-# Fix 1: interception at build time — wrapper replaces /usr/bin/firefox in the
-#         image layer; composefs makes it read-only at runtime, so no escape hatch.
-# Fix 3: wrapper uses /etc allowlist (see arkaos-firefox), not full /etc bind.
 RUN dnf install -y firefox bubblewrap
 COPY arkaos-firefox /usr/bin/firefox-sandbox
 RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox
+
+# Graphical session: sway Wayland compositor
+RUN dnf install -y sway foot xorg-x11-server-Xwayland pipewire wireplumber \
+    pipewire-pulseaudio
+
+# Autologin ram on tty1
+RUN mkdir -p /etc/systemd/system/getty@tty1.service.d && \
+    printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin ram --noclear %%I $TERM\n' \
+      > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+
+# Sway config + autostart via /etc/skel (copied to home on first login)
+RUN mkdir -p /etc/skel/.config/sway
+COPY arkaos-sway-config /etc/skel/.config/sway/config
+COPY sway-autostart     /etc/skel/.bash_profile
 
 RUN bootc container lint

@@ -46,7 +46,16 @@ BWRAP_ARGS=(
     --proc /proc
     # Writable scratch areas
     --tmpfs /tmp
+    # /run: fresh tmpfs, then thread the Wayland socket back through so Firefox
+    # can connect to the compositor. D-Bus session bus stays hidden.
     --tmpfs /run
+    --dir /run/user
+    --dir /run/user/"${UID}"
+    --bind-try /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}" \
+               /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}"
+    --setenv XDG_RUNTIME_DIR /run/user/"${UID}"
+    --setenv WAYLAND_DISPLAY "${WAYLAND_DISPLAY:-wayland-0}"
+    --setenv MOZ_ENABLE_WAYLAND 1
     # Home isolation: tmpfs hides all of /home, then re-expose Downloads only
     --tmpfs /home
     --tmpfs /root
