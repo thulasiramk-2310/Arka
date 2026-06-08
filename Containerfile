@@ -56,10 +56,11 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
 RUN dnf install -y hyprland waybar swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio
 
-# Autologin ram on tty1
-RUN mkdir -p /etc/systemd/system/getty@tty1.service.d && \
-    printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin ram --noclear %%I $TERM\n' \
-      > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+# First-boot setup wizard — prompts for username+password, configures autologin
+COPY arkaos-firstboot         /usr/libexec/arkaos-firstboot
+COPY arkaos-firstboot.service /usr/lib/systemd/system/arkaos-firstboot.service
+RUN chmod 755 /usr/libexec/arkaos-firstboot && \
+    systemctl enable arkaos-firstboot.service
 
 # Hyprland config + waybar + autostart via /etc/skel
 RUN mkdir -p /etc/skel/.config/hypr /etc/skel/.config/waybar

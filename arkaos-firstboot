@@ -1,0 +1,50 @@
+#!/bin/bash
+# Runs once on first boot via arkaos-firstboot.service
+# Opens tty1, collects username+password, creates account, configures autologin.
+
+exec </dev/tty1 >/dev/tty1 2>&1
+clear
+
+printf '\n'
+printf '    \033[1;34m╔════════════════════════════════════════╗\033[0m\n'
+printf '    \033[1;34m║           Welcome to ArkaOS            ║\033[0m\n'
+printf '    \033[1;34m║      Privacy-first desktop Linux       ║\033[0m\n'
+printf '    \033[1;34m╚════════════════════════════════════════╝\033[0m\n'
+printf '\n'
+printf '    Create your user account to get started.\n'
+printf '\n'
+
+# Username
+while true; do
+    read -rp '    Username: ' username
+    if [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]]; then
+        break
+    fi
+    printf '    \033[31m→ Lowercase letters, numbers, _ or - only (must start with a letter).\033[0m\n'
+done
+
+# Password
+while true; do
+    read -rsp '    Password: ' password; printf '\n'
+    read -rsp '    Confirm:  ' confirm;  printf '\n'
+    if [[ -n "$password" && "$password" == "$confirm" ]]; then
+        break
+    fi
+    printf '    \033[31m→ Passwords do not match or are empty — try again.\033[0m\n'
+done
+
+printf '\n    Setting up your account...\n'
+
+useradd -m -G wheel -s /bin/bash "$username"
+printf '%s:%s' "$username" "$password" | chpasswd
+
+# Point autologin at the new user
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
+    "$username" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+
+touch /var/lib/arkaos-firstboot-done
+
+printf '    \033[32mDone! Rebooting into your desktop...\033[0m\n\n'
+sleep 2
+systemctl reboot

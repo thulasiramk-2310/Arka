@@ -1,0 +1,18 @@
+[Unit]
+Description=ArkaOS First Boot User Setup
+DefaultDependencies=no
+After=multi-user.target local-fs.target
+Before=getty@tty1.service
+ConditionPathExists=!/var/lib/arkaos-firstboot-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/arkaos-firstboot
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
