@@ -1,0 +1,71 @@
+#!/bin/bash
+# ArkaOS Settings — run with: sudo arkaos-settings (or Super+S in Hyprland)
+
+[[ $EUID -ne 0 ]] && exec sudo "$0" "$@"
+
+B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
+Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
+
+AUTOLOGIN_CONF=/etc/systemd/system/getty@tty1.service.d/autologin.conf
+
+autologin_on() { [[ -f "$AUTOLOGIN_CONF" ]] && grep -q 'autologin' "$AUTOLOGIN_CONF"; }
+
+autologin_user() {
+    if [[ -f "$AUTOLOGIN_CONF" ]]; then
+        grep -oP '(?<=--autologin )\S+' "$AUTOLOGIN_CONF"
+    else
+        echo "${SUDO_USER:-$USER}"
+    fi
+}
+
+enable_autologin() {
+    local user; user=$(autologin_user)
+    mkdir -p "$(dirname "$AUTOLOGIN_CONF")"
+    printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
+        "$user" > "$AUTOLOGIN_CONF"
+    systemctl daemon-reload 2>/dev/null
+}
+
+disable_autologin() {
+    rm -f "$AUTOLOGIN_CONF"
+    systemctl daemon-reload 2>/dev/null
+}
+
+while true; do
+    clear
+    printf '\n'
+    printf "    ${C}${B}ArkaOS${E}  ${D}Settings${E}\n\n"
+    printf "    ${D}┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄${E}\n\n"
+
+    if autologin_on; then
+        al_badge="${G}${B} ON ${E}"
+        al_hint="boot goes straight to desktop"
+    else
+        al_badge="${R}${B} OFF${E}"
+        al_hint="password required on each boot"
+    fi
+
+    printf "    ${B}[1]${E}  Autologin     $al_badge  ${D}$al_hint${E}\n\n"
+
+    printf "    ${D}┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄${E}\n"
+    printf "    ${D}Q  quit${E}\n\n"
+    printf "    ${C}▸${E} "
+    read -r choice
+
+    case "${choice,,}" in
+        1)
+            if autologin_on; then
+                disable_autologin
+                printf "\n    ${G}✓${E}  Autologin disabled — password required from next boot.\n"
+            else
+                enable_autologin
+                printf "\n    ${G}✓${E}  Autologin enabled for ${C}$(autologin_user)${E} — takes effect next boot.\n"
+            fi
+            printf "\n    Press Enter to continue..."
+            read -r
+            ;;
+        q|quit|"")
+            break
+            ;;
+    esac
+done

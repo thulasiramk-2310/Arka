@@ -9,7 +9,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 FROM quay.io/fedora/fedora-bootc:42
 
 RUN echo "arkaos-dev" > /etc/arkaos-release && \
-    printf 'NAME="ArkaOS"\nPRETTY_NAME="ArkaOS 0.1 — by Thulasi Ram K"\nID=arkaos\nID_LIKE=fedora\nVERSION="0.1"\nVERSION_ID="0.1"\nHOME_URL="https://github.com/thulasiramk-2310/Arka"\nBUG_REPORT_URL="https://github.com/thulasiramk-2310/Arka/issues"\n' \
+    printf 'NAME="ArkaOS"\nPRETTY_NAME="ArkaOS 0.1"\nID=arkaos\nID_LIKE=fedora\nVERSION="0.1"\nVERSION_ID="0.1"\nHOME_URL="https://github.com/thulasiramk-2310/Arka"\nBUG_REPORT_URL="https://github.com/thulasiramk-2310/Arka/issues"\n' \
       > /etc/os-release
 
 RUN mkdir -p /etc/NetworkManager/conf.d && \
@@ -52,15 +52,19 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox
 
-# Graphical session: Hyprland Wayland compositor
+# Graphical session: Hyprland + launcher + file manager
 RUN dnf install -y hyprland waybar swaybg foot xorg-x11-server-Xwayland \
-    pipewire wireplumber pipewire-pulseaudio
+    pipewire wireplumber pipewire-pulseaudio \
+    wofi thunar
 
-# First-boot setup wizard — prompts for username+password, configures autologin
+# First-boot setup wizard + settings utility
 COPY arkaos-firstboot         /usr/libexec/arkaos-firstboot
 COPY arkaos-firstboot.service /usr/lib/systemd/system/arkaos-firstboot.service
-RUN chmod 755 /usr/libexec/arkaos-firstboot && \
-    systemctl enable arkaos-firstboot.service
+COPY arkaos-settings          /usr/bin/arkaos-settings
+RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
+    systemctl enable arkaos-firstboot.service && \
+    echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
+      > /etc/sudoers.d/99-arkaos-settings
 
 # Hyprland config + waybar + autostart via /etc/skel
 RUN mkdir -p /etc/skel/.config/hypr /etc/skel/.config/waybar

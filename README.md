@@ -4,8 +4,7 @@ Privacy-first immutable desktop Linux. The GrapheneOS-for-desktop gap.
 
 Built on the [bootc](https://containers.github.io/bootc/) image model — the OS is an OCI container image. Updates are atomic, the rootfs is read-only at runtime via composefs, and the entire system is reproducible from a `Containerfile`.
 
-**Author:** Thulasi Ram K — [github.com/thulasiramk-2310](https://github.com/thulasiramk-2310)
-**License:** GPL-3.0
+by [Thulasiram K](https://github.com/thulasiramk-2310) · GPL-3.0
 
 ---
 

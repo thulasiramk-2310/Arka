@@ -1,105 +1,107 @@
 #!/bin/bash
 exec </dev/tty1 >/dev/tty1 2>&1
 
-B='\033[1m'
-C='\033[1;36m'
-BL='\033[1;34m'
-G='\033[1;32m'
-Y='\033[1;33m'
-R='\033[1;31m'
-D='\033[2m'
-E='\033[0m'
+B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
+Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
-spinner() {
-    local msg="$1"
-    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    for _ in $(seq 1 20); do
-        for i in $(seq 0 9); do
-            printf "\r    ${C}${frames:$i:1}${E}  %s..." "$msg"
-            sleep 0.05
+spin_wait() {
+    local pid=$1 msg="$2" fr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    while kill -0 "$pid" 2>/dev/null; do
+        for i in 0 1 2 3 4 5 6 7 8 9; do
+            printf "\r    ${C}${fr:$i:1}${E}  %s" "$msg"
+            sleep 0.07
         done
     done
-    printf "\r    ${G}✓${E}  %-36s\n" "$msg"
+    wait "$pid" 2>/dev/null
+    printf "\r    ${G}✓${E}  %-44s\n" "$msg"
+}
+
+reveal() {
+    printf "    %s\n" "$1"
+    sleep 0.18
 }
 
 clear
 printf '\n\n'
-printf "${C}"
-printf '    ░█████╗░██████╗░██╗░░██╗░█████╗░░█████╗░░██████╗\n'
-printf '    ██╔══██╗██╔══██╗██║░██╔╝██╔══██╗██╔══██╗██╔════╝\n'
-printf '    ███████║██████╔╝█████╔╝░███████║██║░░██║╚█████╗░\n'
-printf '    ██╔══██║██╔══██╗██╔═██╗░██╔══██║██║░░██║░╚═══██╗\n'
-printf '    ██║░░██║██║░░██║██║░╚██╗██║░░██║╚█████╔╝██████╔╝\n'
-printf '    ╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚═╝░╚════╝░╚═════╝\n'
-printf "${E}\n"
-printf "    ${BL}┌─────────────────────────────────────────────────┐${E}\n"
-printf "    ${BL}│${E}  ${B}Privacy-first immutable desktop Linux${E}            ${BL}│${E}\n"
-printf "    ${BL}│${E}  ${D}Secure by design. Built on bootc + composefs.${E}    ${BL}│${E}\n"
-printf "    ${BL}└─────────────────────────────────────────────────┘${E}\n\n"
-printf "    ${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${E}\n"
-printf "    ${Y}FIRST BOOT SETUP${E}  ${D}Create your account${E}\n"
-printf "    ${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${E}\n\n"
+printf "    ${BL}┌─────────────────────────────────────────────────────┐${E}\n"
+printf "    ${BL}│${E}                                                     ${BL}│${E}\n"
+printf "    ${BL}│${E}      ${C}${B}▓▒░  A R K A O S  ░▒▓${E}                         ${BL}│${E}\n"
+printf "    ${BL}│${E}      ${D}P R I V A C Y - F I R S T   L I N U X${E}         ${BL}│${E}\n"
+printf "    ${BL}│${E}                                                     ${BL}│${E}\n"
+printf "    ${BL}└─────────────────────────────────────────────────────┘${E}\n\n"
+
+printf "    ${D}Protections active on this system:${E}\n\n"
+reveal "${G}  [✓]${E} ${B}rootfs${E}   composefs — read-only, tamper-evident"
+reveal "${G}  [✓]${E} ${B}DNS${E}      encrypted DNS-over-TLS → Quad9  9.9.9.9"
+reveal "${G}  [✓]${E} ${B}MAC${E}      randomised per connection (WiFi + ethernet)"
+reveal "${G}  [✓]${E} ${B}IPv6${E}     privacy extensions (temp addresses)"
+reveal "${G}  [✓]${E} ${B}browser${E}  Firefox isolated in bubblewrap sandbox"
+printf "\n"
+
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+printf "    ${Y}ACCOUNT SETUP${E}\n"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n\n"
 
 while true; do
-    printf "    ${C}▸${E} ${B}Username:${E} "
+    printf "    ${C}▸${E} Username: "
     read -r username
-    if [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]]; then
-        printf "    ${G}  ✓ Username accepted${E}\n\n"
-        break
-    fi
+    [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { printf "    ${G}  ✓${E}\n\n"; break; }
     printf "    ${R}  ✗ Lowercase letters/numbers/_ only, must start with a letter${E}\n\n"
 done
 
 while true; do
-    printf "    ${C}▸${E} ${B}Password:${E} "
-    read -rsp "" password; printf '\n'
-    if [[ -z "$password" ]]; then
-        printf "    ${R}  ✗ Password cannot be empty${E}\n\n"
-        continue
-    fi
-    printf "    ${C}▸${E} ${B}Confirm: ${E} "
-    read -rsp "" confirm; printf '\n'
-    if [[ "$password" == "$confirm" ]]; then
-        printf "    ${G}  ✓ Password set${E}\n\n"
-        break
-    fi
+    printf "    ${C}▸${E} Password: "; read -rsp "" password; printf '\n'
+    [[ -z "$password" ]] && { printf "    ${R}  ✗ Password cannot be empty${E}\n\n"; continue; }
+    printf "    ${C}▸${E} Confirm:  "; read -rsp "" confirm;  printf '\n'
+    [[ "$password" == "$confirm" ]] && { printf "    ${G}  ✓${E}\n\n"; break; }
     printf "    ${R}  ✗ Passwords do not match — try again${E}\n\n"
 done
 
-printf "    ${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${E}\n"
-printf "    ${Y}CONFIGURING YOUR SYSTEM${E}\n\n"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+printf "    ${Y}AUTOLOGIN${E}\n"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n\n"
+printf "    Boot straight to your desktop without a password prompt?\n\n"
+printf "    ${G}Y${E}  log in automatically on boot\n"
+printf "       ${D}best for: personal laptop, single-user machine${E}\n\n"
+printf "    ${R}N${E}  ask for password on each boot\n"
+printf "       ${D}best for: shared machine, extra security${E}\n\n"
+printf "    ${D}You can toggle this any time with${E} ${C}arkaos-settings${E} ${D}(Super+S)${E}\n\n"
+printf "    ${C}▸${E} Enable autologin? [Y/n]: "
+read -r al_choice
+printf "\n"
 
-useradd -m -G wheel -s /bin/bash "$username" 2>/dev/null
-spinner "Creating user account"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+printf "    ${Y}CONFIGURING${E}\n\n"
 
-printf '%s:%s' "$username" "$password" | chpasswd 2>/dev/null
-spinner "Setting credentials"
+useradd -m -G wheel -s /bin/bash "$username" &>/dev/null &
+spin_wait $! "Creating user account"
 
-mkdir -p /etc/systemd/system/getty@tty1.service.d
-printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
-    "$username" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
-spinner "Enabling autologin for $username"
+printf '%s:%s' "$username" "$password" | chpasswd &>/dev/null &
+spin_wait $! "Setting password"
 
-touch /var/lib/arkaos-firstboot-done
-spinner "Finalizing setup"
+if [[ "${al_choice,,}" != "n" ]]; then
+    (
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
+            "$username" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+    ) &
+    spin_wait $! "Enabling autologin"
+    al_note="${G}autologin on${E}"
+else
+    al_note="${Y}password login${E}"
+fi
 
-printf '\n'
-printf "    ${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${E}\n"
-printf "    ${G}${B}All done!${E}  Welcome aboard, ${C}${username}${E}.\n\n"
+touch /var/lib/arkaos-firstboot-done &
+spin_wait $! "Finalising setup"
 
-printf "    ${D}Your Hyprland desktop shortcuts:${E}\n"
-printf "    ${BL}  Super + Enter${E}    open terminal\n"
-printf "    ${BL}  Super + B${E}        launch Firefox  ${D}(sandboxed)${E}\n"
-printf "    ${BL}  Super + 1-9${E}      switch workspace\n"
-printf "    ${BL}  Super+Shift+Q${E}    close window\n\n"
-
-printf "    ${D}Privacy protections active on every boot:${E}\n"
-printf "    ${C}  •${E} MAC randomisation  ${D}(WiFi + ethernet)${E}\n"
-printf "    ${C}  •${E} DNS-over-TLS       ${D}(Quad9 — 9.9.9.9)${E}\n"
-printf "    ${C}  •${E} IPv6 privacy extensions\n"
-printf "    ${C}  •${E} Firefox in bubblewrap sandbox\n\n"
-
-printf "    ${D}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${E}\n"
+printf "\n"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+printf "    ${G}${B}Ready!${E}  ${D}Welcome,${E} ${C}${username}${E}  ·  $al_note\n\n"
+printf "    ${D}Desktop shortcuts${E}\n"
+printf "    ${BL}  Super+Enter${E}   terminal       ${BL}Super+Space${E}  app launcher\n"
+printf "    ${BL}  Super+B${E}       browser         ${BL}Super+E${E}      file manager\n"
+printf "    ${BL}  Super+S${E}       settings        ${BL}Super+1-9${E}    workspaces\n\n"
+printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
 printf "    ${Y}⟳  Rebooting into your desktop in 5 seconds...${E}\n\n"
 sleep 5
 systemctl reboot

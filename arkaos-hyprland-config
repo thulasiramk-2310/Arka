@@ -67,10 +67,18 @@ dwindle {
     preserve_split = true
 }
 
+# Floating windows
+windowrulev2 = float,  title:^(ArkaOS Settings)$
+windowrulev2 = size  520 380, title:^(ArkaOS Settings)$
+windowrulev2 = center, title:^(ArkaOS Settings)$
+
 # Keybinds
 $mod = SUPER
-bind = $mod,       Return,    exec,         foot
-bind = $mod,       B,         exec,         firefox
+bind = $mod,       Return,    exec,  foot
+bind = $mod,       B,         exec,  firefox
+bind = $mod,       Space,     exec,  wofi --show drun
+bind = $mod,       E,         exec,  thunar
+bind = $mod,       S,         exec,  foot --title "ArkaOS Settings" -e sudo arkaos-settings
 bind = $mod SHIFT, Q,         killactive
 bind = $mod SHIFT, E,         exit
 bind = $mod,       V,         togglefloating
