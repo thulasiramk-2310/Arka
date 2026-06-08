@@ -7,30 +7,35 @@ echo 0 > /proc/sys/kernel/printk 2>/dev/null || true
 B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
 Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
-# Detect terminal dimensions
-COLS=$(tput cols 2>/dev/null || echo 80)
+# Detect terminal size
+COLS=$(tput cols  2>/dev/null || echo 80)
 ROWS=$(tput lines 2>/dev/null || echo 24)
 
+LW=18                                     # left inner width (fixed)
+RW=$(( COLS - LW - 3 ))                   # right inner width (adaptive)
+[[ $RW -lt 30 ]] && RW=30
+
+# Strip ANSI escapes then pad to width — $'\033' is the literal ESC char
 pad() {
-    local v; v=$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*m//g')
-    local p=$(( $2 - ${#v} )); [[ $p -lt 0 ]] && p=0
+    local raw; raw=$(printf '%s' "$1" | sed $'s/\033\[[0-9;]*m//g')
+    local p=$(( $2 - ${#raw} )); [[ $p -lt 0 ]] && p=0
     printf '%s%*s' "$1" "$p" ""
 }
 
-# ── Wide layout (>= 80 cols): split panel ────────────────────────────────────
-
-LW=18                          # left inner width
-RW=$(( COLS - LW - 3 ))       # right inner width (3 = left | + mid | + right |)
-[[ $RW -lt 30 ]] && RW=30
-
 row() { printf "${BL}|${E}$(pad "$1" $LW)${BL}|${E}$(pad "$2" $RW)${BL}|${E}\n"; }
 
-# top/bottom border strings
-_hline() { printf '%*s' "$1" '' | tr ' ' '='; }
-TOP_BOT() {
-    printf "${BL}+$(_hline $LW)+$(_hline $RW)+${E}\n"
+border() {
+    local eq_l eq_r
+    eq_l=$(printf '%*s' $LW  '' | tr ' ' '=')
+    eq_r=$(printf '%*s' $RW  '' | tr ' ' '=')
+    printf "${BL}+%s+%s+${E}\n" "$eq_l" "$eq_r"
 }
 
+# Separator line — exactly RW visible chars (3 spaces + dashes)
+_make_sep() { printf '   %*s' $(( RW - 3 )) '' | tr ' ' '-'; }
+SEP=$(_make_sep)
+
+# Left column (20 rows, static)
 declare -a L=(
     ""
     "  ${C}${B}ARKAOS${E}"
@@ -54,31 +59,27 @@ declare -a L=(
     ""
 )
 
-SEP() { pad "   $(_hline $(( RW - 4 )))" $RW; }
-
 draw_wide() {
     clear
-    TOP_BOT
+    border
     local args=("$@")
-    local total=${#L[@]}
-    for (( i=0; i<total; i++ )); do row "${L[$i]}" "${args[$i]:-}"; done
-    TOP_BOT
+    for i in "${!L[@]}"; do row "${L[$i]}" "${args[$i]:-}"; done
+    border
 }
 
-# ── Narrow fallback (< 80 cols): single column ───────────────────────────────
-
 draw_narrow() {
-    # $1 = step title, $2..N = content lines
+    # narrow: single-column, $1=title, rest=content lines
     clear
     local title="$1"; shift
-    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
-    printf "${BL}|${E}$(pad "  ${C}${B}ARKAOS${E}" $(( COLS - 2 )))${BL}|${E}\n"
-    printf "${BL}|${E}$(pad "  ${D}$title${E}" $(( COLS - 2 )))${BL}|${E}\n"
-    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
+    local w=$(( COLS - 2 ))
+    local eq; eq=$(printf '%*s' $w '' | tr ' ' '=')
+    printf "${BL}+%s+${E}\n" "$eq"
+    printf "${BL}|${E}$(pad "  ${C}${B}ARKAOS${E}  ${D}--  %s${E}" $w)${BL}|${E}\n" "$title"
+    printf "${BL}+%s+${E}\n" "$eq"
     for line in "$@"; do
-        printf "${BL}|${E}$(pad "$line" $(( COLS - 2 )))${BL}|${E}\n"
+        printf "${BL}|${E}$(pad "$line" $w)${BL}|${E}\n"
     done
-    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
+    printf "${BL}+%s+${E}\n" "$eq"
 }
 
 draw_panel() {
@@ -97,7 +98,6 @@ spin_pid() {
     wait "$pid" 2>/dev/null
     printf "\r   ${G}OK${E} %-56s\n" "$msg"
 }
-
 spin() { local msg="$1"; shift; "$@" &>/dev/null & spin_pid $! "$msg"; }
 
 # ── Step 1: username ─────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ while true; do
         draw_wide \
             "" \
             "   ${Y}ACCOUNT SETUP${E}                          ${D}1 / 3${E}" \
-            "   $(SEP)" \
+            "$SEP" \
             "" \
             "   Create a username for your account." \
             "   ${D}Lowercase letters, numbers, _ or -${E}" \
@@ -132,7 +132,7 @@ while true; do
         draw_wide \
             "" \
             "   ${Y}ACCOUNT SETUP${E}                          ${D}2 / 3${E}" \
-            "   $(SEP)" \
+            "$SEP" \
             "" \
             "   Choose a password for  ${C}${username}${E}" \
             "   ${D}Minimum 8 characters${E}" \
@@ -157,20 +157,21 @@ if [[ $COLS -ge 80 ]]; then
     draw_wide \
         "" \
         "   ${Y}PREFERENCES${E}                             ${D}3 / 3${E}" \
-        "   $(SEP)" \
+        "$SEP" \
         "" \
         "   ${B}Should ArkaOS log you in automatically on boot?${E}" \
         "" \
-        "   ${G}Y  Autologin ON${E}   -- boots straight to your desktop." \
-        "      ${D}No password prompt. Best for a personal laptop or${E}" \
-        "      ${D}a machine only you use.${E}" \
+        "   ${G}Y  Autologin ON${E}" \
+        "      Boots straight to your desktop. No password prompt." \
+        "      ${D}Best for a personal laptop or single-user machine.${E}" \
         "" \
-        "   ${R}N  Autologin OFF${E}  -- asks for your password every boot." \
+        "   ${R}N  Autologin OFF${E}" \
+        "      Asks for your password on every boot." \
         "      ${D}Better if others have physical access to this machine.${E}" \
         "" \
-        "   ${D}You can switch this on or off at any time:${E}" \
-        "   ${D}press Super+S on the desktop to open ArkaOS Settings.${E}" \
-        "" "" "" "" \
+        "   ${D}You can switch this on or off any time:${E}" \
+        "   ${D}Open ArkaOS Settings with  Super+S  on the desktop.${E}" \
+        "" "" "" \
         "   ${D}[*] [*] [*]${E}"
 else
     draw_narrow "PREFERENCES  3/3" \
@@ -182,29 +183,30 @@ fi
 printf "\n   Autologin [Y/n] > "
 read -r al_choice
 
-# ── What makes ArkaOS different — shown while configuring ────────────────────
+# ── Configuring (show what makes ArkaOS different) ───────────────────────────
 if [[ $COLS -ge 80 ]]; then
     draw_wide \
         "" \
         "   ${Y}CONFIGURING${E}" \
-        "   $(SEP)" \
+        "$SEP" \
         "" \
         "   ${D}What makes ArkaOS different from other Linux distros:${E}" \
         "" \
-        "   ${G}*${E} ${B}Immutable rootfs${E}   ${D}System files are read-only at runtime.${E}" \
-        "     ${D}Malware cannot silently modify the OS.${E}" \
+        "   ${G}*${E} ${B}Immutable rootfs${E}" \
+        "     ${D}System files are read-only at runtime. Malware cannot${E}" \
+        "     ${D}silently modify the OS between reboots.${E}" \
         "" \
-        "   ${G}*${E} ${B}Encrypted DNS${E}      ${D}Every DNS query goes over TLS to Quad9.${E}" \
-        "     ${D}Your ISP cannot see what sites you visit.${E}" \
+        "   ${G}*${E} ${B}Encrypted DNS${E}" \
+        "     ${D}Every DNS query goes over TLS to Quad9 (9.9.9.9:853).${E}" \
+        "     ${D}Your ISP cannot see what sites you look up.${E}" \
         "" \
-        "   ${G}*${E} ${B}MAC randomisation${E}  ${D}Your hardware address changes each connection.${E}" \
-        "     ${D}Prevents tracking across networks.${E}" \
+        "   ${G}*${E} ${B}MAC randomisation${E}" \
+        "     ${D}Hardware address changes on every new connection.${E}" \
+        "     ${D}Prevents tracking you across different networks.${E}" \
         "" \
-        "   ${G}*${E} ${B}Browser sandbox${E}    ${D}Firefox cannot read your home directory,${E}" \
-        "     ${D}WiFi passwords, or system config.${E}" \
-        "" \
-        "" \
-        ""
+        "   ${G}*${E} ${B}Browser sandbox${E}" \
+        "     ${D}Firefox runs isolated. It cannot read your home folder,${E}" \
+        "     ${D}WiFi passwords, or system configuration files.${E}"
 else
     draw_narrow "CONFIGURING" "" "   Setting up your account..." ""
 fi
@@ -220,9 +222,9 @@ if [[ "${al_choice,,}" != "n" ]]; then
         mkdir -p /etc/systemd/system/getty@tty1.service.d
         printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin $username --noclear %%I \$TERM\n' \
             > /etc/systemd/system/getty@tty1.service.d/autologin.conf"
-    al_note="${G}Autologin ON${E}  -- desktop loads automatically"
+    al_note="${G}Autologin ON${E}  -- desktop loads automatically on boot"
 else
-    al_note="${Y}Autologin OFF${E} -- password required on each boot"
+    al_note="${Y}Autologin OFF${E} -- password required on every boot"
 fi
 
 spin "Finalising" touch /var/lib/arkaos-firstboot-done
@@ -232,15 +234,18 @@ if [[ $COLS -ge 80 ]]; then
     draw_wide \
         "" \
         "   ${G}${B}ALL DONE!${E}  Welcome, ${C}${username}${E}" \
-        "   $(SEP)" \
+        "$SEP" \
         "" \
         "   $al_note" \
         "" \
         "   ${D}Desktop shortcuts${E}" \
-        "   ${BL}Super+Enter${E}  terminal      ${BL}Super+Space${E}  app launcher" \
-        "   ${BL}Super+B${E}      browser       ${BL}Super+E${E}      file manager" \
-        "   ${BL}Super+S${E}      settings      ${BL}Super+1-9${E}    workspaces" \
-        "" "" "" "" "" "" "" "" "" ""
+        "   ${BL}Super+Enter${E}   open terminal" \
+        "   ${BL}Super+Space${E}   app launcher" \
+        "   ${BL}Super+B${E}       Firefox  ${D}(sandboxed)${E}" \
+        "   ${BL}Super+E${E}       file manager" \
+        "   ${BL}Super+S${E}       ArkaOS settings" \
+        "   ${BL}Super+1-9${E}     switch workspace" \
+        "" "" "" "" "" "" ""
 else
     draw_narrow "ALL DONE! Welcome, ${C}${username}${E}" \
         "" "   $al_note" "" \
