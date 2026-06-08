@@ -5,3 +5,4 @@ OVMF_VARS.4m.fd
 *.ppm
 sway-screenshot*
 sway-foot*
+config.toml
