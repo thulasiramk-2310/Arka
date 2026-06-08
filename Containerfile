@@ -62,6 +62,11 @@ RUN mkdir -p /etc/security/pwquality.conf.d && \
     printf 'minlen=1\ndcredit=0\nucredit=0\nlcredit=0\nocredit=0\nminclass=0\n' \
       > /etc/security/pwquality.conf.d/00-arkaos.conf
 
+# Suppress systemd service status lines from appearing on tty1 during firstboot
+RUN mkdir -p /etc/systemd/system.conf.d && \
+    printf '[Manager]\nShowStatus=no\n' \
+      > /etc/systemd/system.conf.d/00-arkaos-quiet.conf
+
 # First-boot setup wizard + settings utility
 COPY arkaos-firstboot         /usr/libexec/arkaos-firstboot
 COPY arkaos-firstboot.service /usr/lib/systemd/system/arkaos-firstboot.service
