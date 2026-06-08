@@ -1,0 +1,8 @@
+output/
+OVMF_VARS.4m.fd
+OVMF_VARS.4m.fd.bak
+arkad/target/
+*.qcow2
+*.img
+/tmp/
+.claude/

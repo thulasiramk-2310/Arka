@@ -1,0 +1,15 @@
+[Unit]
+Description=ArkaOS Privacy Daemon
+After=network.target NetworkManager.service systemd-resolved.service
+Wants=NetworkManager.service systemd-resolved.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/arkad
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

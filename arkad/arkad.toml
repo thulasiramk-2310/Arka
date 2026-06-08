@@ -1,0 +1,8 @@
+check_interval_secs = 60
+
+[dns]
+server = "9.9.9.9"
+tls_name = "dns.quad9.net"
+
+[hostname]
+name = "arka"

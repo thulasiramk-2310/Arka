@@ -1,0 +1,67 @@
+#!/bin/bash
+# ArkaOS sandboxed browser — wraps /usr/bin/firefox-unwrapped via bubblewrap.
+# This file IS /usr/bin/firefox in the deployed image.
+#
+# Usage:
+#   firefox [args]      — launch Firefox in the sandbox
+#   firefox --shell     — open bash in the IDENTICAL sandbox (isolation testing)
+#   firefox --shell -c 'cmd'  — run cmd in the identical sandbox non-interactively
+#
+# Isolation model:
+#   - /home entirely hidden (tmpfs); only ~/Downloads re-exposed via bind
+#   - /etc allowlisted: resolv.conf, ssl, pki, fonts, localtime, nsswitch — no
+#     NM profiles, no arkad config, no machine-id
+#   - /run: tmpfs (no D-Bus session access; headless Firefox doesn't need it)
+#   - New PID, IPC, UTS namespaces; die-with-parent
+
+set -euo pipefail
+
+BROWSER=/usr/bin/firefox-unwrapped
+DOWNLOADS="${HOME:-/home/ram}/Downloads"
+mkdir -p "${DOWNLOADS}"
+
+# Single source of truth for sandbox args.
+# Both browser launch and --shell mode use this array identically.
+BWRAP_ARGS=(
+    # System directories — read-only
+    --ro-bind /usr /usr
+    --ro-bind /lib /lib
+    --ro-bind /lib64 /lib64
+    --ro-bind /bin /bin
+    --ro-bind /sbin /sbin
+    # /etc: allowlist only; no NM creds, no arkad config, no machine-id
+    --tmpfs /etc
+    --ro-bind-try /etc/resolv.conf    /etc/resolv.conf
+    --ro-bind-try /etc/hosts          /etc/hosts
+    --ro-bind-try /etc/nsswitch.conf  /etc/nsswitch.conf
+    --ro-bind-try /etc/ssl            /etc/ssl
+    --ro-bind-try /etc/pki            /etc/pki
+    --ro-bind-try /etc/fonts          /etc/fonts
+    --ro-bind-try /etc/localtime      /etc/localtime
+    --ro-bind-try /etc/ld.so.cache    /etc/ld.so.cache
+    --ro-bind-try /etc/ld.so.conf.d   /etc/ld.so.conf.d
+    --ro-bind-try /etc/alternatives   /etc/alternatives
+    # Devices, proc
+    --dev /dev
+    --proc /proc
+    # Writable scratch areas
+    --tmpfs /tmp
+    --tmpfs /run
+    # Home isolation: tmpfs hides all of /home, then re-expose Downloads only
+    --tmpfs /home
+    --tmpfs /root
+    --bind  "${DOWNLOADS}" "${DOWNLOADS}"
+    # Namespace isolation
+    --unshare-pid
+    --unshare-ipc
+    --unshare-uts
+    --new-session
+    --die-with-parent
+)
+
+if [[ "${1:-}" == "--shell" ]]; then
+    shift
+    exec bwrap "${BWRAP_ARGS[@]}" /bin/bash "${@:--i}"
+fi
+
+exec bwrap "${BWRAP_ARGS[@]}" "${BROWSER}" "$@"
