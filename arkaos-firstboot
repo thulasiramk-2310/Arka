@@ -4,119 +4,163 @@ exec </dev/tty1 >/dev/tty1 2>&1
 B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
 Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
-spin_wait() {
+# Pad $1 to $2 visible chars (ignores ANSI escape bytes)
+pad() {
+    local v; v=$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*m//g')
+    local p=$(( $2 - ${#v} ))
+    [[ $p -lt 0 ]] && p=0
+    printf '%s%*s' "$1" "$p" ""
+}
+
+# Print one panel row
+row() {
+    printf "${BL}║${E}$(pad "$1" 18)${BL}║${E}$(pad "$2" 59)${BL}║${E}\n"
+}
+
+# Left column (18 visible chars, 20 rows — never changes)
+declare -a L=(
+    ""
+    "  ${C}${B}ARKAOS${E}"
+    "  ${D}──────────────${E}"
+    ""
+    "  ${D}privacy-first${E}"
+    "  ${D}linux${E}"
+    ""
+    "  ${G}✦${E} composefs"
+    "  ${G}✦${E} DoT DNS"
+    "  ${G}✦${E} MAC random"
+    "  ${G}✦${E} IPv6 priv"
+    "  ${G}✦${E} bwrap"
+    ""
+    ""
+    ""
+    ""
+    ""
+    "  ${D}────────────${E}"
+    "  ${D}Thulasiram K${E}"
+    ""
+)
+
+# draw_panel <r0> <r1> ... <r19>  — 20 right-column rows
+draw_panel() {
+    clear
+    printf "${BL}╔══════════════════╦═══════════════════════════════════════════════════════════╗${E}\n"
+    local args=("$@")
+    for i in "${!L[@]}"; do
+        row "${L[$i]}" "${args[$i]:-}"
+    done
+    printf "${BL}╚══════════════════╩═══════════════════════════════════════════════════════════╝${E}\n"
+}
+
+spin_pid() {
     local pid=$1 msg="$2" fr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     while kill -0 "$pid" 2>/dev/null; do
         for i in 0 1 2 3 4 5 6 7 8 9; do
-            printf "\r    ${C}${fr:$i:1}${E}  %s" "$msg"
+            printf "\r   ${C}${fr:$i:1}${E}  %s" "$msg"
             sleep 0.07
         done
     done
     wait "$pid" 2>/dev/null
-    printf "\r    ${G}✓${E}  %-44s\n" "$msg"
+    printf "\r   ${G}✓${E}  %-55s\n" "$msg"
 }
 
-clear
-printf '\n'
+spin() { local msg="$1"; shift; "$@" &>/dev/null & spin_pid $! "$msg"; }
 
-# Block-letter ARKAOS logo
-printf "    ${C}${B}"
-printf ' █████╗  ██████╗  ██╗ ██╗  █████╗  ██████╗  ███████╗\n'
-printf "    "
-printf '██╔══██╗ ██╔══██╗ ██║██╔╝ ██╔══██╗ ██╔═══██╗ ██╔════╝\n'
-printf "    "
-printf '███████║ ██████╔╝ █████╔╝  ███████║ ██║   ██║ ███████╗\n'
-printf "    "
-printf '██╔══██║ ██╔══██╗ ██╔═██╗  ██╔══██║ ██║   ██║ ╚════██║\n'
-printf "    "
-printf '██║  ██║ ██║  ██║ ██║  ██╗ ██║  ██║ ╚██████╔╝ ███████║\n'
-printf "    "
-printf '╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝  ╚═════╝  ╚══════╝\n'
-printf "${E}"
-printf "    ${D}                  privacy-first linux  ·  by Thulasiram K${E}\n"
-printf "\n"
-printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
-printf "\n"
-
-# Privacy protections — reveal one by one
-printf "    ${D}Loading protections...${E}\n\n"
-sleep 0.3
-
-_line() { printf "    %b\n" "$1"; sleep 0.2; }
-_line "${G}  ✦${E} ${B}rootfs${E}   ${D}composefs immutable overlay — tamper-evident at rest${E}"
-_line "${G}  ✦${E} ${B}DNS${E}      ${D}DNS-over-TLS encrypted → Quad9  9.9.9.9:853${E}"
-_line "${G}  ✦${E} ${B}MAC${E}      ${D}hardware address randomised per connection${E}"
-_line "${G}  ✦${E} ${B}IPv6${E}     ${D}privacy extensions  (temporary addresses)${E}"
-_line "${G}  ✦${E} ${B}browser${E}  ${D}Firefox isolated in bubblewrap — home + /etc hidden${E}"
-printf "\n"
-printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
-printf "\n"
-
-# ── Account setup ───────────────────────────────────────────────────────────
-printf "    ${Y}ACCOUNT SETUP${E}\n\n"
-
+# ── Step 1: username ─────────────────────────────────────────────────────────
+err=""
 while true; do
-    printf "    ${C}▸${E} Username: "
+    draw_panel \
+        "" \
+        "   ${Y}ACCOUNT SETUP${E}                          ${D}1 / 3${E}" \
+        "   ${BL}──────────────────────────────────────────────────────────${E}" \
+        "" \
+        "   Create a username for your account." \
+        "   ${D}Lowercase letters, numbers,  _ or -${E}" \
+        "" "" "" "" "" "" "" "" "" "" "" "" "" \
+        "   ${D}● ○ ○${E}"
+    [[ -n "$err" ]] && printf "\n   ${R}✗  %s${E}\n" "$err" || printf "\n"
+    printf "   Username  ${C}▸${E} "
     read -r username
-    [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { printf "    ${G}  ✓ accepted${E}\n\n"; break; }
-    printf "    ${R}  ✗ lowercase + letters/numbers/_, must start with a letter${E}\n\n"
+    [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { err=""; break; }
+    err="start with a letter — lowercase letters, numbers, _ or - only"
 done
 
+# ── Step 2: password ─────────────────────────────────────────────────────────
+err=""
 while true; do
-    printf "    ${C}▸${E} Password: "; read -rsp "" password; printf '\n'
-    [[ -z "$password" ]] && { printf "    ${R}  ✗ password cannot be empty${E}\n\n"; continue; }
-    printf "    ${C}▸${E} Confirm:  "; read -rsp "" confirm;  printf '\n'
-    [[ "$password" == "$confirm" ]] && { printf "    ${G}  ✓ password set${E}\n\n"; break; }
-    printf "    ${R}  ✗ passwords do not match — try again${E}\n\n"
+    draw_panel \
+        "" \
+        "   ${Y}ACCOUNT SETUP${E}                          ${D}2 / 3${E}" \
+        "   ${BL}──────────────────────────────────────────────────────────${E}" \
+        "" \
+        "   Choose a password for  ${C}${username}${E}" \
+        "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
+        "   ${D}○ ● ○${E}"
+    [[ -n "$err" ]] && printf "\n   ${R}✗  %s${E}\n" "$err" || printf "\n"
+    printf "   Password  ${C}▸${E} "; read -rsp "" password; printf "\n"
+    if [[ -z "$password" ]]; then err="password cannot be empty"; continue; fi
+    printf "   Confirm   ${C}▸${E} "; read -rsp "" confirm;  printf "\n"
+    [[ "$password" == "$confirm" ]] && { err=""; break; }
+    err="passwords do not match — try again"
 done
 
-# ── Autologin ────────────────────────────────────────────────────────────────
-printf "    ${BL}──────────────────────────────────────────────────────${E}\n\n"
-printf "    ${Y}AUTOLOGIN${E}\n\n"
-printf "    ${G}Y${E}  boot straight to desktop  ${D}(single-user, convenient)${E}\n"
-printf "    ${R}N${E}  password required each boot  ${D}(shared machine, more secure)${E}\n\n"
-printf "    ${D}Toggle this any time:${E}  ${C}Super+S${E}  ${D}→ ArkaOS Settings${E}\n\n"
-printf "    ${C}▸${E} Enable autologin? [Y/n]: "
+# ── Step 3: autologin ────────────────────────────────────────────────────────
+draw_panel \
+    "" \
+    "   ${Y}PREFERENCES${E}                             ${D}3 / 3${E}" \
+    "   ${BL}──────────────────────────────────────────────────────────${E}" \
+    "" \
+    "   Boot straight to desktop without a password?" \
+    "" \
+    "   ${G}Y${E}  automatic login   ${D}(convenient, single-user)${E}" \
+    "   ${R}N${E}  password on boot  ${D}(shared or sensitive machine)${E}" \
+    "" \
+    "   ${D}Change later:${E}  ${C}Super+S${E}  ${D}→ arkaos-settings${E}" \
+    "" "" "" "" "" "" "" "" "" \
+    "   ${D}○ ○ ●${E}"
+printf "\n   Autologin  ${C}▸${E} [Y/n]:  "
 read -r al_choice
-printf "\n"
 
 # ── Configuring ──────────────────────────────────────────────────────────────
-printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
-printf "    ${Y}CONFIGURING${E}\n\n"
+draw_panel \
+    "" \
+    "   ${Y}CONFIGURING${E}" \
+    "   ${BL}──────────────────────────────────────────────────────────${E}" \
+    "" \
+    "   Applying your settings..." \
+    "" "" "" "" "" "" "" "" "" "" "" "" "" "" ""
+printf "\n"
 
-useradd -m -G wheel -s /bin/bash "$username" &>/dev/null &
-spin_wait $! "Creating user  ${C}${username}${E}"
+spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
 
-printf '%s:%s' "$username" "$password" | chpasswd &>/dev/null &
-spin_wait $! "Setting password"
+bash -c "printf '%s:%s' '$username' '$password' | chpasswd" &>/dev/null &
+spin_pid $! "Setting password"
 
 if [[ "${al_choice,,}" != "n" ]]; then
-    (
+    spin "Enabling autologin" bash -c "
         mkdir -p /etc/systemd/system/getty@tty1.service.d
-        printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
-            "$username" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
-    ) &
-    spin_wait $! "Enabling autologin"
+        printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin $username --noclear %%I \$TERM\n' \
+            > /etc/systemd/system/getty@tty1.service.d/autologin.conf"
     al_note="${G}autologin on${E}"
 else
     al_note="${Y}password login${E}"
 fi
 
-touch /var/lib/arkaos-firstboot-done &
-spin_wait $! "Finalising"
+spin "Finalising" touch /var/lib/arkaos-firstboot-done
 
-# ── Welcome card ─────────────────────────────────────────────────────────────
-printf "\n"
-printf "    ${BL}╔══════════════════════════════════════════════════════╗${E}\n"
-printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
-printf "    ${BL}║${E}   ${G}${B}All done!${E}  Welcome, ${C}${username}${E}  ·  $al_note\n"
-printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
-printf "    ${BL}║${E}   ${D}Shortcuts${E}                                         ${BL}║${E}\n"
-printf "    ${BL}║${E}   ${BL}Super+Enter${E}  terminal    ${BL}Super+Space${E}  apps         ${BL}║${E}\n"
-printf "    ${BL}║${E}   ${BL}Super+B${E}      browser     ${BL}Super+E${E}      files        ${BL}║${E}\n"
-printf "    ${BL}║${E}   ${BL}Super+S${E}      settings    ${BL}Super+1-9${E}    workspaces   ${BL}║${E}\n"
-printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
-printf "    ${BL}╚══════════════════════════════════════════════════════╝${E}\n\n"
-printf "    ${Y}⟳  Rebooting into your desktop in 5 seconds...${E}\n\n"
+# ── Welcome ──────────────────────────────────────────────────────────────────
+draw_panel \
+    "" \
+    "   ${G}${B}ALL DONE!${E}   Welcome, ${C}${username}${E}" \
+    "   ${BL}──────────────────────────────────────────────────────────${E}" \
+    "" \
+    "   $al_note" \
+    "" \
+    "   ${D}Desktop shortcuts${E}" \
+    "   ${BL}Super+Enter${E}  terminal      ${BL}Super+Space${E}  app launcher" \
+    "   ${BL}Super+B${E}      browser       ${BL}Super+E${E}      file manager" \
+    "   ${BL}Super+S${E}      settings      ${BL}Super+1-9${E}    workspaces" \
+    "" "" "" "" "" "" "" "" "" ""
+printf "\n   ${Y}⟳  Rebooting into your desktop in 5 seconds...${E}\n\n"
 sleep 5
 systemctl reboot
