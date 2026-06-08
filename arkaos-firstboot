@@ -16,65 +16,76 @@ spin_wait() {
     printf "\r    ${G}✓${E}  %-44s\n" "$msg"
 }
 
-reveal() {
-    printf "    %s\n" "$1"
-    sleep 0.18
-}
-
 clear
-printf '\n\n'
-printf "    ${BL}┌─────────────────────────────────────────────────────┐${E}\n"
-printf "    ${BL}│${E}                                                     ${BL}│${E}\n"
-printf "    ${BL}│${E}      ${C}${B}▓▒░  A R K A O S  ░▒▓${E}                         ${BL}│${E}\n"
-printf "    ${BL}│${E}      ${D}P R I V A C Y - F I R S T   L I N U X${E}         ${BL}│${E}\n"
-printf "    ${BL}│${E}                                                     ${BL}│${E}\n"
-printf "    ${BL}└─────────────────────────────────────────────────────┘${E}\n\n"
+printf '\n'
 
-printf "    ${D}Protections active on this system:${E}\n\n"
-reveal "${G}  [✓]${E} ${B}rootfs${E}   composefs — read-only, tamper-evident"
-reveal "${G}  [✓]${E} ${B}DNS${E}      encrypted DNS-over-TLS → Quad9  9.9.9.9"
-reveal "${G}  [✓]${E} ${B}MAC${E}      randomised per connection (WiFi + ethernet)"
-reveal "${G}  [✓]${E} ${B}IPv6${E}     privacy extensions (temp addresses)"
-reveal "${G}  [✓]${E} ${B}browser${E}  Firefox isolated in bubblewrap sandbox"
+# Block-letter ARKAOS logo
+printf "    ${C}${B}"
+printf ' █████╗  ██████╗  ██╗ ██╗  █████╗  ██████╗  ███████╗\n'
+printf "    "
+printf '██╔══██╗ ██╔══██╗ ██║██╔╝ ██╔══██╗ ██╔═══██╗ ██╔════╝\n'
+printf "    "
+printf '███████║ ██████╔╝ █████╔╝  ███████║ ██║   ██║ ███████╗\n'
+printf "    "
+printf '██╔══██║ ██╔══██╗ ██╔═██╗  ██╔══██║ ██║   ██║ ╚════██║\n'
+printf "    "
+printf '██║  ██║ ██║  ██║ ██║  ██╗ ██║  ██║ ╚██████╔╝ ███████║\n'
+printf "    "
+printf '╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝  ╚═════╝  ╚══════╝\n'
+printf "${E}"
+printf "    ${D}                  privacy-first linux  ·  by Thulasiram K${E}\n"
+printf "\n"
+printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
 printf "\n"
 
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
-printf "    ${Y}ACCOUNT SETUP${E}\n"
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n\n"
+# Privacy protections — reveal one by one
+printf "    ${D}Loading protections...${E}\n\n"
+sleep 0.3
+
+_line() { printf "    %b\n" "$1"; sleep 0.2; }
+_line "${G}  ✦${E} ${B}rootfs${E}   ${D}composefs immutable overlay — tamper-evident at rest${E}"
+_line "${G}  ✦${E} ${B}DNS${E}      ${D}DNS-over-TLS encrypted → Quad9  9.9.9.9:853${E}"
+_line "${G}  ✦${E} ${B}MAC${E}      ${D}hardware address randomised per connection${E}"
+_line "${G}  ✦${E} ${B}IPv6${E}     ${D}privacy extensions  (temporary addresses)${E}"
+_line "${G}  ✦${E} ${B}browser${E}  ${D}Firefox isolated in bubblewrap — home + /etc hidden${E}"
+printf "\n"
+printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
+printf "\n"
+
+# ── Account setup ───────────────────────────────────────────────────────────
+printf "    ${Y}ACCOUNT SETUP${E}\n\n"
 
 while true; do
     printf "    ${C}▸${E} Username: "
     read -r username
-    [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { printf "    ${G}  ✓${E}\n\n"; break; }
-    printf "    ${R}  ✗ Lowercase letters/numbers/_ only, must start with a letter${E}\n\n"
+    [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { printf "    ${G}  ✓ accepted${E}\n\n"; break; }
+    printf "    ${R}  ✗ lowercase + letters/numbers/_, must start with a letter${E}\n\n"
 done
 
 while true; do
     printf "    ${C}▸${E} Password: "; read -rsp "" password; printf '\n'
-    [[ -z "$password" ]] && { printf "    ${R}  ✗ Password cannot be empty${E}\n\n"; continue; }
+    [[ -z "$password" ]] && { printf "    ${R}  ✗ password cannot be empty${E}\n\n"; continue; }
     printf "    ${C}▸${E} Confirm:  "; read -rsp "" confirm;  printf '\n'
-    [[ "$password" == "$confirm" ]] && { printf "    ${G}  ✓${E}\n\n"; break; }
-    printf "    ${R}  ✗ Passwords do not match — try again${E}\n\n"
+    [[ "$password" == "$confirm" ]] && { printf "    ${G}  ✓ password set${E}\n\n"; break; }
+    printf "    ${R}  ✗ passwords do not match — try again${E}\n\n"
 done
 
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
-printf "    ${Y}AUTOLOGIN${E}\n"
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n\n"
-printf "    Boot straight to your desktop without a password prompt?\n\n"
-printf "    ${G}Y${E}  log in automatically on boot\n"
-printf "       ${D}best for: personal laptop, single-user machine${E}\n\n"
-printf "    ${R}N${E}  ask for password on each boot\n"
-printf "       ${D}best for: shared machine, extra security${E}\n\n"
-printf "    ${D}You can toggle this any time with${E} ${C}arkaos-settings${E} ${D}(Super+S)${E}\n\n"
+# ── Autologin ────────────────────────────────────────────────────────────────
+printf "    ${BL}──────────────────────────────────────────────────────${E}\n\n"
+printf "    ${Y}AUTOLOGIN${E}\n\n"
+printf "    ${G}Y${E}  boot straight to desktop  ${D}(single-user, convenient)${E}\n"
+printf "    ${R}N${E}  password required each boot  ${D}(shared machine, more secure)${E}\n\n"
+printf "    ${D}Toggle this any time:${E}  ${C}Super+S${E}  ${D}→ ArkaOS Settings${E}\n\n"
 printf "    ${C}▸${E} Enable autologin? [Y/n]: "
 read -r al_choice
 printf "\n"
 
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+# ── Configuring ──────────────────────────────────────────────────────────────
+printf "    ${BL}──────────────────────────────────────────────────────${E}\n"
 printf "    ${Y}CONFIGURING${E}\n\n"
 
 useradd -m -G wheel -s /bin/bash "$username" &>/dev/null &
-spin_wait $! "Creating user account"
+spin_wait $! "Creating user  ${C}${username}${E}"
 
 printf '%s:%s' "$username" "$password" | chpasswd &>/dev/null &
 spin_wait $! "Setting password"
@@ -92,16 +103,20 @@ else
 fi
 
 touch /var/lib/arkaos-firstboot-done &
-spin_wait $! "Finalising setup"
+spin_wait $! "Finalising"
 
+# ── Welcome card ─────────────────────────────────────────────────────────────
 printf "\n"
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
-printf "    ${G}${B}Ready!${E}  ${D}Welcome,${E} ${C}${username}${E}  ·  $al_note\n\n"
-printf "    ${D}Desktop shortcuts${E}\n"
-printf "    ${BL}  Super+Enter${E}   terminal       ${BL}Super+Space${E}  app launcher\n"
-printf "    ${BL}  Super+B${E}       browser         ${BL}Super+E${E}      file manager\n"
-printf "    ${BL}  Super+S${E}       settings        ${BL}Super+1-9${E}    workspaces\n\n"
-printf "    ${D}╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌${E}\n"
+printf "    ${BL}╔══════════════════════════════════════════════════════╗${E}\n"
+printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
+printf "    ${BL}║${E}   ${G}${B}All done!${E}  Welcome, ${C}${username}${E}  ·  $al_note\n"
+printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
+printf "    ${BL}║${E}   ${D}Shortcuts${E}                                         ${BL}║${E}\n"
+printf "    ${BL}║${E}   ${BL}Super+Enter${E}  terminal    ${BL}Super+Space${E}  apps         ${BL}║${E}\n"
+printf "    ${BL}║${E}   ${BL}Super+B${E}      browser     ${BL}Super+E${E}      files        ${BL}║${E}\n"
+printf "    ${BL}║${E}   ${BL}Super+S${E}      settings    ${BL}Super+1-9${E}    workspaces   ${BL}║${E}\n"
+printf "    ${BL}║${E}                                                      ${BL}║${E}\n"
+printf "    ${BL}╚══════════════════════════════════════════════════════╝${E}\n\n"
 printf "    ${Y}⟳  Rebooting into your desktop in 5 seconds...${E}\n\n"
 sleep 5
 systemctl reboot
