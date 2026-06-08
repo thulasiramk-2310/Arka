@@ -1,8 +1,7 @@
+CLAUDE.md
 output/
+OVMF_VARS_*_boot.qcow2
 OVMF_VARS.4m.fd
-OVMF_VARS.4m.fd.bak
-arkad/target/
-*.qcow2
-*.img
-/tmp/
-.claude/
+*.ppm
+sway-screenshot*
+sway-foot*
