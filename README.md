@@ -1,48 +1,93 @@
 # ArkaOS
 
-Privacy-first immutable Linux desktop. CentOS Stream 10 base, bootc image model.
-The GrapheneOS-for-desktop gap: hardened defaults, isolation-by-default, no unsandboxed apps.
+Privacy-first immutable desktop Linux. No unsandboxed apps, 60-second enforcement
+loop, read-only rootfs. The GrapheneOS-for-desktop gap on a bootc image model.
+
+Base: `centos-bootc:stream10`. Build: OCI container → bootc → qcow2.
+
+---
+
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        ArkaOS Image                              │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Phase 4 — App Sandboxing                                  │  │
-│  │  /usr/bin/firefox → bwrap wrapper                         │  │
-│  │  tmpfs /home  ·  /etc allowlist  ·  --unshare-pid/ipc/uts │  │
-│  ├────────────────────────────────────────────────────────────┤  │
-│  │  Phase 2 — arkad privacy daemon (Rust, musl, 60s watch)   │  │
-│  │  MAC random  ·  DoT Quad9  ·  hostname=arka  ·  IPv6 EUI  │  │
-│  ├────────────────────────────────────────────────────────────┤  │
-│  │  Phase 3 — Integrity                                       │  │
-│  │  composefs read-only rootfs  ·  TPM2 PCR 0-10 measured    │  │
-│  │  UKI artifact in image layer (PCRs 11-15: see Limitations) │  │
-│  ├────────────────────────────────────────────────────────────┤  │
-│  │  Phase 1 — Base                                            │  │
-│  │  centos-bootc:stream10  ·  bootc immutable OCI model       │  │
-│  │  NM MAC random (conf.d)  ·  XFS root via 00-defaults.toml  │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-         │                                    │
-   podman build                    bootc-image-builder
-   (inside podman machine)         → qcow2/disk image
+┌─────────────────────────────────── ArkaOS ───────────────────────────────────┐
+│                                                                               │
+│  BOOT CHAIN                                                                   │
+│  OVMF → GRUB → vmlinuz (6.12 LTS) → systemd                                 │
+│                      │                                                        │
+│            composefs overlay (rootfs read-only, ostree object store)         │
+│            No path to overwrite system files at runtime.                     │
+│                                                                               │
+│  TPM2:  PCR 0-10 measured ✓  (firmware, bootloader, shim chain)             │
+│         PCR 11-15 dormant  ✗  (requires UKI boot path — see Limitations)    │
+│                                                                               │
+├──────────────────────────────── arkad ───────────────────────────────────────┤
+│                                                                               │
+│  Rust daemon (static musl). Enforces on start, re-enforces every 60s.       │
+│  Drift detection: if any enforcer's target state changes, it re-applies.    │
+│                                                                               │
+│  ┌─────────────────┐ ┌──────────────────────┐ ┌──────────┐ ┌─────────────┐ │
+│  │    mac.rs       │ │       dns.rs          │ │hostname  │ │   ipv6.rs   │ │
+│  │ WiFi+eth MAC    │ │ DNS-over-TLS          │ │   .rs    │ │use_tempaddr │ │
+│  │ random per conn │ │ Quad9  9.9.9.9:853   │ │ arka     │ │     =2      │ │
+│  │ NM conf.d       │ │ resolved.conf.d       │ │hostnamectl│ │  sysctl    │ │
+│  └─────────────────┘ └──────────────────────┘ └──────────┘ └─────────────┘ │
+│                                                                               │
+├──────────────────────────── firefox sandbox ─────────────────────────────────┤
+│                                                                               │
+│  /usr/bin/firefox ──symlink──▶ /usr/bin/firefox-sandbox  (bwrap wrapper)    │
+│                                /usr/bin/firefox-unwrapped (real ELF, hidden) │
+│                                                                               │
+│  Interception is baked at build time. composefs makes it read-only at       │
+│  runtime — no path to replace the symlink or access the unwrapped binary.   │
+│                                                                               │
+│  Inside bwrap:                     │  Not visible to browser:               │
+│  /usr /lib /bin /sbin  (ro bind)   │  ~/           (tmpfs — home hidden)    │
+│  /etc                  (tmpfs)     │  /etc/NetworkManager/  (WiFi creds)    │
+│    + resolv.conf, hosts, ssl,      │  /etc/arkad/           (daemon cfg)    │
+│      pki, fonts, nsswitch,         │  /etc/machine-id       (host identity) │
+│      ld.so.cache, alternatives     │  /run/dbus             (session bus)   │
+│  /dev /proc            (dev/proc)  │  ~/.mozilla/    (discarded on exit)    │
+│  /tmp /run /home /root (tmpfs)     │                                        │
+│  ~/Downloads           (bind rw)   │  Network: host namespace.              │
+│  --unshare-pid/ipc/uts             │  arkad DoT + IPv6 active below bwrap. │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Build pipeline:**
+```
+Arch host
+ └─ podman machine ssh podman-machine-default
+      ├─ podman build
+      │    Stage 1: rust:alpine  →  arkad (x86_64-musl, static)
+      │    Stage 2: centos-bootc:stream10
+      │               arkad binary + systemd unit
+      │               NM conf.d (MAC random)
+      │               resolved.conf.d (DoT)
+      │               UKI artifact (in image layer only — see Limitations)
+      │               firefox → bwrap wrapper
+      └─ bootc-image-builder  →  output/qcow2/disk.qcow2
+
+qemu-system-x86_64 + swtpm  →  serial console :4445  (ram / arkaos)
 ```
 
 ---
 
 ## Prerequisites
 
-- Arch Linux host (or similar; adjust paths for your distro)
-- `podman` + `podman machine` with a running `podman-machine-default` VM
+- Arch Linux host (or similar)
+- `podman` + `podman machine` (rootful, `podman-machine-default`)
 - `qemu-system-x86_64`, `edk2-ovmf`
-- `swtpm` + `swtpm_setup` (for TPM tests)
+- `swtpm`, `swtpm_setup`
+- podman machine VM disk: 20GB minimum (`podman machine init --disk-size 20`)
 
 ---
 
 ## Build
 
-All build commands run inside `podman-machine-default` (virtiofs mounts `/home/Ram` at `/var/home/Ram`).
+All build commands run inside the podman machine.
+virtiofs mounts `/home/Ram` → `/var/home/Ram` inside the VM.
 
 **1. Build the container image:**
 ```bash
@@ -52,7 +97,7 @@ podman machine ssh podman-machine-default \
 
 **2. Produce the disk image:**
 
-Kill any running boot-test VMs first — podman machine dies under memory pressure with two QEMU instances + a build.
+Kill any running boot-test VMs first (two QEMU instances + a build exhausts the VM's memory).
 
 ```bash
 podman machine ssh podman-machine-default "podman run --rm --privileged \
@@ -65,16 +110,17 @@ podman machine ssh podman-machine-default "podman run --rm --privileged \
 
 Output: `output/qcow2/disk.qcow2`
 
-**3. Initialize swtpm (once per VM lifecycle):**
+**3. Initialize swtpm (once per tpm state directory):**
 ```bash
 mkdir -p /tmp/arkaos-tpm
 swtpm_setup --tpm2 --tpmstate /tmp/arkaos-tpm \
   --createek --decryption --create-ek-cert
 ```
 
-**4. Boot the VM:**
+**4. Boot:**
 ```bash
-cp /usr/share/edk2/x64/OVMF_VARS.4m.fd ./OVMF_VARS.4m.fd   # first run only
+# First run: copy OVMF_VARS to a writable location
+cp /usr/share/edk2/x64/OVMF_VARS.4m.fd ./OVMF_VARS.4m.fd
 
 swtpm socket --tpmstate dir=/tmp/arkaos-tpm \
   --ctrl type=unixio,path=/tmp/arkaos-tpm.sock --tpm2 --daemon
@@ -90,137 +136,114 @@ qemu-system-x86_64 -enable-kvm -m 2048 -cpu host -smp 2 \
   -serial telnet::4445,server,nowait \
   -monitor telnet::4444,server,nowait \
   -no-reboot
-```
 
-**5. Serial console:**
-```bash
 telnet localhost 4445   # login: ram / arkaos
 ```
 
 ---
 
-## Demo: Browser Isolation Proof
+## Demo: Sentinel-file Isolation Proof
 
-This is the headline claim of Phase 4: a compromised browser cannot read user files.
-Run this sequence in the VM serial console.
+The headline claim of Phase 4: a compromised browser process cannot read user
+files, WiFi credentials, or daemon config. Run this in the VM serial console.
 
 ```bash
-# Write a sentinel file to the real home directory
+# Setup: write a sentinel to the real home directory
 echo "topsecret" > ~/secret.txt
 
-# 1. Can the sandbox read the sentinel?
+# 1. Sandbox cannot read the sentinel (real home is hidden behind tmpfs)
 firefox --shell -c 'cat ~/secret.txt 2>&1'
-# → cat: /var/home/ram/secret.txt: No such file or directory
+# cat: /var/home/ram/secret.txt: No such file or directory
 
-# 2. What is /home inside the sandbox?
+# 2. /home inside the sandbox is a tmpfs, not the real home
 firefox --shell -c 'grep " /home " /proc/self/mountinfo'
-# → ... tmpfs on /home ...    (real home is hidden)
+# ... tmpfs on /home rw ...
 
-# 3. Are WiFi credentials visible?
+# 3. WiFi credentials not reachable
 firefox --shell -c 'ls /etc/NetworkManager 2>&1'
-# → ls: cannot access '/etc/NetworkManager': No such file or directory
+# ls: cannot access '/etc/NetworkManager': No such file or directory
 
-# 4. Is the arkad daemon config visible?
+# 4. arkad daemon config not reachable
 firefox --shell -c 'ls /etc/arkad 2>&1'
-# → ls: cannot access '/etc/arkad': No such file or directory
+# ls: cannot access '/etc/arkad': No such file or directory
 
-# 5. What is /etc inside the sandbox?
+# 5. /etc allowlist — nothing outside it
 firefox --shell -c 'ls /etc'
-# → alternatives  fonts  hosts  ld.so.cache  ld.so.conf.d
-#   nsswitch.conf  pki  resolv.conf  ssl
-#   (nothing else — no credentials, no machine-id, no shadow)
+# alternatives  fonts  hosts  ld.so.cache  ld.so.conf.d
+# nsswitch.conf  pki  resolv.conf  ssl
 
-# Verify the default launch path IS the sandbox
+# 6. Confirm the sentinel is still intact after sandbox exits
+cat ~/secret.txt
+# topsecret   (sandbox writes went to tmpfs and were discarded)
+
+# Confirm /usr/bin/firefox IS the sandbox wrapper (no escape hatch)
 ls -la /usr/bin/firefox
-# → /usr/bin/firefox -> firefox-sandbox
+# /usr/bin/firefox -> firefox-sandbox
 ```
 
-`firefox --shell` reuses the exact same bwrap args as a real browser launch —
-there is no gap between what the proof tests and what ships.
-
-Persistent Downloads directory is the only home subdirectory re-exposed:
-```bash
-firefox --shell -c 'ls ~/Downloads'   # writable inside sandbox
-```
-
----
-
-## arkad: Privacy Daemon
-
-Source: `arkad/` — Rust, static musl binary, no tokio.
-
-Four enforcers, verified active every 60s:
-
-| Enforcer | What it does | Enforced via |
-|----------|--------------|--------------|
-| `mac.rs` | Randomize MAC on every connection | NM conf.d |
-| `dns.rs` | DNS-over-TLS, Quad9 (9.9.9.9) | systemd-resolved conf.d |
-| `hostname.rs` | Set hostname to `arka` | `hostnamectl` |
-| `ipv6.rs` | IPv6 privacy extensions | `sysctl use_tempaddr=2` |
-
-Config: `/etc/arkad/arkad.toml` — secure defaults baked in, works with no file.
-
-```bash
-# In VM: verify arkad is active
-systemctl is-active arkad            # → active
-journalctl -u arkad --no-pager -n 20 # → enforcement log
-```
+`firefox --shell` reuses the identical `BWRAP_ARGS` array from the wrapper. There
+is no gap between what this test exercises and what ships.
 
 ---
 
 ## Limitations
 
-### Phase 3: measured boot is incomplete
+### PCR 11-15: measured boot is incomplete
 
-PCRs 0-10 are measured by the firmware and captured by TPM2. PCRs 11-15
-(kernel + initrd + cmdline, the useful ones for OS-level sealing) are dormant.
+PCRs 0-10 are measured (firmware → GRUB → shim chain, verified with swtpm).
+PCRs 11-15 (kernel + initrd + cmdline) are dormant.
 
-**Why:** `ConditionSecurity=measured-uki` in the relevant systemd unit is not
-satisfied because GRUB loads the kernel directly, not via a UKI. The UKI
-artifact exists in the image layer (`/usr/lib/modules/<kver>/<kver>.efi`) but
-`bootupd` on CentOS Stream 10 has only a `grub2-static` component — there is
-no systemd-boot component to stage the UKI to the ESP.
+`systemd-pcrphase` runs but hits `ConditionSecurity=measured-uki`, which requires
+the kernel to be loaded via a signed UKI by systemd-boot. GRUB loads the kernel
+directly from BLS entries — PCR 11 is never extended.
 
-This means TPM-sealed disk encryption and remote attestation against OS state
-are not available in the current build. The signed kernel chain is intact; only
-the PCR-based sealing path is blocked.
+The UKI artifact exists in the image (`/usr/lib/modules/<kver>/<kver>.efi`, 240MB,
+sections `.sbat .osrel .uname .linux .initrd` verified). It is never staged to the
+ESP because `bootupd-0.2.31` — the version in both the CentOS image and the
+bootc-image-builder container — has only a `grub2-static` component.
+No `sdboot` component = no path to get the UKI onto the ESP via `[install]
+bootloader = "systemd"`.
 
-**What this affects:** The composefs read-only rootfs and the bwrap sandbox
-both work independently of PCRs 11-15. The integrity story is "signed,
-immutable, composefs" — not "sealed to OS state."
+**What this means in practice:** No TPM-sealed disk encryption, no remote
+attestation against kernel/initrd state. The signed, immutable composefs rootfs
+is the integrity story. PCR sealing requires a future bootupd that ships the
+sdboot component.
 
-### Phase 4: sandbox scope
+**We tested the Fedora path.** Branch `research/fedora-systemd-boot` ported the
+full build to `fedora-bootc:42` and set `bootloader = "systemd"`. **Result: same
+failure.** Fedora 42 ships `bootupd-0.2.31-1.fc42` with only `grub2-static` —
+identical to CentOS. The hypothesis that Fedora's bootupd would differ was wrong
+for this version. See `RESEARCH.md` on that branch for the full finding, root
+cause, and forward paths.
 
-- Network is host namespace (browser needs internet). arkad's DoT and IPv6
-  privacy extensions operate at the kernel/NM layer — below bwrap — and remain
-  active for all browser traffic.
-- Browser profile (`.mozilla/`) lives in the `/home` tmpfs and is discarded on
-  exit. No persistent browser state. This is intentional.
-- Wayland/X11 socket isolation not tested (headless build).
-- Only Firefox is sandboxed. Other apps run unsandboxed (Phase 4 scope).
+### Sandbox scope
 
-### Research branch: `research/fedora-systemd-boot`
-
-The hypothesis: Fedora's bootupd ships a systemd-boot component (unlike CentOS
-Stream 10), and using `[install] bootloader = "systemd"` in a Fedora bootc base
-would stage the UKI to the ESP on install, enabling PCRs 11-15 and completing
-the measured-boot chain. The branch ports the current arkad + bwrap setup to a
-Fedora bootc base, changes only the bootloader path, and documents the
-pass/fail result. See `RESEARCH.md` on that branch.
+- Network runs in the host namespace (browser needs internet). arkad's DNS-over-TLS
+  and IPv6 privacy extensions operate at the kernel/NM layer below bwrap — they
+  apply to all browser traffic regardless.
+- Browser profile (`.mozilla/`) lives in `/home` tmpfs and is discarded on process
+  exit. No persistent session state on disk. Intentional.
+- Wayland/X11 socket isolation not tested (headless-only build).
+- Only Firefox is sandboxed. Other desktop apps run unsandboxed. Phase 4 scoped
+  to one reference app.
 
 ---
 
 ## Files
 
 ```
-Containerfile          multi-stage build (rust:alpine → centos-bootc:stream10)
-arkad/                 privacy daemon source (Rust)
-  src/main.rs          60s enforce loop
-  src/enforcers/       mac, dns, hostname, ipv6
+Containerfile          multi-stage build: rust:alpine → centos-bootc:stream10
+arkad/
+  src/main.rs          main loop: enforce all, sleep 60s, re-enforce on drift
+  src/config.rs        serde config (secure defaults, works with no file)
+  src/enforcers/       mac.rs  dns.rs  hostname.rs  ipv6.rs
   arkad.service        systemd unit
-  arkad.toml           config with secure defaults
-arkaos-firefox         bwrap wrapper (IS /usr/bin/firefox in deployed image)
-config.toml            bootc-image-builder config (qcow2, XFS)
-PHASE3-FINDINGS.md     measured-boot investigation and blocked path analysis
+  arkad.toml           /etc/arkad/arkad.toml defaults
+arkaos-firefox         bwrap wrapper — IS /usr/bin/firefox in the deployed image
+config.toml            bootc-image-builder config (qcow2, XFS rootfs)
+OVMF_VARS.4m.fd        writable NVRAM copy (gitignored, created on first boot)
+PHASE3-FINDINGS.md     measured-boot investigation: what's live, what's blocked
 PHASE4-SANDBOX.md      sandbox model, isolation proof, scope boundaries
+RESEARCH.md            Fedora systemd-boot experiment: FAIL + root cause
+  (on branch research/fedora-systemd-boot)
 ```
