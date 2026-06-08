@@ -1,6 +1,10 @@
 #!/bin/bash
 exec </dev/tty1 >/dev/tty1 2>&1
 
+# Silence kernel printk and journald to console — prevents log noise during UI
+dmesg -n 1 2>/dev/null
+echo 0 2>/dev/null > /proc/sys/kernel/printk || true
+
 B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
 Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
@@ -99,6 +103,7 @@ while true; do
     [[ -n "$err" ]] && printf "\n   ${R}✗  %s${E}\n" "$err" || printf "\n"
     printf "   Password  ${C}▸${E} "; read -rsp "" password; printf "\n"
     if [[ -z "$password" ]]; then err="password cannot be empty"; continue; fi
+    if [[ ${#password} -lt 8 ]]; then err="password must be at least 8 characters"; continue; fi
     printf "   Confirm   ${C}▸${E} "; read -rsp "" confirm;  printf "\n"
     [[ "$password" == "$confirm" ]] && { err=""; break; }
     err="passwords do not match — try again"
@@ -133,7 +138,8 @@ printf "\n"
 
 spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
 
-bash -c "printf '%s:%s' '$username' '$password' | chpasswd" &>/dev/null &
+# Use subshell — safe for any password content, avoids bash -c quote issues
+( printf '%s:%s\n' "$username" "$password" | chpasswd ) &>/dev/null &
 spin_pid $! "Setting password"
 
 if [[ "${al_choice,,}" != "n" ]]; then
