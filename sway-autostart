@@ -1,9 +1,14 @@
 # Launch Hyprland on tty1 login
 if [[ $(tty) == /dev/tty1 ]]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
     export WLR_NO_HARDWARE_CURSORS=1
     export WLR_RENDERER=pixman
     export WLR_RENDERER_ALLOW_SOFTWARE=1
     export LIBGL_ALWAYS_SOFTWARE=1
     export MOZ_ENABLE_WAYLAND=1
-    Hyprland
+    export HYPRLAND_NO_RT=1
+
+    mkdir -p "$XDG_RUNTIME_DIR"
+
+    exec dbus-run-session -- Hyprland
 fi
