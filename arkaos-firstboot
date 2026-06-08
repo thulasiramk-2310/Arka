@@ -1,71 +1,101 @@
 #!/bin/bash
 exec </dev/tty1 >/dev/tty1 2>&1
 
-# Silence kernel printk and journald to console — prevents log noise during UI
 dmesg -n 1 2>/dev/null
-echo 0 2>/dev/null > /proc/sys/kernel/printk || true
+echo 0 > /proc/sys/kernel/printk 2>/dev/null || true
 
 B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
 Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
-# Pad $1 to $2 visible chars (ignores ANSI escape bytes)
+# Detect terminal dimensions
+COLS=$(tput cols 2>/dev/null || echo 80)
+ROWS=$(tput lines 2>/dev/null || echo 24)
+
 pad() {
     local v; v=$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*m//g')
-    local p=$(( $2 - ${#v} ))
-    [[ $p -lt 0 ]] && p=0
+    local p=$(( $2 - ${#v} )); [[ $p -lt 0 ]] && p=0
     printf '%s%*s' "$1" "$p" ""
 }
 
-# Print one panel row
-row() {
-    printf "${BL}║${E}$(pad "$1" 18)${BL}║${E}$(pad "$2" 59)${BL}║${E}\n"
+# ── Wide layout (>= 80 cols): split panel ────────────────────────────────────
+
+LW=18                          # left inner width
+RW=$(( COLS - LW - 3 ))       # right inner width (3 = left | + mid | + right |)
+[[ $RW -lt 30 ]] && RW=30
+
+row() { printf "${BL}|${E}$(pad "$1" $LW)${BL}|${E}$(pad "$2" $RW)${BL}|${E}\n"; }
+
+# top/bottom border strings
+_hline() { printf '%*s' "$1" '' | tr ' ' '='; }
+TOP_BOT() {
+    printf "${BL}+$(_hline $LW)+$(_hline $RW)+${E}\n"
 }
 
-# Left column (18 visible chars, 20 rows — never changes)
 declare -a L=(
     ""
     "  ${C}${B}ARKAOS${E}"
-    "  ${D}──────────────${E}"
+    "  ${D}--------------${E}"
     ""
     "  ${D}privacy-first${E}"
     "  ${D}linux${E}"
     ""
-    "  ${G}✦${E} composefs"
-    "  ${G}✦${E} DoT DNS"
-    "  ${G}✦${E} MAC random"
-    "  ${G}✦${E} IPv6 priv"
-    "  ${G}✦${E} bwrap"
+    "  ${G}*${E} composefs"
+    "  ${G}*${E} DoT DNS"
+    "  ${G}*${E} MAC random"
+    "  ${G}*${E} IPv6 priv"
+    "  ${G}*${E} bwrap"
     ""
     ""
     ""
     ""
     ""
-    "  ${D}────────────${E}"
+    "  ${D}--------------${E}"
     "  ${D}Thulasiram K${E}"
     ""
 )
 
-# draw_panel <r0> <r1> ... <r19>  — 20 right-column rows
-draw_panel() {
+SEP() { pad "   $(_hline $(( RW - 4 )))" $RW; }
+
+draw_wide() {
     clear
-    printf "${BL}╔══════════════════╦═══════════════════════════════════════════════════════════╗${E}\n"
+    TOP_BOT
     local args=("$@")
-    for i in "${!L[@]}"; do
-        row "${L[$i]}" "${args[$i]:-}"
+    local total=${#L[@]}
+    for (( i=0; i<total; i++ )); do row "${L[$i]}" "${args[$i]:-}"; done
+    TOP_BOT
+}
+
+# ── Narrow fallback (< 80 cols): single column ───────────────────────────────
+
+draw_narrow() {
+    # $1 = step title, $2..N = content lines
+    clear
+    local title="$1"; shift
+    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
+    printf "${BL}|${E}$(pad "  ${C}${B}ARKAOS${E}" $(( COLS - 2 )))${BL}|${E}\n"
+    printf "${BL}|${E}$(pad "  ${D}$title${E}" $(( COLS - 2 )))${BL}|${E}\n"
+    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
+    for line in "$@"; do
+        printf "${BL}|${E}$(pad "$line" $(( COLS - 2 )))${BL}|${E}\n"
     done
-    printf "${BL}╚══════════════════╩═══════════════════════════════════════════════════════════╝${E}\n"
+    printf "${BL}+$(_hline $(( COLS - 2 )))+${E}\n"
+}
+
+draw_panel() {
+    if [[ $COLS -ge 80 ]]; then draw_wide "$@"
+    else draw_narrow "$@"; fi
 }
 
 spin_pid() {
-    local pid=$1 msg="$2" fr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local pid=$1 msg="$2" fr='-\|/'
     while kill -0 "$pid" 2>/dev/null; do
-        for i in 0 1 2 3 4 5 6 7 8 9; do
+        for i in 0 1 2 3; do
             printf "\r   ${C}${fr:$i:1}${E}  %s" "$msg"
-            sleep 0.07
+            sleep 0.1
         done
     done
     wait "$pid" 2>/dev/null
-    printf "\r   ${G}✓${E}  %-55s\n" "$msg"
+    printf "\r   ${G}OK${E} %-56s\n" "$msg"
 }
 
 spin() { local msg="$1"; shift; "$@" &>/dev/null & spin_pid $! "$msg"; }
@@ -73,72 +103,115 @@ spin() { local msg="$1"; shift; "$@" &>/dev/null & spin_pid $! "$msg"; }
 # ── Step 1: username ─────────────────────────────────────────────────────────
 err=""
 while true; do
-    draw_panel \
-        "" \
-        "   ${Y}ACCOUNT SETUP${E}                          ${D}1 / 3${E}" \
-        "   ${BL}──────────────────────────────────────────────────────────${E}" \
-        "" \
-        "   Create a username for your account." \
-        "   ${D}Lowercase letters, numbers,  _ or -${E}" \
-        "" "" "" "" "" "" "" "" "" "" "" "" "" \
-        "   ${D}● ○ ○${E}"
-    [[ -n "$err" ]] && printf "\n   ${R}✗  %s${E}\n" "$err" || printf "\n"
-    printf "   Username  ${C}▸${E} "
+    if [[ $COLS -ge 80 ]]; then
+        draw_wide \
+            "" \
+            "   ${Y}ACCOUNT SETUP${E}                          ${D}1 / 3${E}" \
+            "   $(SEP)" \
+            "" \
+            "   Create a username for your account." \
+            "   ${D}Lowercase letters, numbers, _ or -${E}" \
+            "" "" "" "" "" "" "" "" "" "" "" "" "" \
+            "   ${D}[*] [ ] [ ]${E}"
+    else
+        draw_narrow "ACCOUNT SETUP  1/3" \
+            "" "   Create a username." \
+            "   ${D}Lowercase, numbers, _ or -${E}" ""
+    fi
+    [[ -n "$err" ]] && printf "\n   ${R}! %s${E}\n" "$err" || printf "\n"
+    printf "   Username  > "
     read -r username
     [[ "$username" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] && { err=""; break; }
-    err="start with a letter — lowercase letters, numbers, _ or - only"
+    err="start with a letter -- lowercase letters, numbers, _ or - only"
 done
 
 # ── Step 2: password ─────────────────────────────────────────────────────────
 err=""
 while true; do
-    draw_panel \
-        "" \
-        "   ${Y}ACCOUNT SETUP${E}                          ${D}2 / 3${E}" \
-        "   ${BL}──────────────────────────────────────────────────────────${E}" \
-        "" \
-        "   Choose a password for  ${C}${username}${E}" \
-        "" "" "" "" "" "" "" "" "" "" "" "" "" "" \
-        "   ${D}○ ● ○${E}"
-    [[ -n "$err" ]] && printf "\n   ${R}✗  %s${E}\n" "$err" || printf "\n"
-    printf "   Password  ${C}▸${E} "; read -rsp "" password; printf "\n"
+    if [[ $COLS -ge 80 ]]; then
+        draw_wide \
+            "" \
+            "   ${Y}ACCOUNT SETUP${E}                          ${D}2 / 3${E}" \
+            "   $(SEP)" \
+            "" \
+            "   Choose a password for  ${C}${username}${E}" \
+            "   ${D}Minimum 8 characters${E}" \
+            "" "" "" "" "" "" "" "" "" "" "" "" "" \
+            "   ${D}[*] [*] [ ]${E}"
+    else
+        draw_narrow "ACCOUNT SETUP  2/3" \
+            "" "   Password for ${C}${username}${E}" \
+            "   ${D}Minimum 8 characters${E}" ""
+    fi
+    [[ -n "$err" ]] && printf "\n   ${R}! %s${E}\n" "$err" || printf "\n"
+    printf "   Password  > "; read -rsp "" password; printf "\n"
     if [[ -z "$password" ]]; then err="password cannot be empty"; continue; fi
     if [[ ${#password} -lt 8 ]]; then err="password must be at least 8 characters"; continue; fi
-    printf "   Confirm   ${C}▸${E} "; read -rsp "" confirm;  printf "\n"
+    printf "   Confirm   > "; read -rsp "" confirm; printf "\n"
     [[ "$password" == "$confirm" ]] && { err=""; break; }
-    err="passwords do not match — try again"
+    err="passwords do not match -- try again"
 done
 
 # ── Step 3: autologin ────────────────────────────────────────────────────────
-draw_panel \
-    "" \
-    "   ${Y}PREFERENCES${E}                             ${D}3 / 3${E}" \
-    "   ${BL}──────────────────────────────────────────────────────────${E}" \
-    "" \
-    "   Boot straight to desktop without a password?" \
-    "" \
-    "   ${G}Y${E}  automatic login   ${D}(convenient, single-user)${E}" \
-    "   ${R}N${E}  password on boot  ${D}(shared or sensitive machine)${E}" \
-    "" \
-    "   ${D}Change later:${E}  ${C}Super+S${E}  ${D}→ arkaos-settings${E}" \
-    "" "" "" "" "" "" "" "" "" \
-    "   ${D}○ ○ ●${E}"
-printf "\n   Autologin  ${C}▸${E} [Y/n]:  "
+if [[ $COLS -ge 80 ]]; then
+    draw_wide \
+        "" \
+        "   ${Y}PREFERENCES${E}                             ${D}3 / 3${E}" \
+        "   $(SEP)" \
+        "" \
+        "   ${B}Should ArkaOS log you in automatically on boot?${E}" \
+        "" \
+        "   ${G}Y  Autologin ON${E}   -- boots straight to your desktop." \
+        "      ${D}No password prompt. Best for a personal laptop or${E}" \
+        "      ${D}a machine only you use.${E}" \
+        "" \
+        "   ${R}N  Autologin OFF${E}  -- asks for your password every boot." \
+        "      ${D}Better if others have physical access to this machine.${E}" \
+        "" \
+        "   ${D}You can switch this on or off at any time:${E}" \
+        "   ${D}press Super+S on the desktop to open ArkaOS Settings.${E}" \
+        "" "" "" "" \
+        "   ${D}[*] [*] [*]${E}"
+else
+    draw_narrow "PREFERENCES  3/3" \
+        "" \
+        "   ${G}Y${E} = auto-login (no password prompt)" \
+        "   ${R}N${E} = ask password each boot" \
+        "   ${D}Change later: Super+S${E}" ""
+fi
+printf "\n   Autologin [Y/n] > "
 read -r al_choice
 
-# ── Configuring ──────────────────────────────────────────────────────────────
-draw_panel \
-    "" \
-    "   ${Y}CONFIGURING${E}" \
-    "   ${BL}──────────────────────────────────────────────────────────${E}" \
-    "" \
-    "   Applying your settings..." \
-    "" "" "" "" "" "" "" "" "" "" "" "" "" "" ""
+# ── What makes ArkaOS different — shown while configuring ────────────────────
+if [[ $COLS -ge 80 ]]; then
+    draw_wide \
+        "" \
+        "   ${Y}CONFIGURING${E}" \
+        "   $(SEP)" \
+        "" \
+        "   ${D}What makes ArkaOS different from other Linux distros:${E}" \
+        "" \
+        "   ${G}*${E} ${B}Immutable rootfs${E}   ${D}System files are read-only at runtime.${E}" \
+        "     ${D}Malware cannot silently modify the OS.${E}" \
+        "" \
+        "   ${G}*${E} ${B}Encrypted DNS${E}      ${D}Every DNS query goes over TLS to Quad9.${E}" \
+        "     ${D}Your ISP cannot see what sites you visit.${E}" \
+        "" \
+        "   ${G}*${E} ${B}MAC randomisation${E}  ${D}Your hardware address changes each connection.${E}" \
+        "     ${D}Prevents tracking across networks.${E}" \
+        "" \
+        "   ${G}*${E} ${B}Browser sandbox${E}    ${D}Firefox cannot read your home directory,${E}" \
+        "     ${D}WiFi passwords, or system config.${E}" \
+        "" \
+        "" \
+        ""
+else
+    draw_narrow "CONFIGURING" "" "   Setting up your account..." ""
+fi
 printf "\n"
 
 spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
 
-# Use subshell — safe for any password content, avoids bash -c quote issues
 ( printf '%s:%s\n' "$username" "$password" | chpasswd ) &>/dev/null &
 spin_pid $! "Setting password"
 
@@ -147,26 +220,34 @@ if [[ "${al_choice,,}" != "n" ]]; then
         mkdir -p /etc/systemd/system/getty@tty1.service.d
         printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin $username --noclear %%I \$TERM\n' \
             > /etc/systemd/system/getty@tty1.service.d/autologin.conf"
-    al_note="${G}autologin on${E}"
+    al_note="${G}Autologin ON${E}  -- desktop loads automatically"
 else
-    al_note="${Y}password login${E}"
+    al_note="${Y}Autologin OFF${E} -- password required on each boot"
 fi
 
 spin "Finalising" touch /var/lib/arkaos-firstboot-done
 
 # ── Welcome ──────────────────────────────────────────────────────────────────
-draw_panel \
-    "" \
-    "   ${G}${B}ALL DONE!${E}   Welcome, ${C}${username}${E}" \
-    "   ${BL}──────────────────────────────────────────────────────────${E}" \
-    "" \
-    "   $al_note" \
-    "" \
-    "   ${D}Desktop shortcuts${E}" \
-    "   ${BL}Super+Enter${E}  terminal      ${BL}Super+Space${E}  app launcher" \
-    "   ${BL}Super+B${E}      browser       ${BL}Super+E${E}      file manager" \
-    "   ${BL}Super+S${E}      settings      ${BL}Super+1-9${E}    workspaces" \
-    "" "" "" "" "" "" "" "" "" ""
-printf "\n   ${Y}⟳  Rebooting into your desktop in 5 seconds...${E}\n\n"
+if [[ $COLS -ge 80 ]]; then
+    draw_wide \
+        "" \
+        "   ${G}${B}ALL DONE!${E}  Welcome, ${C}${username}${E}" \
+        "   $(SEP)" \
+        "" \
+        "   $al_note" \
+        "" \
+        "   ${D}Desktop shortcuts${E}" \
+        "   ${BL}Super+Enter${E}  terminal      ${BL}Super+Space${E}  app launcher" \
+        "   ${BL}Super+B${E}      browser       ${BL}Super+E${E}      file manager" \
+        "   ${BL}Super+S${E}      settings      ${BL}Super+1-9${E}    workspaces" \
+        "" "" "" "" "" "" "" "" "" ""
+else
+    draw_narrow "ALL DONE! Welcome, ${C}${username}${E}" \
+        "" "   $al_note" "" \
+        "   Super+Enter  terminal" \
+        "   Super+B      browser" \
+        "   Super+S      settings" ""
+fi
+printf "\n   ${Y}Rebooting into your desktop in 5 seconds...${E}\n\n"
 sleep 5
 systemctl reboot
