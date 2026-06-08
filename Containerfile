@@ -8,7 +8,9 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 # Stage 2: bootc image
 FROM quay.io/fedora/fedora-bootc:42
 
-RUN echo "arkaos-dev" > /etc/arkaos-release
+RUN echo "arkaos-dev" > /etc/arkaos-release && \
+    printf 'NAME="ArkaOS"\nPRETTY_NAME="ArkaOS 0.1 — by Thulasi Ram K"\nID=arkaos\nID_LIKE=fedora\nVERSION="0.1"\nVERSION_ID="0.1"\nHOME_URL="https://github.com/thulasiramk-2310/Arka"\nBUG_REPORT_URL="https://github.com/thulasiramk-2310/Arka/issues"\n' \
+      > /etc/os-release
 
 RUN mkdir -p /etc/NetworkManager/conf.d && \
     printf '[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n' \
