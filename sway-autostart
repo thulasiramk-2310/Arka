@@ -4,11 +4,17 @@ if [[ $(tty) == /dev/tty1 ]]; then
     export WLR_NO_HARDWARE_CURSORS=1
     export WLR_RENDERER=pixman
     export WLR_RENDERER_ALLOW_SOFTWARE=1
-    export LIBGL_ALWAYS_SOFTWARE=1
     export MOZ_ENABLE_WAYLAND=1
     export HYPRLAND_NO_RT=1
 
     mkdir -p "$XDG_RUNTIME_DIR"
 
-    exec dbus-run-session -- Hyprland
+    # No exec: if Hyprland crashes we fall through to a visible shell
+    # with the log instead of silently respawning agetty forever.
+    dbus-run-session -- Hyprland > /tmp/hyprland.log 2>&1
+    clear
+    printf 'Hyprland exited. Log (/tmp/hyprland.log):\n\n'
+    tail -40 /tmp/hyprland.log 2>/dev/null
+    printf '\nPress Enter for a shell...\n'
+    read -r _
 fi

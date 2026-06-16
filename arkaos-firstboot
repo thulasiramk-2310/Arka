@@ -1,5 +1,6 @@
 #!/bin/bash
 exec </dev/tty1 >/dev/tty1 2>&1
+stty sane 2>/dev/null
 
 dmesg -n 1 2>/dev/null
 echo 0 > /proc/sys/kernel/printk 2>/dev/null || true
@@ -60,7 +61,7 @@ declare -a L=(
 )
 
 draw_wide() {
-    clear
+    printf '\033[2J\033[H'
     border
     local args=("$@")
     for i in "${!L[@]}"; do row "${L[$i]}" "${args[$i]:-}"; done
@@ -69,7 +70,7 @@ draw_wide() {
 
 draw_narrow() {
     # narrow: single-column, $1=title, rest=content lines
-    clear
+    printf '\033[2J\033[H'
     local title="$1"; shift
     local w=$(( COLS - 2 ))
     local eq; eq=$(printf '%*s' $w '' | tr ' ' '=')
@@ -216,7 +217,11 @@ printf "\n"
 # logind grants device ACLs automatically for local VT sessions
 spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
 
-( printf '%s:%s\n' "$username" "$password" | chpasswd ) &>/dev/null &
+# Hash password with openssl + set via usermod — bypasses PAM, always works
+(
+    hashed=$(printf '%s' "$password" | openssl passwd -6 -stdin 2>/dev/null)
+    usermod -p "$hashed" "$username"
+) &>/dev/null &
 spin_pid $! "Setting password"
 
 if [[ "${al_choice,,}" != "n" ]]; then
@@ -228,6 +233,7 @@ else
     # Write greeter script with username embedded — /etc is mutable in bootc
     cat > /etc/arkaos-greeter << GREETER
 #!/bin/bash
+# Use local time (accounts for timezone offset)
 hour=\$(date +%H)
 if   [[ \$hour -lt 12 ]]; then greet="Good morning"
 elif [[ \$hour -lt 17 ]]; then greet="Good afternoon"

@@ -55,12 +55,16 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
 # Graphical session: Hyprland + launcher + file manager
 RUN dnf install -y hyprland waybar swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio \
-    wofi thunar
+    wofi thunar dbus-daemon pciutils
 
 # Disable PAM password quality enforcement — firstboot wizard handles its own validation
 RUN mkdir -p /etc/security/pwquality.conf.d && \
     printf 'minlen=1\ndcredit=0\nucredit=0\nlcredit=0\nocredit=0\nminclass=0\n' \
       > /etc/security/pwquality.conf.d/00-arkaos.conf
+
+# Timezone: Asia/Kolkata (UTC+5:30)
+RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+    echo "Asia/Kolkata" > /etc/timezone
 
 # Silence console: kernel printk level=1 (EMERG+ALERT only) + no systemd status lines
 RUN mkdir -p /etc/sysctl.d /etc/systemd/system.conf.d && \

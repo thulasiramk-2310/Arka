@@ -7,14 +7,11 @@ ConditionPathExists=!/var/lib/arkaos-firstboot-done
 
 [Service]
 Type=oneshot
+Environment=TERM=linux
 ExecStart=/usr/libexec/arkaos-firstboot
-StandardInput=tty
-StandardOutput=tty
-StandardError=tty
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=no
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
 RemainAfterExit=yes
 
 [Install]
