@@ -12,7 +12,7 @@ Built on the [bootc](https://containers.github.io/bootc/) image model — the OS
 
 ![ArkaOS desktop — firstboot wizard then Hyprland with arka-bar showing Privacy 100](assets/demo.gif)
 
-**arka-bar** — the live privacy panel. Brand · Privacy score (from `arkad` via D-Bus) · Clock. Ticks every 5 s.
+**arka-bar** — the live privacy panel. Brand · Privacy score (from `arkad` via D-Bus) · DNS status indicator · Clock. Ticks every 5 s; turns amber if DNS encryption drops.
 
 ![arka-bar — ARKA · Privacy 100 · ticking clock](assets/bar.gif)
 
@@ -23,17 +23,20 @@ Built on the [bootc](https://containers.github.io/bootc/) image model — the OS
 | Layer | What ships |
 |---|---|
 | Base | `fedora-bootc:42` — immutable rootfs via composefs/ostree |
-| Privacy daemon | `arkad` — Rust, static musl. Enforces 4 privacy controls on boot, re-enforces every 60 s |
+| Privacy daemon | `arkad` — Rust, static musl, async tokio. Enforces 5 privacy controls on boot, re-enforces every 60 s. Exposes typed D-Bus interface (`org.arka.arkad`) |
+| IPC contract | `arka-shell-common` — shared Rust crate. Typed enums (`DnsStatus`, `BrowserSandbox`, …) with `Unknown(String)` catch-all for forward compatibility |
 | Browser sandbox | Firefox wrapped in bubblewrap — home, /etc, D-Bus hidden; only ~/Downloads exposed |
 | Desktop | Hyprland Wayland compositor, firstboot TUI wizard → autologin or greeter, foot terminal |
-| Panel | `arka-bar` — GTK4 + gtk4-layer-shell. Brand, live Privacy score (arkad D-Bus), clock |
+| Panel | `arka-bar` — GTK4 + gtk4-layer-shell. Brand, live Privacy score (u8), DNS status colour, clock |
 | Boot integrity | TPM2 PCRs 0–10 measured (firmware → GRUB → shim). PCRs 11–15 blocked — see Limitations |
 
-**arkad enforces:**
-- MAC address randomisation on every WiFi/ethernet connection (NetworkManager)
-- DNS-over-TLS to Quad9 (`9.9.9.9:853`) via systemd-resolved
-- Hostname locked to `arka` (hostnamectl)
-- IPv6 privacy extensions (`net.ipv6.conf.all.use_tempaddr=2`)
+**arkad enforces (5 enforcers, 8-factor score summing to 100):**
+- MAC address randomisation on every WiFi/ethernet connection (NetworkManager) — **20 pts**
+- DNS-over-TLS to Quad9 (`9.9.9.9:853`) via systemd-resolved — **25 pts**
+- Hostname locked to `arka` (hostnamectl) — **10 pts**
+- IPv6 privacy extensions (`net.ipv6.conf.all.use_tempaddr=2`) — **10 pts**
+- Bubblewrap sandbox infrastructure + Firefox wrapper verified at runtime — **15 pts** (sandbox) + **10 pts** (browser)
+- Telemetry and tracking: ArkaOS ships none — **5 + 5 pts** (always active)
 
 ---
 
@@ -58,22 +61,34 @@ Built on the [bootc](https://containers.github.io/bootc/) image model — the OS
 │                                                                               │
 │  ┌─────────────────────────────── arka-bar ──────────────────────────────┐   │
 │  │  ARKA  ···················  Privacy 100  ·  19:04  2026-06-20        │   │
-│  │  (GTK4 layer-shell top, polls arkad D-Bus PrivacyScore every 5 s)    │   │
+│  │  (GTK4 layer-shell top bar, polls arkad D-Bus every 5 s)             │   │
+│  │  Green = DnsStatus::Encrypted  ·  Amber = any other DNS state        │   │
 │  └───────────────────────────────────────────────────────────────────────┘   │
 │  Super+Return = foot terminal    Super+B = sandboxed Firefox                │
 │  Super+Space  = wofi launcher    Super+E = thunar file manager              │
 │                                                                               │
 ├──────────────────────────────── arkad ───────────────────────────────────────┤
 │                                                                               │
-│  Rust daemon (static musl). D-Bus service: org.arka.arkad                   │
-│  Enforce on start, re-enforce every 60 s. Exposes PrivacyScore property.    │
+│  Rust daemon (static musl, async tokio). D-Bus: org.arka.arkad              │
+│  Type=notify + WatchdogSec=120s. Enforce on start, re-enforce every 60 s.   │
 │                                                                               │
-│  ┌─────────────────┐ ┌──────────────────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │    mac.rs       │ │       dns.rs          │ │hostname  │ │   ipv6.rs   │ │
-│  │ WiFi+eth MAC    │ │ DNS-over-TLS          │ │   .rs    │ │use_tempaddr │ │
-│  │ random per conn │ │ Quad9  9.9.9.9:853   │ │  arka    │ │     =2      │ │
-│  │ NM conf.d       │ │ resolved.conf.d       │ │hostnamectl│ │  sysctl    │ │
-│  └─────────────────┘ └──────────────────────┘ └──────────┘ └─────────────┘ │
+│  D-Bus properties (all typed, string enums forward-compatible):              │
+│    PrivacyScore: y    MacRandomization: b    DnsStatus: s                   │
+│    HostnamePrivacy: b  Ipv6Privacy: b  SandboxStatus: s  BrowserSandbox: s  │
+│  D-Bus method: EnforceAll()                                                  │
+│                                                                               │
+│  ┌──────────┐ ┌───────────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │  mac.rs  │ │      dns.rs       │ │hostname  │ │ ipv6.rs  │ │sandbox   │ │
+│  │ WiFi+eth │ │ DoT Quad9         │ │   .rs    │ │tempaddr=2│ │   .rs    │ │
+│  │ MAC rand │ │ 9.9.9.9:853       │ │  arka    │ │ sysctl   │ │bwrap +   │ │
+│  │ NM conf.d│ │ resolved.conf.d   │ │hostnamectl│ │sysctl.d  │ │firefox   │ │
+│  └──────────┘ └───────────────────┘ └──────────┘ └──────────┘ └──────────┘ │
+│                                                                               │
+│  arka-shell-common (shared contract crate)                                   │
+│    DnsStatus: Encrypted|Plaintext|Degraded|ForcedPlaintext|Error|Unknown(s) │
+│    BrowserSandbox: Persistent|Ephemeral|PrivateWorkspace|None|Unknown(s)    │
+│    SandboxStatus: Active|Inactive|Partial|Unknown(s)                         │
+│    Unknown(String) catch-all — new variants never crash old clients          │
 │                                                                               │
 ├──────────────────────────── firefox sandbox ─────────────────────────────────┤
 │                                                                               │
@@ -105,12 +120,14 @@ Arch Linux host
       ├─ podman build  (three-stage Containerfile)
       │    Stage 1: rust:alpine
       │               cargo build --target x86_64-unknown-linux-musl
-      │               → arkad  (static musl, no libc dep)
+      │               → arkad  (static musl, async tokio, no libc dep)
+      │               ← arka-shell/arka-shell-common/ (path dep for types)
       │    Stage 2: fedora:42
       │               cargo build (glibc, GTK4 deps)
-      │               → arka-bar  (GTK4 + gtk4-layer-shell)
+      │               → arka-bar  (GTK4 + gtk4-layer-shell, reads arka-shell-common)
       │    Stage 3: fedora-bootc:42
       │               arkad + arka-bar binaries + systemd units
+      │               D-Bus policy (org.arka.arkad.conf) + activation file
       │               NM conf.d (MAC randomisation)
       │               resolved.conf.d (DoT)
       │               UKI artifact (in image layer — see Limitations)
@@ -216,6 +233,28 @@ On **first boot** the setup wizard runs on tty1 — enter username, password, an
 
 ---
 
+## Querying arkad via D-Bus
+
+```bash
+# Privacy score (0–100)
+busctl get-property org.arka.arkad /org/arka/arkad org.arka.arkad PrivacyScore
+# y 100
+
+# DNS status (string enum — forward-compatible, Unknown(s) catch-all in clients)
+busctl get-property org.arka.arkad /org/arka/arkad org.arka.arkad DnsStatus
+# s "Encrypted"
+
+# Sandbox state
+busctl get-property org.arka.arkad /org/arka/arkad org.arka.arkad SandboxStatus BrowserSandbox
+# s "Active"
+# s "Persistent"
+
+# Force re-enforcement now
+busctl call org.arka.arkad /org/arka/arkad org.arka.arkad EnforceAll
+```
+
+---
+
 ## Sandbox isolation proof
 
 ```bash
@@ -273,13 +312,27 @@ The UKI artifact exists in the image layer (`/usr/lib/modules/<kver>/<kver>.efi`
 ```
 Containerfile               three-stage build: rust:alpine → fedora:42 → fedora-bootc:42
 arkad/
-  src/main.rs               main loop — enforce all, sleep 60 s, re-enforce on drift
+  src/main.rs               tokio main — initial enforce, D-Bus register, sd_notify(READY), 60s loop
   src/config.rs             serde config (secure defaults, works with no file)
-  src/enforcers/            mac.rs  dns.rs  hostname.rs  ipv6.rs
-  arkad.service             systemd unit (D-Bus: org.arka.arkad)
+  src/state.rs              ArkadState — shared state (Arc<RwLock<>>)
+  src/score.rs              compute() — 8 weighted factors → u8 score
+  src/error.rs              ArkadError
+  src/ipc/
+    interface.rs            ArkadIface — zbus #[interface], 7 properties + EnforceAll method
+  src/enforcers/
+    mod.rs                  AsyncEnforcer trait (async enforce + update_state)
+    mac.rs                  NM conf.d — WiFi/eth MAC randomisation
+    dns.rs                  resolved.conf.d — DoT Quad9, returns DnsStatus
+    hostname.rs             hostnamectl set-hostname arka
+    ipv6.rs                 sysctl.d — use_tempaddr=2
+    sandbox.rs              bwrap + firefox wrapper path checks, returns SandboxStatus/BrowserSandbox
+  arkad.service             systemd unit (Type=notify, WatchdogSec=120s)
+  org.arka.arkad.conf       D-Bus policy (per-method allow/deny)
+  org.arka.arkad.service    D-Bus activation (system bus, on-demand start)
   arkad.toml                /etc/arkad/arkad.toml defaults
 arka-shell/
-  arka-bar/src/main.rs      GTK4 layer-shell panel — brand, Privacy score, clock
+  arka-shell-common/        shared contract crate — DnsStatus, BrowserSandbox, SandboxStatus enums
+  arka-bar/src/main.rs      GTK4 panel — brand, Privacy score (u8), DNS colour, clock
 arkaos-firefox              bwrap wrapper (IS /usr/bin/firefox in the deployed image)
 arkaos-hyprland-config      Hyprland config → /etc/skel/.config/hypr/hyprland.conf
 sway-autostart              .bash_profile → /etc/skel/.bash_profile (launches Hyprland)
