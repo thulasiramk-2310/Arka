@@ -8,10 +8,12 @@ const APP_ID: &str = "org.arka.hotkeys";
 const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
     ("Apps", &[
         ("Super + Space",   "Open app launcher"),
+        ("Super + S",       "Settings"),
         ("Super + D",       "Privacy dashboard"),
         ("Super + W",       "WiFi networks"),
         ("Super + U",       "System updates"),
         ("Super + P",       "Capsule — install apps"),
+        ("Super + M",       "App permissions"),
         ("Super + /",       "This cheat sheet"),
     ]),
     ("Windows", &[
@@ -19,8 +21,15 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
         ("Super + B",       "Open browser"),
         ("Super + E",       "File manager"),
         ("Super + Shift+Q", "Close window"),
+        ("Alt + F4",        "Close window"),
         ("Super + F",       "Fullscreen"),
         ("Super + V",       "Toggle floating"),
+    ]),
+    ("Media Keys", &[
+        ("Volume Up/Down",  "Raise / lower volume 5%"),
+        ("Mute",            "Toggle mute"),
+        ("Brightness Up",   "Increase screen brightness"),
+        ("Brightness Down", "Decrease screen brightness"),
     ]),
     ("Screenshots", &[
         ("Print",           "Screenshot entire screen"),

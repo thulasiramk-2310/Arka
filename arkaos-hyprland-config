@@ -72,9 +72,9 @@ dwindle {
 }
 
 # Floating windows
-windowrulev2 = float,  title:^(ArkaOS Settings)$
-windowrulev2 = size  520 380, title:^(ArkaOS Settings)$
-windowrulev2 = center, title:^(ArkaOS Settings)$
+windowrulev2 = float,  class:^(org.arka.settings)$
+windowrulev2 = size  720 680, class:^(org.arka.settings)$
+windowrulev2 = center, class:^(org.arka.settings)$
 
 windowrulev2 = float,  class:^(org.arka.dashboard)$
 windowrulev2 = size  760 700, class:^(org.arka.dashboard)$
@@ -96,19 +96,25 @@ windowrulev2 = float,  class:^(org.arka.hotkeys)$
 windowrulev2 = size  500 580, class:^(org.arka.hotkeys)$
 windowrulev2 = center, class:^(org.arka.hotkeys)$
 
+windowrulev2 = float,  class:^(org.arka.perms)$
+windowrulev2 = size  640 700, class:^(org.arka.perms)$
+windowrulev2 = center, class:^(org.arka.perms)$
+
 # Keybinds
 $mod = SUPER
 bind = $mod,       Return,    exec,  foot
 bind = $mod,       B,         exec,  firefox
 bind = $mod,       Space,     exec,  arka-launcher
 bind = $mod,       E,         exec,  thunar
-bind = $mod,       S,         exec,  foot --title "ArkaOS Settings" -e sudo arkaos-settings
+bind = $mod,       S,         exec,  arka-settings-gtk
 bind = $mod,       D,         exec,  arka-dashboard
 bind = $mod,       W,         exec,  arka-wifi
 bind = $mod,       U,         exec,  arka-update
 bind = $mod,       slash,     exec,  arka-hotkeys
 bind = $mod,       P,         exec,  arka-capsule
+bind = $mod,       M,         exec,  arka-perms
 bind = $mod SHIFT, Q,         killactive
+bind = ALT,        F4,        killactive
 bind = $mod SHIFT, E,         exit
 bind = $mod,       F,         fullscreen
 
@@ -116,10 +122,15 @@ bind = $mod,       F,         fullscreen
 bind  = ,          Print,     exec,  sh -c 'mkdir -p ~/Pictures && grim ~/Pictures/screenshot-$(date +%s).png && notify-send "Screenshot" "Saved to ~/Pictures"'
 bind  = $mod SHIFT,S,         exec,  sh -c 'mkdir -p ~/Pictures && grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%s).png && notify-send "Screenshot" "Saved to ~/Pictures"'
 
-# Volume (media keys)
-bindel = ,XF86AudioRaiseVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
-bindel = ,XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
-bind   = ,XF86AudioMute,        exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+# Volume (media keys — XF86 works regardless of which Fn key the laptop assigns)
+bindel = ,XF86AudioRaiseVolume,  exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindel = ,XF86AudioLowerVolume,  exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bind   = ,XF86AudioMute,         exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bind   = ,XF86AudioMicMute,      exec, wpctl set-mute @DEFAULT_SOURCE@ toggle
+
+# Screen brightness (media keys)
+bindel = ,XF86MonBrightnessUp,   exec, brightnessctl set 10%+
+bindel = ,XF86MonBrightnessDown, exec, brightnessctl set 10%-
 
 # Focus
 bind = $mod, left,  movefocus, l

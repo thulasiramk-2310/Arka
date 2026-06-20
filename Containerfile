@@ -67,7 +67,7 @@ RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio \
     thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
     libadwaita mako grim slurp pavucontrol \
-    wl-clipboard fzf flatpak xdg-user-dirs
+    wl-clipboard fzf flatpak xdg-user-dirs brightnessctl
 
 
 # Install arka-bar (replaces waybar)
@@ -81,8 +81,11 @@ COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wif
 COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
 COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
 COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
+COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
+COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
 RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher /usr/bin/arka-wifi \
-              /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule
+              /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
+              /usr/bin/arka-perms /usr/bin/arka-settings-gtk
 
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \

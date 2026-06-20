@@ -54,6 +54,12 @@ fn build_ui(app: &Application) {
 
     let privacy_label = Label::new(Some("Privacy --"));
     privacy_label.add_css_class("privacy-score");
+    // Click privacy score → open dashboard
+    let priv_click = gtk4::GestureClick::new();
+    priv_click.connect_released(|_, _, _, _| {
+        let _ = std::process::Command::new("arka-dashboard").spawn();
+    });
+    privacy_label.add_controller(priv_click);
 
     let wifi_img = Image::from_icon_name("network-wireless-signal-none-symbolic");
     wifi_img.set_pixel_size(16);
