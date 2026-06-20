@@ -62,20 +62,32 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox
 
-# Graphical session: Hyprland + launcher + file manager
+# Graphical session: Hyprland + launcher + file manager + user tools
 RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio \
-    wofi thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
-    libadwaita
+    thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
+    libadwaita mako grim slurp pavucontrol \
+    wl-clipboard fzf flatpak xdg-user-dirs
+
 
 # Install arka-bar (replaces waybar)
 COPY --from=shell-builder /build/target/release/arka-bar /usr/bin/arka-bar
 RUN chmod 755 /usr/bin/arka-bar
 
-# Install arka-dashboard + arka-launcher
+# Install arka-shell binaries
 COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
 COPY --from=shell-builder /build/target/release/arka-launcher  /usr/bin/arka-launcher
-RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher
+COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
+COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
+COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
+COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
+RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher /usr/bin/arka-wifi \
+              /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule
+
+# mako notification config + skel/Pictures for screenshots
+RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
+    printf '[global]\nbackground-color=#0d0d1aff\ntext-color=#d0dff0ff\nborder-color=#1a3a5aff\nborder-radius=8\nborder-size=1\nfont=Liberation Sans 12\nwidth=320\nmargin=10\npadding=12\ndefault-timeout=4000\n' \
+      > /etc/skel/.config/mako/config
 
 # Disable PAM password quality enforcement — firstboot wizard handles its own validation
 RUN mkdir -p /etc/security/pwquality.conf.d && \

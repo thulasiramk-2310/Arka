@@ -6,6 +6,7 @@ monitor=,preferred,auto,1
 # Startup
 exec-once = swaybg -i /usr/share/arka/wallpapers/default.png -m fill
 exec-once = arka-bar
+exec-once = mako
 
 # Environment
 env = WLR_NO_HARDWARE_CURSORS,1
@@ -83,6 +84,18 @@ windowrulev2 = float,    class:^(org.arka.launcher)$
 windowrulev2 = noanim,   class:^(org.arka.launcher)$
 windowrulev2 = noborder, class:^(org.arka.launcher)$
 
+windowrulev2 = float,  class:^(org.arka.wifi)$
+windowrulev2 = size  440 520, class:^(org.arka.wifi)$
+windowrulev2 = center, class:^(org.arka.wifi)$
+
+windowrulev2 = float,  class:^(org.arka.update)$
+windowrulev2 = size  460 400, class:^(org.arka.update)$
+windowrulev2 = center, class:^(org.arka.update)$
+
+windowrulev2 = float,  class:^(org.arka.hotkeys)$
+windowrulev2 = size  500 580, class:^(org.arka.hotkeys)$
+windowrulev2 = center, class:^(org.arka.hotkeys)$
+
 # Keybinds
 $mod = SUPER
 bind = $mod,       Return,    exec,  foot
@@ -91,10 +104,22 @@ bind = $mod,       Space,     exec,  arka-launcher
 bind = $mod,       E,         exec,  thunar
 bind = $mod,       S,         exec,  foot --title "ArkaOS Settings" -e sudo arkaos-settings
 bind = $mod,       D,         exec,  arka-dashboard
+bind = $mod,       W,         exec,  arka-wifi
+bind = $mod,       U,         exec,  arka-update
+bind = $mod,       slash,     exec,  arka-hotkeys
+bind = $mod,       P,         exec,  arka-capsule
 bind = $mod SHIFT, Q,         killactive
 bind = $mod SHIFT, E,         exit
-bind = $mod,       V,         togglefloating
 bind = $mod,       F,         fullscreen
+
+# Screenshots
+bind  = ,          Print,     exec,  sh -c 'mkdir -p ~/Pictures && grim ~/Pictures/screenshot-$(date +%s).png && notify-send "Screenshot" "Saved to ~/Pictures"'
+bind  = $mod SHIFT,S,         exec,  sh -c 'mkdir -p ~/Pictures && grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%s).png && notify-send "Screenshot" "Saved to ~/Pictures"'
+
+# Volume (media keys)
+bindel = ,XF86AudioRaiseVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindel = ,XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bind   = ,XF86AudioMute,        exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
 
 # Focus
 bind = $mod, left,  movefocus, l
