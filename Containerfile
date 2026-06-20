@@ -5,7 +5,14 @@ COPY arkad/ /build/
 WORKDIR /build
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
-# Stage 2: bootc image
+# Stage 2: build arka-bar (GTK4 layer-shell bar — glibc required, not musl)
+FROM docker.io/fedora:42 AS shell-builder
+RUN dnf install -y -q gtk4-devel gtk4-layer-shell-devel rust cargo gcc pkgconf-pkg-config
+COPY arka-shell/ /build/
+WORKDIR /build
+RUN cargo build --release
+
+# Stage 3: bootc image
 FROM quay.io/fedora/fedora-bootc:42
 
 RUN echo "arkaos-dev" > /etc/arkaos-release && \
@@ -54,9 +61,13 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
     ln -sf firefox-sandbox /usr/bin/firefox
 
 # Graphical session: Hyprland + launcher + file manager
-RUN dnf install -y hyprland waybar swaybg foot xorg-x11-server-Xwayland \
+RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio \
-    wofi thunar dbus-daemon pciutils
+    wofi thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES
+
+# Install arka-bar (replaces waybar)
+COPY --from=shell-builder /build/target/release/arka-bar /usr/bin/arka-bar
+RUN chmod 755 /usr/bin/arka-bar
 
 # Disable PAM password quality enforcement — firstboot wizard handles its own validation
 RUN mkdir -p /etc/security/pwquality.conf.d && \
@@ -83,11 +94,9 @@ RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
     echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
       > /etc/sudoers.d/99-arkaos-settings
 
-# Hyprland config + waybar + autostart via /etc/skel
-RUN mkdir -p /etc/skel/.config/hypr /etc/skel/.config/waybar
+# Hyprland config + autostart via /etc/skel
+RUN mkdir -p /etc/skel/.config/hypr
 COPY arkaos-hyprland-config    /etc/skel/.config/hypr/hyprland.conf
-COPY arkaos-waybar-config      /etc/skel/.config/waybar/config.jsonc
-COPY arkaos-waybar-style       /etc/skel/.config/waybar/style.css
 COPY sway-autostart            /etc/skel/.bash_profile
 
 RUN bootc container lint

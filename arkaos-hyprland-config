@@ -5,13 +5,16 @@ monitor=,preferred,auto,1
 
 # Startup
 exec-once = swaybg -c 0f0f14
-exec-once = waybar
+exec-once = arka-bar
 
 # Environment
 env = WLR_NO_HARDWARE_CURSORS,1
 env = WLR_RENDERER_ALLOW_SOFTWARE,1
 env = MOZ_ENABLE_WAYLAND,1
+env = GDK_BACKEND,wayland
 env = XCURSOR_SIZE,24
+env = GSK_RENDERER,cairo
+env = GTK_A11Y,none
 
 # Input
 input {
