@@ -54,6 +54,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-launcher"
+version = "0.1.0"
+dependencies = [
+ "glib",
+ "gtk4",
+ "gtk4-layer-shell",
+]
+
+[[package]]
 name = "arka-shell-common"
 version = "0.1.0"
 

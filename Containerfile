@@ -72,9 +72,10 @@ RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
 COPY --from=shell-builder /build/target/release/arka-bar /usr/bin/arka-bar
 RUN chmod 755 /usr/bin/arka-bar
 
-# Install arka-dashboard
+# Install arka-dashboard + arka-launcher
 COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
-RUN chmod 755 /usr/bin/arka-dashboard
+COPY --from=shell-builder /build/target/release/arka-launcher  /usr/bin/arka-launcher
+RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher
 
 # Disable PAM password quality enforcement — firstboot wizard handles its own validation
 RUN mkdir -p /etc/security/pwquality.conf.d && \
@@ -104,13 +105,20 @@ RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
 # ArkaOS branded wallpaper (generated at build time — no binary assets in repo)
 RUN dnf install -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
-    magick -size 1920x1080 gradient:"#080812-#0d1b2e" \
+    magick \
+      \( -size 1920x1080 gradient:"#07080f-#0a1220" \) \
+      \( -size 1920x1080 radial-gradient:"#0d2a50-#07080f" \) \
+      -compose Screen -composite \
+      \( -size 32x32 xc:none -fill "rgba(255,255,255,0.04)" \
+         -draw "point 16,16" -write mpr:dot +delete \
+         -size 1920x1080 tile:mpr:dot \) \
+      -compose Over -composite \
       -fill "#c8d8f0" -gravity Center \
       -font /usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf \
-      -pointsize 80 -draw "text 0,-60 '▲  ARKA'" \
-      -fill "#4a6e8a" \
+      -pointsize 78 -draw "text 0,-60 '▲  ARKA'" \
+      -fill "#3d6080" \
       -font /usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf \
-      -pointsize 22 -kerning 3 \
+      -pointsize 21 -kerning 3 \
       -draw "text 0,40 'Your Computer Is Yours'" \
       /usr/share/arka/wallpapers/default.png && \
     dnf remove -y -q ImageMagick

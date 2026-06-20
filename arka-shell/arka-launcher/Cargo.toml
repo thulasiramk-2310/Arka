@@ -1,0 +1,13 @@
+[package]
+name = "arka-launcher"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arka-launcher"
+path = "src/main.rs"
+
+[dependencies]
+gtk4 = "0.9"
+gtk4-layer-shell = "0.4"
+glib = "0.20"

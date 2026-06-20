@@ -79,11 +79,15 @@ windowrulev2 = float,  class:^(org.arka.dashboard)$
 windowrulev2 = size  760 700, class:^(org.arka.dashboard)$
 windowrulev2 = center, class:^(org.arka.dashboard)$
 
+windowrulev2 = float,    class:^(org.arka.launcher)$
+windowrulev2 = noanim,   class:^(org.arka.launcher)$
+windowrulev2 = noborder, class:^(org.arka.launcher)$
+
 # Keybinds
 $mod = SUPER
 bind = $mod,       Return,    exec,  foot
 bind = $mod,       B,         exec,  firefox
-bind = $mod,       Space,     exec,  wofi --show drun
+bind = $mod,       Space,     exec,  arka-launcher
 bind = $mod,       E,         exec,  thunar
 bind = $mod,       S,         exec,  foot --title "ArkaOS Settings" -e sudo arkaos-settings
 bind = $mod,       D,         exec,  arka-dashboard
