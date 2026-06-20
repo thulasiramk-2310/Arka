@@ -1,0 +1,67 @@
+/* arka-dashboard stylesheet */
+
+.arka-brand {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: @accent_color;
+    margin-bottom: 4px;
+}
+
+.score-number {
+    font-size: 72px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.score-denom {
+    font-size: 22px;
+    color: alpha(@window_fg_color, 0.45);
+    padding-bottom: 10px;
+    margin-start: 4px;
+}
+
+.score-tagline {
+    font-size: 13px;
+    color: alpha(@window_fg_color, 0.55);
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+
+/* status badges */
+label.badge-green  { color: #4ade80; font-size: 13px; font-weight: 600; }
+label.badge-yellow { color: #fbbf24; font-size: 13px; font-weight: 600; }
+label.badge-red    { color: #f87171; font-size: 13px; font-weight: 600; }
+
+/* score row check icons */
+image.score-check-good    { color: #4ade80; }
+image.score-check-bad     { color: #f87171; }
+image.score-check-pending { color: alpha(@window_fg_color, 0.3); }
+
+/* level bars in score breakdown */
+levelbar.score-bar {
+    min-height: 6px;
+}
+
+levelbar.score-bar block.filled {
+    background: linear-gradient(to right, #22c55e, #4ade80);
+    border-radius: 3px;
+    min-height: 6px;
+    margin: 3px 0;
+}
+
+levelbar.score-bar block.empty {
+    background: alpha(@window_fg_color, 0.08);
+    border-radius: 3px;
+    min-height: 6px;
+    margin: 3px 0;
+}
+
+/* action buttons */
+button.pill {
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 0;
+}

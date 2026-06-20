@@ -37,3 +37,7 @@ impl From<String> for DnsStatus {
 impl From<&str> for DnsStatus {
     fn from(s: &str) -> Self { Self::from(s.to_owned()) }
 }
+
+impl Default for DnsStatus {
+    fn default() -> Self { Self::Unknown("Unknown".into()) }
+}

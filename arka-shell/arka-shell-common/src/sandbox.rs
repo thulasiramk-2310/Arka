@@ -32,6 +32,10 @@ impl From<&str> for SandboxStatus {
     fn from(s: &str) -> Self { Self::from(s.to_owned()) }
 }
 
+impl Default for SandboxStatus {
+    fn default() -> Self { Self::Unknown("Unknown".into()) }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum BrowserSandbox {
     Persistent,
@@ -67,4 +71,8 @@ impl From<String> for BrowserSandbox {
 
 impl From<&str> for BrowserSandbox {
     fn from(s: &str) -> Self { Self::from(s.to_owned()) }
+}
+
+impl Default for BrowserSandbox {
+    fn default() -> Self { Self::Unknown("Unknown".into()) }
 }

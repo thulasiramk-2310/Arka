@@ -8,7 +8,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Stage 2: build arka-bar (GTK4 layer-shell bar — glibc required, not musl)
 FROM docker.io/fedora:42 AS shell-builder
-RUN dnf install -y -q gtk4-devel gtk4-layer-shell-devel rust cargo gcc pkgconf-pkg-config
+RUN dnf install -y -q gtk4-devel gtk4-layer-shell-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
 COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --release
@@ -65,11 +65,16 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
 # Graphical session: Hyprland + launcher + file manager
 RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
     pipewire wireplumber pipewire-pulseaudio \
-    wofi thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES
+    wofi thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
+    libadwaita
 
 # Install arka-bar (replaces waybar)
 COPY --from=shell-builder /build/target/release/arka-bar /usr/bin/arka-bar
 RUN chmod 755 /usr/bin/arka-bar
+
+# Install arka-dashboard
+COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
+RUN chmod 755 /usr/bin/arka-dashboard
 
 # Disable PAM password quality enforcement — firstboot wizard handles its own validation
 RUN mkdir -p /etc/security/pwquality.conf.d && \
@@ -95,6 +100,20 @@ RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
     systemctl enable arkaos-firstboot.service && \
     echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
       > /etc/sudoers.d/99-arkaos-settings
+
+# ArkaOS branded wallpaper (generated at build time — no binary assets in repo)
+RUN dnf install -y -q ImageMagick && \
+    mkdir -p /usr/share/arka/wallpapers && \
+    magick -size 1920x1080 gradient:"#080812-#0d1b2e" \
+      -fill "#c8d8f0" -gravity Center \
+      -font /usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf \
+      -pointsize 80 -draw "text 0,-60 '▲  ARKA'" \
+      -fill "#4a6e8a" \
+      -font /usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf \
+      -pointsize 22 -kerning 3 \
+      -draw "text 0,40 'Your Computer Is Yours'" \
+      /usr/share/arka/wallpapers/default.png && \
+    dnf remove -y -q ImageMagick
 
 # Hyprland config + autostart via /etc/skel
 RUN mkdir -p /etc/skel/.config/hypr
