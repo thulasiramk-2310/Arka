@@ -1,3 +1,4 @@
+use arka_shell_common::DnsStatus;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, Box as GtkBox, Label, Orientation};
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -8,6 +9,7 @@ const STYLE: &str = "
 .arka-bar { background-color: #0f0f14; padding: 2px 12px; }
 .brand { color: #4fc3f7; font-weight: bold; letter-spacing: 2px; }
 .privacy-score { color: #8bd17c; margin-right: 16px; }
+.privacy-warn  { color: #e5a445; margin-right: 16px; }
 .clock { color: #cfcfcf; }
 ";
 
@@ -68,11 +70,11 @@ fn build_ui(app: &Application) {
         }
     });
 
-    update_privacy_score(&privacy_label);
+    update_privacy(&privacy_label);
     glib::timeout_add_seconds_local(5, {
         let privacy_label = privacy_label.clone();
         move || {
-            update_privacy_score(&privacy_label);
+            update_privacy(&privacy_label);
             glib::ControlFlow::Continue
         }
     });
@@ -80,14 +82,28 @@ fn build_ui(app: &Application) {
     window.present();
 }
 
-fn update_privacy_score(label: &Label) {
-    match fetch_privacy_score() {
-        Ok(score) => label.set_text(&format!("Privacy {score}")),
-        Err(_) => label.set_text("Privacy --"),
+fn update_privacy(label: &Label) {
+    match fetch_state() {
+        Ok((score, dns)) => {
+            label.set_text(&format!("Privacy {score}"));
+            // Warn visually if DNS isn't encrypted
+            if dns == DnsStatus::Encrypted {
+                label.remove_css_class("privacy-warn");
+                label.add_css_class("privacy-score");
+            } else {
+                label.remove_css_class("privacy-score");
+                label.add_css_class("privacy-warn");
+            }
+        }
+        Err(_) => {
+            label.set_text("Privacy --");
+            label.remove_css_class("privacy-warn");
+            label.add_css_class("privacy-score");
+        }
     }
 }
 
-fn fetch_privacy_score() -> zbus::Result<u32> {
+fn fetch_state() -> zbus::Result<(u8, DnsStatus)> {
     let conn = zbus::blocking::Connection::system()?;
     let proxy = zbus::blocking::Proxy::new(
         &conn,
@@ -95,5 +111,7 @@ fn fetch_privacy_score() -> zbus::Result<u32> {
         "/org/arka/arkad",
         "org.arka.arkad",
     )?;
-    proxy.get_property::<u32>("PrivacyScore")
+    let score = proxy.get_property::<u8>("PrivacyScore")?;
+    let dns   = proxy.get_property::<String>("DnsStatus").map(DnsStatus::from).unwrap_or(DnsStatus::Unknown("?".into()));
+    Ok((score, dns))
 }

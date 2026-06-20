@@ -2,6 +2,7 @@
 FROM docker.io/rust:alpine AS builder
 RUN apk add --no-cache musl-dev
 COPY arkad/ /build/
+COPY arka-shell/arka-shell-common/ /arka-shell/arka-shell-common/
 WORKDIR /build
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
@@ -49,6 +50,7 @@ COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/arkad /usr/b
 COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
 COPY arkad/arkad.toml /etc/arkad/arkad.toml
 COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
+COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
 RUN chmod 755 /usr/bin/arkad && \
     mkdir -p /etc/arkad && \
     systemctl enable arkad.service

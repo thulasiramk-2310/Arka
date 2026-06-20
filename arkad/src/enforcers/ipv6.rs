@@ -1,5 +1,7 @@
 use crate::config::Config;
-use super::Enforcer;
+use crate::error::ArkadError;
+use crate::state::SharedState;
+use super::AsyncEnforcer;
 
 const SYSCTL_CONF: &str = "/etc/sysctl.d/99-arkad-ipv6-privacy.conf";
 const SYSCTL_CONTENT: &str =
@@ -11,24 +13,31 @@ impl Ipv6Enforcer {
     pub fn new(_cfg: &Config) -> Self { Self }
 }
 
-impl Enforcer for Ipv6Enforcer {
+#[async_trait::async_trait]
+impl AsyncEnforcer for Ipv6Enforcer {
     fn name(&self) -> &'static str { "ipv6" }
 
-    fn enforce(&self) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::create_dir_all("/etc/sysctl.d")?;
-        std::fs::write(SYSCTL_CONF, SYSCTL_CONTENT)?;
-        // Apply immediately via sysctl -p
-        let _ = std::process::Command::new("sysctl")
-            .args(["-p", SYSCTL_CONF])
-            .status();
-        Ok(())
+    async fn enforce(&self) -> Result<(), ArkadError> {
+        tokio::task::spawn_blocking(|| {
+            std::fs::create_dir_all("/etc/sysctl.d")
+                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            std::fs::write(SYSCTL_CONF, SYSCTL_CONTENT)
+                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            let _ = std::process::Command::new("sysctl")
+                .args(["-p", SYSCTL_CONF])
+                .status();
+            Ok::<(), ArkadError>(())
+        }).await?
     }
 
-    fn verify(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        let out = std::process::Command::new("sysctl")
-            .arg("net.ipv6.conf.all.use_tempaddr")
-            .output()?;
-        let val = String::from_utf8_lossy(&out.stdout);
-        Ok(val.contains('2'))
+    async fn update_state(&self, state: &SharedState) {
+        let ok = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("sysctl")
+                .arg("net.ipv6.conf.all.use_tempaddr")
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).contains('2'))
+                .unwrap_or(false)
+        }).await.unwrap_or(false);
+        state.write().await.ipv6_privacy = ok;
     }
 }

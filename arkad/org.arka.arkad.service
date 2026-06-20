@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.arka.arkad
+Exec=/usr/bin/arkad
+User=root
+SystemdService=arkad.service

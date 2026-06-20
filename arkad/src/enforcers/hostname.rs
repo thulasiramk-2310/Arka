@@ -1,30 +1,42 @@
 use crate::config::Config;
-use super::Enforcer;
+use crate::error::ArkadError;
+use crate::state::SharedState;
+use super::AsyncEnforcer;
 
 pub struct HostnameEnforcer {
-    name: String,
+    hostname: String,
 }
 
 impl HostnameEnforcer {
     pub fn new(cfg: &Config) -> Self {
-        Self { name: cfg.hostname.name.clone() }
+        Self { hostname: cfg.hostname.name.clone() }
     }
 }
 
-impl Enforcer for HostnameEnforcer {
+#[async_trait::async_trait]
+impl AsyncEnforcer for HostnameEnforcer {
     fn name(&self) -> &'static str { "hostname" }
 
-    fn enforce(&self) -> Result<(), Box<dyn std::error::Error>> {
-        std::process::Command::new("hostnamectl")
-            .args(["set-hostname", &self.name])
-            .status()?;
-        Ok(())
+    async fn enforce(&self) -> Result<(), ArkadError> {
+        let name = self.hostname.clone();
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new("hostnamectl")
+                .args(["set-hostname", &name])
+                .status()
+                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            Ok::<(), ArkadError>(())
+        }).await?
     }
 
-    fn verify(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        let out = std::process::Command::new("hostnamectl")
-            .arg("--static")
-            .output()?;
-        Ok(String::from_utf8_lossy(&out.stdout).trim() == self.name)
+    async fn update_state(&self, state: &SharedState) {
+        let name = self.hostname.clone();
+        let ok = tokio::task::spawn_blocking(move || {
+            std::process::Command::new("hostnamectl")
+                .arg("--static")
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim() == name)
+                .unwrap_or(false)
+        }).await.unwrap_or(false);
+        state.write().await.hostname_privacy = ok;
     }
 }

@@ -8,11 +8,15 @@ name = "arkad"
 path = "src/main.rs"
 
 [dependencies]
+arka-shell-common = { path = "../arka-shell/arka-shell-common" }
+async-trait = "0.1"
+sd-notify = "0.4"
 serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-zbus = "4"
+zbus = { version = "4", features = ["tokio"] }
 
 [profile.release]
 opt-level = "z"

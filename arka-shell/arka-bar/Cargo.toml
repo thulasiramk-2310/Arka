@@ -8,9 +8,9 @@ name = "arka-bar"
 path = "src/main.rs"
 
 [dependencies]
+arka-shell-common = { path = "../arka-shell-common" }
 gtk4 = "0.9"
 gtk4-layer-shell = "0.4"
 glib = "0.20"
-zbus = "4"
+zbus = { version = "4", features = ["blocking"] }
 chrono = "0.4"
-

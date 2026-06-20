@@ -4,10 +4,11 @@ After=network.target NetworkManager.service systemd-resolved.service
 Wants=NetworkManager.service systemd-resolved.service
 
 [Service]
-Type=simple
+Type=notify
 ExecStart=/usr/bin/arkad
 Restart=on-failure
 RestartSec=5s
+WatchdogSec=120s
 StandardOutput=journal
 StandardError=journal
 

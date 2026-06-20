@@ -1,5 +1,5 @@
 [workspace]
-members = ["arka-bar"]
+members = ["arka-shell-common", "arka-bar"]
 resolver = "2"
 
 [profile.release]

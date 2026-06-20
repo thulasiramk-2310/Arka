@@ -1,5 +1,7 @@
 use crate::config::Config;
-use super::Enforcer;
+use crate::error::ArkadError;
+use crate::state::SharedState;
+use super::AsyncEnforcer;
 
 const NM_CONF: &str = "/etc/NetworkManager/conf.d/00-arkaos-mac-random.conf";
 const NM_CONF_CONTENT: &str = "[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n";
@@ -10,22 +12,29 @@ impl MacEnforcer {
     pub fn new(_cfg: &Config) -> Self { Self }
 }
 
-impl Enforcer for MacEnforcer {
+#[async_trait::async_trait]
+impl AsyncEnforcer for MacEnforcer {
     fn name(&self) -> &'static str { "mac" }
 
-    fn enforce(&self) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::create_dir_all("/etc/NetworkManager/conf.d")?;
-        std::fs::write(NM_CONF, NM_CONF_CONTENT)?;
-        // Reload NM so the config takes effect on running interfaces
-        let _ = std::process::Command::new("nmcli")
-            .args(["general", "reload"])
-            .status();
-        Ok(())
+    async fn enforce(&self) -> Result<(), ArkadError> {
+        tokio::task::spawn_blocking(|| {
+            std::fs::create_dir_all("/etc/NetworkManager/conf.d")
+                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            std::fs::write(NM_CONF, NM_CONF_CONTENT)
+                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            let _ = std::process::Command::new("nmcli")
+                .args(["general", "reload"])
+                .status();
+            Ok::<(), ArkadError>(())
+        }).await?
     }
 
-    fn verify(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        Ok(std::fs::read_to_string(NM_CONF)
-            .map(|c| c == NM_CONF_CONTENT)
-            .unwrap_or(false))
+    async fn update_state(&self, state: &SharedState) {
+        let ok = tokio::task::spawn_blocking(|| {
+            std::fs::read_to_string(NM_CONF)
+                .map(|c| c == NM_CONF_CONTENT)
+                .unwrap_or(false)
+        }).await.unwrap_or(false);
+        state.write().await.mac_randomization = ok;
     }
 }
