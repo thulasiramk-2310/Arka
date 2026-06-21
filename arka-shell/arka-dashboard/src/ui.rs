@@ -1,6 +1,7 @@
 use std::sync::mpsc::Sender;
 
 use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
+use gtk4::glib;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use adw::prelude::*;
@@ -122,6 +123,135 @@ impl ScoreRow {
             self.check.add_css_class("score-check-bad");
         }
     }
+}
+
+// --- timeline ---------------------------------------------------------------
+
+struct LogEvent {
+    ts:  u64,
+    cat: String,
+    ev:  String,
+    msg: String,
+}
+
+fn extract_u64(s: &str, key: &str) -> Option<u64> {
+    let prefix = format!("\"{}\":", key);
+    let start = s.find(&prefix)? + prefix.len();
+    let rest = &s[start..];
+    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    rest[..end].parse().ok()
+}
+
+fn extract_str(s: &str, key: &str) -> Option<String> {
+    let prefix = format!("\"{}\":\"", key);
+    let start = s.find(&prefix)? + prefix.len();
+    let rest = &s[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn parse_log_line(line: &str) -> Option<LogEvent> {
+    Some(LogEvent {
+        ts:  extract_u64(line, "ts")?,
+        cat: extract_str(line, "cat")?,
+        ev:  extract_str(line, "ev")?,
+        msg: extract_str(line, "msg")?,
+    })
+}
+
+fn event_icon(cat: &str, ev: &str) -> &'static str {
+    if ev == "drift" { return "dialog-warning-symbolic"; }
+    match cat {
+        "dns"      => "network-server-symbolic",
+        "mac"      => "network-wireless-symbolic",
+        "hostname" => "computer-symbolic",
+        "ipv6"     => "preferences-system-network-symbolic",
+        "sandbox"  => "security-high-symbolic",
+        "system"   => "dialog-information-symbolic",
+        _          => "emblem-system-symbolic",
+    }
+}
+
+fn event_color(ev: &str) -> &'static str {
+    match ev {
+        "drift"     => "#fb923c",
+        "recovered" => "#4ade80",
+        "started" | "ready" | "active" => "#4fc3f7",
+        _           => "#8ab0cc",
+    }
+}
+
+fn populate_timeline(container: &gtk4::Box) {
+    while let Some(child) = container.first_child() {
+        container.remove(&child);
+    }
+
+    let today = glib::DateTime::now_local().map(|d| d.format("%Y-%m-%d").unwrap_or_default());
+    let today_str = today.unwrap_or_default();
+
+    let content = std::fs::read_to_string("/var/log/arkaos/privacy.jsonl").unwrap_or_default();
+    let mut events: Vec<LogEvent> = content
+        .lines()
+        .filter_map(parse_log_line)
+        .filter(|e| {
+            glib::DateTime::from_unix_local(e.ts as i64)
+                .map(|d| d.format("%Y-%m-%d").unwrap_or_default() == today_str)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    events.reverse(); // newest first
+
+    if events.is_empty() {
+        let empty = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+        empty.set_halign(gtk4::Align::Center);
+        empty.set_valign(gtk4::Align::Center);
+        empty.set_margin_top(60);
+
+        let icon = gtk4::Image::from_icon_name("security-high-symbolic");
+        icon.set_pixel_size(48);
+        icon.add_css_class("dim-label");
+
+        let lbl = gtk4::Label::new(Some("No events today yet"));
+        lbl.add_css_class("dim-label");
+
+        let sub = gtk4::Label::new(Some("arkad logs privacy events here as they happen"));
+        sub.add_css_class("dim-label");
+        sub.add_css_class("caption");
+
+        empty.append(&icon);
+        empty.append(&lbl);
+        empty.append(&sub);
+        container.append(&empty);
+        return;
+    }
+
+    // Group events: use a single PreferencesGroup for today
+    let group = adw::PreferencesGroup::new();
+    group.set_title(&format!("Today — {} events", events.len()));
+
+    for ev in &events {
+        let time_str = glib::DateTime::from_unix_local(ev.ts as i64)
+            .and_then(|d| d.format("%H:%M").map(|s| s.to_string()))
+            .unwrap_or_else(|_| "??:??".to_string());
+
+        let row = adw::ActionRow::new();
+        row.set_title(&ev.msg);
+        row.set_subtitle(&format!("{time_str}  ·  {}", ev.cat));
+
+        let icon = gtk4::Image::from_icon_name(event_icon(&ev.cat, &ev.ev));
+        icon.set_pixel_size(16);
+
+        let color = event_color(&ev.ev);
+        let css = gtk4::CssProvider::new();
+        css.load_from_data(&format!("image {{ color: {color}; }}"));
+        icon.style_context().add_provider(&css, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+        row.add_prefix(&icon);
+        group.add(&row);
+    }
+
+    container.append(&group);
 }
 
 // --- build ------------------------------------------------------------------
@@ -276,36 +406,88 @@ pub fn build(
     actions_box.append(&logs_btn);
     actions_group.add(&actions_box);
 
-    // ── assemble ─────────────────────────────────────────────────────────────
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-    content.set_margin_start(16);
-    content.set_margin_end(16);
-    content.set_margin_bottom(32);
-    content.append(&header_card);
-    content.append(&net_group);
-    content.append(&browser_group);
-    content.append(&score_group);
-    content.append(&actions_group);
+    // ── status page ──────────────────────────────────────────────────────────
+    let status_content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+    status_content.set_margin_start(16);
+    status_content.set_margin_end(16);
+    status_content.set_margin_bottom(32);
+    status_content.append(&header_card);
+    status_content.append(&net_group);
+    status_content.append(&browser_group);
+    status_content.append(&score_group);
+    status_content.append(&actions_group);
 
-    let clamp = adw::Clamp::builder()
+    let status_clamp = adw::Clamp::builder()
         .maximum_size(720)
         .tightening_threshold(640)
         .build();
-    clamp.set_child(Some(&content));
+    status_clamp.set_child(Some(&status_content));
 
-    let scroll = gtk4::ScrolledWindow::builder()
+    let status_scroll = gtk4::ScrolledWindow::builder()
         .vexpand(true)
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .build();
-    scroll.set_child(Some(&clamp));
+    status_scroll.set_child(Some(&status_clamp));
 
+    // ── timeline page ────────────────────────────────────────────────────────
+    let timeline_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    timeline_content.set_margin_start(16);
+    timeline_content.set_margin_end(16);
+    timeline_content.set_margin_top(16);
+    timeline_content.set_margin_bottom(16);
+    populate_timeline(&timeline_content);
+
+    let timeline_clamp = adw::Clamp::builder()
+        .maximum_size(720)
+        .tightening_threshold(640)
+        .build();
+    timeline_clamp.set_child(Some(&timeline_content));
+
+    let timeline_scroll = gtk4::ScrolledWindow::builder()
+        .vexpand(true)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .build();
+    timeline_scroll.set_child(Some(&timeline_clamp));
+
+    // ── view stack ───────────────────────────────────────────────────────────
+    let stack = adw::ViewStack::new();
+    let status_page = stack.add_titled(&status_scroll, Some("status"), "Status");
+    status_page.set_icon_name(Some("security-high-symbolic"));
+    let timeline_page = stack.add_titled(&timeline_scroll, Some("timeline"), "Timeline");
+    timeline_page.set_icon_name(Some("document-open-recent-symbolic"));
+
+    // Refresh timeline on tab switch
+    let tc_ref = timeline_content.clone();
+    stack.connect_visible_child_notify(move |s| {
+        if s.visible_child_name().as_deref() == Some("timeline") {
+            populate_timeline(&tc_ref);
+        }
+    });
+
+    // ── switcher bar ─────────────────────────────────────────────────────────
+    let switcher_bar = adw::ViewSwitcherBar::new();
+    switcher_bar.set_stack(Some(&stack));
+    switcher_bar.set_reveal(true);
+
+    // ── assemble ─────────────────────────────────────────────────────────────
     let toolbar = adw::ToolbarView::new();
     let headerbar = adw::HeaderBar::new();
+
+    // Refresh button (visible when on Timeline)
+    let refresh_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
+    refresh_btn.set_tooltip_text(Some("Refresh timeline"));
+    let tc_ref2 = timeline_content.clone();
+    refresh_btn.connect_clicked(move |_| {
+        populate_timeline(&tc_ref2);
+    });
+    headerbar.pack_start(&refresh_btn);
+
     headerbar.set_title_widget(Some(
         &adw::WindowTitle::new("Privacy Dashboard", "ArkaOS"),
     ));
     toolbar.add_top_bar(&headerbar);
-    toolbar.set_content(Some(&scroll));
+    toolbar.set_content(Some(&stack));
+    toolbar.add_bottom_bar(&switcher_bar);
 
     let toast_overlay = adw::ToastOverlay::new();
     toast_overlay.set_child(Some(&toolbar));

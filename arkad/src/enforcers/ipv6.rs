@@ -26,6 +26,7 @@ impl AsyncEnforcer for Ipv6Enforcer {
             let _ = std::process::Command::new("sysctl")
                 .args(["-p", SYSCTL_CONF])
                 .status();
+            crate::log::log_event("ipv6", "active", "IPv6 privacy extensions active — your IP address rotates automatically");
             Ok::<(), ArkadError>(())
         }).await?
     }

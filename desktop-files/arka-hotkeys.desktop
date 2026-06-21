@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Shortcuts
+Comment=View all ArkaOS keyboard shortcuts
+Exec=arka-hotkeys
+Icon=preferences-desktop-keyboard-symbolic
+Keywords=keyboard;shortcuts;hotkeys;keybindings;help;cheat;
+Categories=System;

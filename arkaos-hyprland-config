@@ -128,6 +128,7 @@ bind = $mod,       P,         exec,  arka-capsule
 bind = $mod,       M,         exec,  arka-perms
 bind = $mod,       N,         exec,  arka-sound
 bind = $mod,       T,         exec,  arka-bluetooth
+bind = $mod,       L,         exec,  swaylock
 bind = $mod SHIFT, Q,         killactive
 bind = ALT,        F4,        killactive
 bind = $mod SHIFT, E,         exit

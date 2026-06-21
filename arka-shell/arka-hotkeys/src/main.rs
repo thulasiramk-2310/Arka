@@ -28,6 +28,7 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
         ("Super + V",       "Toggle floating"),
     ]),
     ("Power", &[
+        ("Super + L",                 "Lock screen"),
         ("Super + Space → Sleep",     "Suspend the system"),
         ("Super + Space → Lock",      "Lock the screen"),
         ("Super + Space → Restart",   "Reboot"),

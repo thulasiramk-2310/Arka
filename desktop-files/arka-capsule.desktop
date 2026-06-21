@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Apps
+Comment=Install additional applications via Flatpak
+Exec=arka-capsule
+Icon=system-software-install-symbolic
+Keywords=install;apps;software;flatpak;store;package;
+Categories=System;PackageManager;

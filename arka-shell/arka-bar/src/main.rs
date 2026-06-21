@@ -42,7 +42,6 @@ fn build_ui(app: &Application) {
 
     let brand = Label::new(Some("▲ ARKA"));
     brand.add_css_class("brand");
-    // ▲ ARKA is the Start Button — click opens launcher
     let brand_click = gtk4::GestureClick::new();
     brand_click.connect_released(|_, _, _, _| {
         let _ = std::process::Command::new("arka-launcher").spawn();
@@ -54,7 +53,6 @@ fn build_ui(app: &Application) {
 
     let privacy_label = Label::new(Some("Privacy --"));
     privacy_label.add_css_class("privacy-score");
-    // Click privacy score → open dashboard
     let priv_click = gtk4::GestureClick::new();
     priv_click.connect_released(|_, _, _, _| {
         let _ = std::process::Command::new("arka-dashboard").spawn();
@@ -63,16 +61,22 @@ fn build_ui(app: &Application) {
 
     let wifi_img = Image::from_icon_name("network-wireless-signal-none-symbolic");
     wifi_img.set_pixel_size(16);
-    // Click WiFi icon → open network picker
     let wifi_click = gtk4::GestureClick::new();
     wifi_click.connect_released(|_, _, _, _| {
         let _ = std::process::Command::new("arka-wifi").spawn();
     });
     wifi_img.add_controller(wifi_click);
 
+    let bt_img = Image::from_icon_name("bluetooth-symbolic");
+    bt_img.set_pixel_size(16);
+    let bt_click = gtk4::GestureClick::new();
+    bt_click.connect_released(|_, _, _, _| {
+        let _ = std::process::Command::new("arka-bluetooth").spawn();
+    });
+    bt_img.add_controller(bt_click);
+
     let vol_img = Image::from_icon_name("audio-volume-high-symbolic");
     vol_img.set_pixel_size(16);
-    // Click volume icon → open audio settings
     let vol_gesture = gtk4::GestureClick::new();
     vol_gesture.connect_released(|_, _, _, _| {
         let _ = std::process::Command::new("arka-sound").spawn();
@@ -94,6 +98,7 @@ fn build_ui(app: &Application) {
     root.append(&spacer);
     root.append(&privacy_label);
     root.append(&wifi_img);
+    root.append(&bt_img);
     root.append(&vol_img);
     root.append(&bat_img);
     root.append(&bat_label);
@@ -114,7 +119,6 @@ fn build_ui(app: &Application) {
     {
         let clock_label = clock_label.clone();
         let date_label = date_label.clone();
-        // Initial
         let now = chrono::Local::now();
         clock_label.set_text(&now.format("%H:%M").to_string());
         date_label.set_text(&now.format("%Y-%m-%d").to_string());
@@ -133,17 +137,20 @@ fn build_ui(app: &Application) {
         move || { update_privacy(&privacy_label); glib::ControlFlow::Continue }
     });
 
-    // WiFi + volume + battery — every 10s
+    // WiFi + BT + volume + battery — every 10s
     update_wifi(&wifi_img);
+    update_bt(&bt_img);
     update_vol(&vol_img);
     update_battery(&bat_img, &bat_label);
     glib::timeout_add_seconds_local(10, {
         let wifi_img = wifi_img.clone();
+        let bt_img = bt_img.clone();
         let vol_img = vol_img.clone();
         let bat_img = bat_img.clone();
         let bat_label = bat_label.clone();
         move || {
             update_wifi(&wifi_img);
+            update_bt(&bt_img);
             update_vol(&vol_img);
             update_battery(&bat_img, &bat_label);
             glib::ControlFlow::Continue
@@ -177,6 +184,20 @@ fn update_wifi(img: &Image) {
     match wifi_state() {
         Some(true) => img.set_icon_name(Some("network-wireless-signal-good-symbolic")),
         _          => img.set_icon_name(Some("network-wireless-offline-symbolic")),
+    }
+}
+
+fn update_bt(img: &Image) {
+    let (powered, connected) = bt_state();
+    if !powered {
+        img.set_icon_name(Some("bluetooth-disabled-symbolic"));
+        img.set_opacity(0.35);
+    } else if connected {
+        img.set_icon_name(Some("bluetooth-active-symbolic"));
+        img.set_opacity(1.0);
+    } else {
+        img.set_icon_name(Some("bluetooth-symbolic"));
+        img.set_opacity(0.65);
     }
 }
 
@@ -254,6 +275,28 @@ fn wifi_state() -> Option<bool> {
         return Some(state.trim() == "up");
     }
     None
+}
+
+fn bt_state() -> (bool, bool) {
+    let out = std::process::Command::new("bluetoothctl")
+        .args(["show"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+    let powered = out.contains("Powered: yes");
+    let connected = if powered {
+        std::process::Command::new("bluetoothctl")
+            .args(["devices", "Connected"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+    } else {
+        false
+    };
+    (powered, connected)
 }
 
 fn battery_state() -> Option<(u8, bool, Option<u32>)> {

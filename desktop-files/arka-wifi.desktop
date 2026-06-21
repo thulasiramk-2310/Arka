@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=WiFi Networks
+Comment=Connect to wireless networks
+Exec=arka-wifi
+Icon=network-wireless-symbolic
+Keywords=wifi;wireless;network;internet;connection;hotspot;
+Categories=System;Network;

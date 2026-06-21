@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=System Updates
+Comment=Check for and apply system updates
+Exec=arka-update
+Icon=software-update-available-symbolic
+Keywords=update;upgrade;system;os;patch;bootc;
+Categories=System;

@@ -24,6 +24,7 @@ impl AsyncEnforcer for HostnameEnforcer {
                 .args(["set-hostname", &name])
                 .status()
                 .map_err(|e| ArkadError::Enforce(e.to_string()))?;
+            crate::log::log_event("hostname", "active", "Hostname set to arka — computer is anonymous on local networks");
             Ok::<(), ArkadError>(())
         }).await?
     }

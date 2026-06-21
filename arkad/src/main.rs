@@ -2,6 +2,7 @@ mod config;
 mod enforcers;
 mod error;
 mod ipc;
+pub mod log;
 mod score;
 mod state;
 
@@ -20,6 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     info!("arkad starting");
+    log::log_event("system", "started", "ArkaOS privacy daemon started");
 
     let cfg = config::Config::load();
 
@@ -49,6 +51,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s.privacy_score = score::compute(&s);
     }
 
+    let initial_score = shared.read().await.privacy_score;
+    log::log_event("system", "ready", &format!("Privacy score: {initial_score}/100 — all controls active"));
+
     // Register D-Bus service
     let _conn = zbus::connection::Builder::system()?
         .name("org.arka.arkad")?
@@ -62,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Notify systemd we're ready
     let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
 
-    info!(score = shared.read().await.privacy_score, "arkad ready");
+    info!(score = initial_score, "arkad ready");
 
     // Watch loop — verify state every interval, re-enforce on drift
     let interval = Duration::from_secs(cfg.check_interval_secs);
@@ -82,6 +87,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if new_score < prev_score {
             info!(prev = prev_score, now = new_score, "drift detected, re-enforcing");
+            log::log_event(
+                "system",
+                "drift",
+                &format!("Privacy drift detected (score {prev_score}→{new_score}) — re-enforcing"),
+            );
             for e in enforcers.iter() {
                 if let Err(err) = e.enforce().await {
                     error!(enforcer = e.name(), %err, "re-enforce failed");
@@ -92,6 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             let mut s = shared.write().await;
             s.privacy_score = score::compute(&s);
+            let recovered = s.privacy_score;
+            log::log_event("system", "recovered", &format!("Re-enforcement complete — score restored to {recovered}/100"));
         }
 
         // Watchdog keepalive

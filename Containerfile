@@ -68,7 +68,7 @@ RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
     thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
     libadwaita mako grim slurp pavucontrol \
     wl-clipboard fzf flatpak xdg-user-dirs brightnessctl \
-    bluez bluez-tools
+    bluez bluez-tools swaylock
 
 
 # Install arka-bar (replaces waybar)
@@ -143,9 +143,13 @@ RUN dnf install -y -q ImageMagick && \
       /usr/share/arka/wallpapers/default.png && \
     dnf remove -y -q ImageMagick
 
+# arka-tools .desktop files for launcher search
+COPY desktop-files/ /usr/share/applications/
+
 # Hyprland config + autostart via /etc/skel
 RUN mkdir -p /etc/skel/.config/hypr
 COPY arkaos-hyprland-config    /etc/skel/.config/hypr/hyprland.conf
+COPY swaylock-config           /etc/skel/.config/swaylock/config
 COPY sway-autostart            /etc/skel/.bash_profile
 
 RUN bootc container lint

@@ -8,12 +8,15 @@ pub struct AppEntry {
     pub exec:      String,
     pub icon:      String,
     pub sandboxed: bool,
+    pub keywords:  String,
 }
 
 impl AppEntry {
     pub fn matches(&self, query: &str) -> bool {
         let q = query.to_lowercase();
         self.name.to_lowercase().contains(&q)
+            || self.exec.to_lowercase().contains(&q)
+            || self.keywords.to_lowercase().contains(&q)
     }
 }
 
@@ -44,9 +47,10 @@ pub fn load() -> Vec<AppEntry> {
 
 fn parse_desktop(path: &Path) -> Option<AppEntry> {
     let content = std::fs::read_to_string(path).ok()?;
-    let mut name  = String::new();
-    let mut exec  = String::new();
-    let mut icon  = String::new();
+    let mut name     = String::new();
+    let mut exec     = String::new();
+    let mut icon     = String::new();
+    let mut keywords = String::new();
     let mut hidden = false;
     let mut no_display = false;
     let mut in_desktop_entry = false;
@@ -63,6 +67,8 @@ fn parse_desktop(path: &Path) -> Option<AppEntry> {
             exec = strip_exec_codes(v);
         } else if let Some(v) = line.strip_prefix("Icon=") {
             icon = v.to_string();
+        } else if let Some(v) = line.strip_prefix("Keywords=") {
+            keywords = v.replace(';', " ");
         } else if line == "Hidden=true" || line == "Hidden=True" {
             hidden = true;
         } else if line == "NoDisplay=true" || line == "NoDisplay=True" {
@@ -80,7 +86,7 @@ fn parse_desktop(path: &Path) -> Option<AppEntry> {
         .to_lowercase();
     let sandboxed = SANDBOXED.iter().any(|s| stem.contains(s));
 
-    Some(AppEntry { name, exec, icon, sandboxed })
+    Some(AppEntry { name, exec, icon, sandboxed, keywords })
 }
 
 fn strip_exec_codes(exec: &str) -> String {
@@ -88,7 +94,7 @@ fn strip_exec_codes(exec: &str) -> String {
     let mut chars = exec.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '%' {
-            chars.next(); // consume the code letter
+            chars.next();
         } else {
             out.push(c);
         }

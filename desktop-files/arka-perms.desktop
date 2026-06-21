@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=App Permissions
+Comment=View and manage application permissions
+Exec=arka-perms
+Icon=system-lock-screen-symbolic
+Keywords=permissions;apps;access;camera;microphone;location;privacy;
+Categories=System;Security;

@@ -179,7 +179,7 @@ fn build_ui(app: &Application) {
 
     let power_items: &[(&str, &str, &str, bool)] = &[
         ("weather-clear-night-symbolic", "Sleep",     "systemctl suspend",  false),
-        ("system-lock-screen-symbolic",  "Lock",      "loginctl lock-session", false),
+        ("system-lock-screen-symbolic",  "Lock",      "swaylock",              false),
         ("view-refresh-symbolic",        "Restart",   "systemctl reboot",   false),
         ("system-shutdown-symbolic",     "Shut Down", "systemctl poweroff", true),
     ];

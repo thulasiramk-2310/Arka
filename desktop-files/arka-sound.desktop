@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Sound & Volume
+Comment=Control audio volume and devices
+Exec=arka-sound
+Icon=audio-volume-high-symbolic
+Keywords=sound;volume;audio;speaker;microphone;mic;music;media;
+Categories=AudioVideo;Audio;

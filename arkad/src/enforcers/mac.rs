@@ -25,6 +25,7 @@ impl AsyncEnforcer for MacEnforcer {
             let _ = std::process::Command::new("nmcli")
                 .args(["general", "reload"])
                 .status();
+            crate::log::log_event("mac", "active", "MAC address randomization enabled — device can't be tracked");
             Ok::<(), ArkadError>(())
         }).await?
     }

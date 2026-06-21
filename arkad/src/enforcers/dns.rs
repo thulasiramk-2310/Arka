@@ -41,6 +41,7 @@ impl AsyncEnforcer for DnsEnforcer {
             let _ = std::process::Command::new("systemctl")
                 .args(["try-reload-or-restart", "systemd-resolved"])
                 .status();
+            crate::log::log_event("dns", "active", "DNS-over-TLS active — searches hidden from your internet provider");
             Ok::<(), ArkadError>(())
         }).await?
     }

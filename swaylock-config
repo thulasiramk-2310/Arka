@@ -1,0 +1,41 @@
+# swaylock config — ArkaOS dark theme
+color=07080f
+font=Liberation Sans
+font-size=16
+indicator-radius=90
+indicator-thickness=8
+
+# Ring colors
+ring-color=1a3a5a
+ring-ver-color=4fc3f7
+ring-wrong-color=f87171
+ring-clear-color=2a5a8a
+
+# Key highlight
+key-hl-color=4fc3f7
+bs-hl-color=f87171
+
+# Line (separator between ring and inner)
+line-color=0d2a50
+line-ver-color=4fc3f7
+line-wrong-color=f87171
+line-clear-color=1a3a5a
+
+# Inner circle
+inside-color=07080fcc
+inside-ver-color=0d1a30cc
+inside-wrong-color=200a0acc
+inside-clear-color=07080fcc
+
+# Text
+text-color=c8d8f0
+text-ver-color=4fc3f7
+text-wrong-color=f87171
+text-clear-color=8ab0cc
+
+# Separator
+separator-color=00000000
+
+# Layout
+show-keyboard-layout
+indicator-caps-lock
