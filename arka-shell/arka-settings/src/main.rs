@@ -82,8 +82,8 @@ fn build_ui(app: &adw::Application) {
 
     // Content stack
     let stack = gtk4::Stack::new();
-    stack.add_named(&page_general(),    Some("General"));
-    stack.add_named(&page_appearance(), Some("Appearance"));
+    stack.add_named(&page_general(),         Some("General"));
+    stack.add_named(&page_appearance(&window), Some("Appearance"));
     stack.add_named(&page_privacy(),    Some("Privacy"));
     stack.add_named(&page_internet(),   Some("Internet"));
     stack.add_named(&page_updates(),    Some("Updates"));
@@ -178,24 +178,44 @@ fn page_general() -> gtk4::Widget {
     b.upcast()
 }
 
-fn page_appearance() -> gtk4::Widget {
+fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     let b = page_box();
 
     let group = adw::PreferencesGroup::new();
     group.set_title("Wallpaper");
 
+    // Read current/custom wallpaper path
+    let saved_wp = gtk4::glib::user_config_dir()
+        .join("arkaos").join("wallpaper");
+    let current_path = std::fs::read_to_string(&saved_wp)
+        .ok()
+        .unwrap_or_else(|| "/usr/share/arka/wallpapers/default.png".into());
+
     let wp_row = adw::ActionRow::new();
     wp_row.set_title("Current Wallpaper");
-    wp_row.set_subtitle("/usr/share/arka/wallpapers/default.png");
+    wp_row.set_subtitle(&current_path);
     let wp_img = gtk4::Image::from_icon_name("image-x-generic-symbolic");
     wp_row.add_prefix(&wp_img);
     group.add(&wp_row);
 
     let custom_row = adw::ActionRow::new();
-    custom_row.set_title("Custom Wallpaper");
-    custom_row.set_subtitle("Coming soon — drag an image file here");
-    custom_row.set_sensitive(false);
+    custom_row.set_title("Choose Wallpaper");
+    custom_row.set_subtitle("Pick any image from your files");
+    let choose_btn = gtk4::Button::with_label("Browse…");
+    choose_btn.add_css_class("suggested-action");
+    choose_btn.add_css_class("pill");
+    choose_btn.set_valign(gtk4::Align::Center);
+    custom_row.add_suffix(&choose_btn);
     group.add(&custom_row);
+
+    let reset_row = adw::ActionRow::new();
+    reset_row.set_title("Reset to Default");
+    reset_row.set_subtitle("Restore the ArkaOS branded wallpaper");
+    let reset_btn = gtk4::Button::with_label("Reset");
+    reset_btn.add_css_class("pill");
+    reset_btn.set_valign(gtk4::Align::Center);
+    reset_row.add_suffix(&reset_btn);
+    group.add(&reset_row);
 
     let theme_group = adw::PreferencesGroup::new();
     theme_group.set_title("Theme");
@@ -206,6 +226,49 @@ fn page_appearance() -> gtk4::Widget {
     dark_row.set_active(true);
     dark_row.set_sensitive(false);
     theme_group.add(&dark_row);
+
+    // Wire up Browse button
+    let wp_row_ref = wp_row.clone();
+    let window_weak = window.downgrade();
+    choose_btn.connect_clicked(move |_| {
+        let dialog = gtk4::FileDialog::new();
+        dialog.set_title("Choose Wallpaper");
+        let filter = gtk4::FileFilter::new();
+        filter.set_name(Some("Images"));
+        filter.add_mime_type("image/png");
+        filter.add_mime_type("image/jpeg");
+        filter.add_mime_type("image/webp");
+        filter.add_mime_type("image/gif");
+        let filters = gtk4::gio::ListStore::new::<gtk4::FileFilter>();
+        filters.append(&filter);
+        dialog.set_filters(Some(&filters));
+        let wp_row2 = wp_row_ref.clone();
+        let parent: Option<gtk4::Window> = window_weak.upgrade().map(|w| w.upcast());
+        dialog.open(parent.as_ref(), None::<&gtk4::gio::Cancellable>, move |res| {
+            if let Ok(file) = res {
+                if let Some(path) = file.path() {
+                    let path_str = path.to_string_lossy().to_string();
+                    wp_row2.set_subtitle(&path_str);
+                    let conf = gtk4::glib::user_config_dir().join("arkaos");
+                    let _ = std::fs::create_dir_all(&conf);
+                    let _ = std::fs::write(conf.join("wallpaper"), &path_str);
+                    let _ = Command::new("pkill").arg("swaybg").status();
+                    let _ = Command::new("swaybg").args(["-i", &path_str, "-m", "fill"]).spawn();
+                }
+            }
+        });
+    });
+
+    // Wire up Reset button
+    let wp_row_ref2 = wp_row.clone();
+    reset_btn.connect_clicked(move |_| {
+        let default = "/usr/share/arka/wallpapers/default.png";
+        wp_row_ref2.set_subtitle(default);
+        let conf = gtk4::glib::user_config_dir().join("arkaos");
+        let _ = std::fs::remove_file(conf.join("wallpaper"));
+        let _ = Command::new("pkill").arg("swaybg").status();
+        let _ = Command::new("swaybg").args(["-i", default, "-m", "fill"]).spawn();
+    });
 
     b.append(&group);
     b.append(&theme_group);

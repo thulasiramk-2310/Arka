@@ -4,9 +4,10 @@
 monitor=,preferred,auto,1
 
 # Startup
-exec-once = swaybg -i /usr/share/arka/wallpapers/default.png -m fill
+exec-once = sh -c 'WP=$(cat ~/.config/arkaos/wallpaper 2>/dev/null); swaybg -i "${WP:-/usr/share/arka/wallpapers/default.png}" -m fill'
 exec-once = arka-bar
 exec-once = mako
+exec-once = arka-welcome
 
 # Environment
 env = WLR_NO_HARDWARE_CURSORS,1
@@ -99,6 +100,10 @@ windowrulev2 = center, class:^(org.arka.hotkeys)$
 windowrulev2 = float,  class:^(org.arka.perms)$
 windowrulev2 = size  640 700, class:^(org.arka.perms)$
 windowrulev2 = center, class:^(org.arka.perms)$
+
+windowrulev2 = float,  class:^(org.arka.welcome)$
+windowrulev2 = size  680 640, class:^(org.arka.welcome)$
+windowrulev2 = center, class:^(org.arka.welcome)$
 
 # Keybinds
 $mod = SUPER

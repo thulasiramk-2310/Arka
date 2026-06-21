@@ -83,9 +83,10 @@ COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hot
 COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
 COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
 COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
+COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
 RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher /usr/bin/arka-wifi \
               /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
-              /usr/bin/arka-perms /usr/bin/arka-settings-gtk
+              /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome
 
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \

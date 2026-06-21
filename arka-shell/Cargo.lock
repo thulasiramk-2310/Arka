@@ -39,6 +39,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-capsule"
+version = "0.1.0"
+dependencies = [
+ "glib",
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
 name = "arka-dashboard"
 version = "0.1.0"
 dependencies = [
@@ -54,6 +63,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-hotkeys"
+version = "0.1.0"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
 name = "arka-launcher"
 version = "0.1.0"
 dependencies = [
@@ -63,8 +80,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-perms"
+version = "0.1.0"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
+name = "arka-settings"
+version = "0.1.0"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
 name = "arka-shell-common"
 version = "0.1.0"
+
+[[package]]
+name = "arka-update"
+version = "0.1.0"
+dependencies = [
+ "glib",
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
+name = "arka-welcome"
+version = "0.1.0"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+]
+
+[[package]]
+name = "arka-wifi"
+version = "0.1.0"
+dependencies = [
+ "glib",
+ "gtk4",
+ "libadwaita",
+]
 
 [[package]]
 name = "async-broadcast"

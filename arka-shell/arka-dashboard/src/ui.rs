@@ -167,23 +167,23 @@ pub fn build(
     net_group.set_title("Network Privacy");
 
     let (dns_row, dns_badge) = make_action_row(
-        "Encrypted DNS",
-        "DNS-over-TLS · Quad9 9.9.9.9:853",
+        "Searches are private",
+        "Your internet provider cannot see what you look up",
         "network-server-symbolic",
     );
     let (mac_row, mac_badge) = make_action_row(
-        "MAC Randomization",
-        "Per-connection random hardware address",
+        "Device can't be tracked by hardware",
+        "Your network identity changes on every connection",
         "network-wireless-symbolic",
     );
     let (host_row, host_badge) = make_action_row(
-        "Hostname Privacy",
-        "Static hostname \"arka\" — no device fingerprint",
+        "Anonymous on local networks",
+        "Nearby devices can't identify your computer",
         "computer-symbolic",
     );
     let (ipv6_row, ipv6_badge) = make_action_row(
-        "IPv6 Privacy Extensions",
-        "Temporary addresses per RFC 4941",
+        "IP address rotates automatically",
+        "Your home address on the internet changes regularly",
         "preferences-system-network-symbolic",
     );
     net_group.add(&dns_row);
@@ -196,35 +196,35 @@ pub fn build(
     browser_group.set_title("Browser");
 
     let (bsandbox_row, bsandbox_badge) = make_action_row(
-        "Browser Sandbox",
-        "bubblewrap isolation · tmpfs home directory",
+        "Browser can't access your files",
+        "Firefox runs in an isolated container, away from your data",
         "application-x-executable-symbolic",
     );
     let (bstatus_row, bstatus_badge) = make_action_row(
-        "Sandbox Infrastructure",
-        "bwrap wrapper binary present and active",
+        "App containment is active",
+        "The security wrapper is running and protecting you",
         "security-medium-symbolic",
     );
 
     browser_group.add(&bsandbox_row);
     browser_group.add(&bstatus_row);
     browser_group.add(&static_row(
-        "Cookie Policy",
-        "Cleared on session close",
+        "No tracking cookies",
+        "Cookies are deleted when you close the browser",
         "emblem-documents-symbolic",
         "Per-Session",
     ));
     browser_group.add(&static_row(
-        "Machine ID",
-        "Hidden from browser sandbox via /etc allowlist",
+        "Computer ID is hidden",
+        "Websites can't fingerprint your machine's identity",
         "emblem-system-symbolic",
-        "Blocked",
+        "Hidden",
     ));
     browser_group.add(&static_row(
-        "WiFi Credentials",
-        "NetworkManager config excluded from sandbox",
+        "WiFi passwords are protected",
+        "Your saved networks are invisible to the browser",
         "network-wireless-signal-excellent-symbolic",
-        "Hidden",
+        "Protected",
     ));
 
     // ── score breakdown ──────────────────────────────────────────────────────
@@ -232,14 +232,14 @@ pub fn build(
     score_group.set_title("Privacy Score Breakdown");
     score_group.set_description(Some("100 points total across 8 privacy factors"));
 
-    let (dns_srow, dns_sr)     = ScoreRow::new("DNS Encryption",         25);
-    let (mac_srow, mac_sr)     = ScoreRow::new("MAC Randomization",      20);
-    let (host_srow, host_sr)   = ScoreRow::new("Hostname Privacy",       10);
-    let (ipv6_srow, ipv6_sr)   = ScoreRow::new("IPv6 Privacy",           10);
-    let (brow_srow, brow_sr)   = ScoreRow::new("Browser Sandbox",        10);
-    let (sand_srow, sand_sr)   = ScoreRow::new("Sandbox Infrastructure", 15);
-    let (tele_srow, tele_sr)   = ScoreRow::new("Telemetry Blocked",       5);
-    let (track_srow, track_sr) = ScoreRow::new("Tracking Blocked",        5);
+    let (dns_srow, dns_sr)     = ScoreRow::new("Private Searches",    25);
+    let (mac_srow, mac_sr)     = ScoreRow::new("Hidden Device ID",     20);
+    let (host_srow, host_sr)   = ScoreRow::new("Network Anonymity",    10);
+    let (ipv6_srow, ipv6_sr)   = ScoreRow::new("Rotating IP Address",  10);
+    let (brow_srow, brow_sr)   = ScoreRow::new("Browser Isolation",    10);
+    let (sand_srow, sand_sr)   = ScoreRow::new("App Containment",      15);
+    let (tele_srow, tele_sr)   = ScoreRow::new("No Telemetry",          5);
+    let (track_srow, track_sr) = ScoreRow::new("No Tracking",           5);
 
     score_group.add(&dns_srow);
     score_group.add(&mac_srow);
