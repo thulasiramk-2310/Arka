@@ -77,6 +77,17 @@ window { background: transparent; }
 scrolledwindow { background: transparent; }
 scrolledwindow undershoot { background: transparent; }
 separator { background-color: rgba(30, 60, 110, 0.25); margin: 0 10px; }
+.power-btn {
+    background: transparent;
+    border: 1px solid rgba(30,60,110,0.3);
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 110px;
+    color: #4a6a88;
+    font-size: 12px;
+}
+.power-btn:hover { background-color: rgba(20,50,90,0.5); color: #8ab0cc; border-color: rgba(60,100,150,0.5); }
+.power-btn.destructive:hover { background-color: rgba(90,20,20,0.4); color: #f87171; border-color: rgba(150,40,40,0.5); }
 ";
 
 fn main() {
@@ -157,9 +168,52 @@ fn build_ui(app: &Application) {
     hint_box.append(&super_key);
     hint_box.append(&hint_rest);
 
+    // Power row
+    let power_sep = gtk4::Separator::new(Orientation::Horizontal);
+    power_sep.set_margin_top(8);
+
+    let power_row = GtkBox::new(Orientation::Horizontal, 6);
+    power_row.set_halign(gtk4::Align::Center);
+    power_row.set_margin_top(8);
+    power_row.set_margin_bottom(10);
+
+    let power_items: &[(&str, &str, &str, bool)] = &[
+        ("weather-clear-night-symbolic", "Sleep",     "systemctl suspend",  false),
+        ("system-lock-screen-symbolic",  "Lock",      "loginctl lock-session", false),
+        ("view-refresh-symbolic",        "Restart",   "systemctl reboot",   false),
+        ("system-shutdown-symbolic",     "Shut Down", "systemctl poweroff", true),
+    ];
+
+    for (icon, label, cmd, destructive) in power_items {
+        let btn = gtk4::Button::new();
+        btn.add_css_class("power-btn");
+        if *destructive { btn.add_css_class("destructive"); }
+
+        let vbox = GtkBox::new(Orientation::Vertical, 3);
+        vbox.set_halign(gtk4::Align::Center);
+        let img = gtk4::Image::from_icon_name(icon);
+        img.set_pixel_size(16);
+        let lbl = Label::new(Some(label));
+        vbox.append(&img);
+        vbox.append(&lbl);
+        btn.set_child(Some(&vbox));
+
+        let cmd_owned = cmd.to_string();
+        let window_ref = window.clone();
+        btn.connect_clicked(move |_| {
+            window_ref.close();
+            let _ = std::process::Command::new("sh")
+                .args(["-c", &cmd_owned])
+                .spawn();
+        });
+        power_row.append(&btn);
+    }
+
     card.append(&entry);
     card.append(&scroll);
     card.append(&hint_box);
+    card.append(&power_sep);
+    card.append(&power_row);
 
     // Pagination dots
     let dots = GtkBox::new(Orientation::Horizontal, 8);

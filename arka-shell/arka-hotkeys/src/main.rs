@@ -14,6 +14,8 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
         ("Super + U",       "System updates"),
         ("Super + P",       "Capsule — install apps"),
         ("Super + M",       "App permissions"),
+        ("Super + N",       "Sound & volume"),
+        ("Super + T",       "Bluetooth"),
         ("Super + /",       "This cheat sheet"),
     ]),
     ("Windows", &[
@@ -24,6 +26,12 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
         ("Alt + F4",        "Close window"),
         ("Super + F",       "Fullscreen"),
         ("Super + V",       "Toggle floating"),
+    ]),
+    ("Power", &[
+        ("Super + Space → Sleep",     "Suspend the system"),
+        ("Super + Space → Lock",      "Lock the screen"),
+        ("Super + Space → Restart",   "Reboot"),
+        ("Super + Space → Shut Down", "Power off"),
     ]),
     ("Media Keys", &[
         ("Volume Up/Down",  "Raise / lower volume 5%"),

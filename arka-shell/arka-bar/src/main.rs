@@ -75,7 +75,7 @@ fn build_ui(app: &Application) {
     // Click volume icon → open audio settings
     let vol_gesture = gtk4::GestureClick::new();
     vol_gesture.connect_released(|_, _, _, _| {
-        let _ = std::process::Command::new("pavucontrol").spawn();
+        let _ = std::process::Command::new("arka-sound").spawn();
     });
     vol_img.add_controller(vol_gesture);
 

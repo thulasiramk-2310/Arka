@@ -105,6 +105,14 @@ windowrulev2 = float,  class:^(org.arka.welcome)$
 windowrulev2 = size  680 640, class:^(org.arka.welcome)$
 windowrulev2 = center, class:^(org.arka.welcome)$
 
+windowrulev2 = float,  class:^(org.arka.sound)$
+windowrulev2 = size  300 240, class:^(org.arka.sound)$
+windowrulev2 = move  onscreen cursor -150 40, class:^(org.arka.sound)$
+
+windowrulev2 = float,  class:^(org.arka.bluetooth)$
+windowrulev2 = size  420 500, class:^(org.arka.bluetooth)$
+windowrulev2 = center, class:^(org.arka.bluetooth)$
+
 # Keybinds
 $mod = SUPER
 bind = $mod,       Return,    exec,  foot
@@ -118,6 +126,8 @@ bind = $mod,       U,         exec,  arka-update
 bind = $mod,       slash,     exec,  arka-hotkeys
 bind = $mod,       P,         exec,  arka-capsule
 bind = $mod,       M,         exec,  arka-perms
+bind = $mod,       N,         exec,  arka-sound
+bind = $mod,       T,         exec,  arka-bluetooth
 bind = $mod SHIFT, Q,         killactive
 bind = ALT,        F4,        killactive
 bind = $mod SHIFT, E,         exit
