@@ -17,5 +17,14 @@ plasma-apply-colorscheme BreezeDark 2>/dev/null || true
 }
 [ -f "$WALL" ] && plasma-apply-wallpaperimage "$WALL" 2>/dev/null || true
 
+# Reshape the desktop toward the ArkaOS layout (top bar + floating dock +
+# full-screen launcher) via Plasma's scripting API.
+LAYOUT=/usr/share/arka/arka-layout.js
+if [ -f "$LAYOUT" ]; then
+    dbus-send --session --type=method_call --dest=org.kde.plasmashell \
+        /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+        string:"$(cat "$LAYOUT")" 2>/dev/null || true
+fi
+
 # One-shot: remove the autostart entry so this never runs again.
 rm -f "$HOME/.config/autostart/arka-plasma-firstrun.desktop"

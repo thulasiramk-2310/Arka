@@ -186,7 +186,8 @@ RUN mkdir -p /etc/skel/.config && \
 
 # First-login one-shot: apply the ArkaOS wallpaper + accent via the official
 # Plasma CLI tools (reliable across versions), then disable itself.
-RUN mkdir -p /etc/skel/.config/autostart
+RUN mkdir -p /etc/skel/.config/autostart /usr/share/arka
+COPY arka-layout.js /usr/share/arka/arka-layout.js
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 RUN chmod 755 /usr/libexec/arka-plasma-firstrun && \
     printf '[Desktop Entry]\nType=Application\nName=ArkaOS Branding\nExec=/usr/libexec/arka-plasma-firstrun\nX-KDE-autostart-phase=2\nOnlyShowIn=KDE\nNoDisplay=true\n' \
