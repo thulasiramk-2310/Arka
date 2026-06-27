@@ -14,20 +14,21 @@ fn main() {
 
 fn build_ui(app: &adw::Application) {
     adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    arka_shell_common::theme::install_adw();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Settings")
         .default_width(720)
-        .default_height(680)
+        .default_height(560)
         .build();
 
     let provider = gtk4::CssProvider::new();
     provider.load_from_data("
-    .section-title { font-size: 13px; font-weight: 700; color: #4fc3f7; }
-    .status-ok     { color: #4ade80; font-size: 12px; }
-    .status-warn   { color: #f59e0b; font-size: 12px; }
-    .kbd           { font-family: monospace; font-size: 11px; color: #4fc3f7; }
+    .section-title { font-size: 13px; font-weight: 700; color: @accent; }
+    .status-ok     { color: @accent; font-size: 12px; font-weight: 600; }
+    .status-warn   { color: @warn; font-size: 12px; font-weight: 600; }
+    .kbd           { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: @text_lo; }
     ");
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
@@ -278,30 +279,84 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
 fn page_privacy() -> gtk4::Widget {
     let b = page_box();
 
-    let group = adw::PreferencesGroup::new();
-    group.set_title("Privacy Services");
-    group.set_description(Some("These run in the background and protect you automatically."));
+    // Toggle: Simple ↔ Advanced
+    let adv_btn = gtk4::ToggleButton::with_label("Advanced Details");
+    adv_btn.add_css_class("pill");
+    adv_btn.set_halign(gtk4::Align::End);
+    b.append(&adv_btn);
 
-    let services = [
-        ("DNS Privacy",         "Searches go over encrypted DNS (DoT) to Quad9",     check_dot_active()),
-        ("MAC Randomisation",   "Network identity changes on every connection",        check_mac_random()),
-        ("Private Hostname",    "Computer shows as 'arka' on all networks",           true),
-        ("IPv6 Privacy",        "Temporary addresses prevent long-term tracking",      check_ipv6_priv()),
-        ("Browser Sandbox",     "Firefox cannot read your files or passwords",         check_bwrap()),
-        ("Immutable System",    "System files are read-only — malware can't persist", true),
+    let stack = gtk4::Stack::new();
+    stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+
+    // ── Simple view ──────────────────────────────────────────────────────────
+    let simple_group = adw::PreferencesGroup::new();
+    simple_group.set_title("Your Privacy Status");
+    simple_group.set_description(Some("Everything that protects you is running in the background."));
+
+    let simple_services = [
+        ("✓ Your searches are private",        "Queries can't be read by your ISP or network",    check_dot_active()),
+        ("✓ Your device can't be tracked",     "Network identity changes on every connection",     check_mac_random()),
+        ("✓ Firefox is isolated",              "The browser can't see your files or passwords",    check_bwrap()),
+        ("✓ System files are protected",       "Malware can't persist across reboots",            true),
+        ("✓ Hostname is anonymised",           "Your computer shows as 'arka' on all networks",   true),
+        ("✓ IPv6 addresses rotate",            "Long-term tracking via IPv6 is prevented",        check_ipv6_priv()),
     ];
 
-    for (title, subtitle, active) in &services {
+    for (title, subtitle, active) in &simple_services {
         let row = adw::ActionRow::new();
         row.set_title(title);
         row.set_subtitle(subtitle);
         let status = gtk4::Label::new(Some(if *active { "Active" } else { "Inactive" }));
         status.add_css_class(if *active { "status-ok" } else { "status-warn" });
         row.add_suffix(&status);
-        group.add(&row);
+        simple_group.add(&row);
     }
 
-    b.append(&group);
+    let simple_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    simple_box.append(&simple_group);
+
+    // ── Advanced view ────────────────────────────────────────────────────────
+    let adv_group = adw::PreferencesGroup::new();
+    adv_group.set_title("Privacy Services");
+
+    let adv_services = [
+        ("DNS-over-TLS",       "Quad9  ·  9.9.9.9  ·  /etc/systemd/resolved.conf.d/", check_dot_active()),
+        ("MAC Randomisation",  "NM  ·  wifi.cloned-mac-address=random",               check_mac_random()),
+        ("Private Hostname",   "hostnamectl  ·  arka",                                true),
+        ("IPv6 Temp Addrs",    "sysctl net.ipv6.conf.all.use_tempaddr=2",             check_ipv6_priv()),
+        ("Browser Sandbox",    "bubblewrap  ·  /usr/bin/firefox → firefox-sandbox",   check_bwrap()),
+        ("composefs rootfs",   "ostree object store  ·  read-only overlay",           true),
+    ];
+
+    for (title, subtitle, active) in &adv_services {
+        let row = adw::ActionRow::new();
+        row.set_title(title);
+        row.set_subtitle(subtitle);
+        let status = gtk4::Label::new(Some(if *active { "Active" } else { "Inactive" }));
+        status.add_css_class(if *active { "status-ok" } else { "status-warn" });
+        row.add_suffix(&status);
+        adv_group.add(&row);
+    }
+
+    let adv_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    adv_box.append(&adv_group);
+
+    stack.add_named(&simple_box, Some("simple"));
+    stack.add_named(&adv_box, Some("advanced"));
+    stack.set_visible_child_name("simple");
+
+    let stack2 = stack.clone();
+    adv_btn.connect_toggled(move |btn| {
+        if btn.is_active() {
+            stack2.set_visible_child_name("advanced");
+            btn.set_label("Simple View");
+        } else {
+            stack2.set_visible_child_name("simple");
+            btn.set_label("Advanced Details");
+        }
+    });
+
+    b.append(&stack);
     b.upcast()
 }
 

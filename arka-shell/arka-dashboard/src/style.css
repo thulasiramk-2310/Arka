@@ -29,14 +29,14 @@
 }
 
 /* status badges */
-label.badge-green  { color: #4ade80; font-size: 13px; font-weight: 600; }
-label.badge-yellow { color: #fbbf24; font-size: 13px; font-weight: 600; }
-label.badge-red    { color: #f87171; font-size: 13px; font-weight: 600; }
+label.badge-green  { color: @accent; font-size: 13px; font-weight: 600; }
+label.badge-yellow { color: @warn;   font-size: 13px; font-weight: 600; }
+label.badge-red    { color: @danger; font-size: 13px; font-weight: 600; }
 
 /* score row check icons */
-image.score-check-good    { color: #4ade80; }
-image.score-check-bad     { color: #f87171; }
-image.score-check-pending { color: alpha(@window_fg_color, 0.3); }
+image.score-check-good    { color: @accent; }
+image.score-check-bad     { color: @danger; }
+image.score-check-pending { color: @text_muted; }
 
 /* level bars in score breakdown */
 levelbar.score-bar {
@@ -44,14 +44,14 @@ levelbar.score-bar {
 }
 
 levelbar.score-bar block.filled {
-    background: linear-gradient(to right, #22c55e, #4ade80);
+    background-color: @accent;
     border-radius: 3px;
     min-height: 6px;
     margin: 3px 0;
 }
 
 levelbar.score-bar block.empty {
-    background: alpha(@window_fg_color, 0.08);
+    background-color: @bg_overlay;
     border-radius: 3px;
     min-height: 6px;
     margin: 3px 0;
@@ -59,7 +59,7 @@ levelbar.score-bar block.empty {
 
 /* action buttons */
 button.pill {
-    border-radius: 20px;
+    border-radius: 999px;
     padding: 10px 20px;
     font-size: 13px;
     font-weight: 600;

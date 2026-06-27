@@ -63,12 +63,16 @@ fn bt_list_devices() -> Vec<BtDevice> {
         .collect()
 }
 
-fn bt_scan_nearby() -> Vec<BtDevice> {
-    // Quick 5-second scan, return all devices found
+fn bt_start_scan() {
+    // Non-blocking: start scan in background, caller polls with bt_scan_results()
     let _ = Command::new("bluetoothctl").args(["scan", "on"]).spawn();
-    std::thread::sleep(std::time::Duration::from_secs(5));
-    let _ = Command::new("bluetoothctl").args(["scan", "off"]).spawn();
+}
 
+fn bt_stop_scan() {
+    let _ = Command::new("bluetoothctl").args(["scan", "off"]).spawn();
+}
+
+fn bt_scan_results() -> Vec<BtDevice> {
     let out = Command::new("bluetoothctl")
         .args(["devices"])
         .output()
@@ -191,34 +195,30 @@ fn build_ui(app: &adw::Application) {
     });
     content.set_sensitive(bt_powered());
 
-    // Scan button
+    // Scan button — non-blocking: start scan, show spinner for 5s, read results
     let paired_ref = paired_group.clone();
     let nearby_ref = nearby_group.clone();
     let scan_ref = scan_btn.clone();
     scan_btn.connect_clicked(move |_| {
         scan_ref.set_sensitive(false);
-        let icon = gtk4::Spinner::new();
-        icon.start();
-        scan_ref.set_child(Some(&icon));
+        let spinner = gtk4::Spinner::new();
+        spinner.start();
+        scan_ref.set_child(Some(&spinner));
 
-        // Clear nearby
-        while let Some(child) = nearby_ref.first_child() {
-            nearby_ref.remove(&child);
-        }
+        while let Some(child) = nearby_ref.first_child() { nearby_ref.remove(&child); }
+
+        bt_start_scan();
 
         let nearby_ref2 = nearby_ref.clone();
         let paired_ref2 = paired_ref.clone();
         let scan_ref2 = scan_ref.clone();
-        glib::spawn_future_local(async move {
-            let devices = gtk4::gio::spawn_blocking(bt_scan_nearby).await.unwrap_or_default();
+        glib::timeout_add_seconds_local(5, move || {
+            bt_stop_scan();
+            let devices = bt_scan_results();
 
-            // Refresh paired list too
-            while let Some(child) = paired_ref2.first_child() {
-                paired_ref2.remove(&child);
-            }
+            while let Some(child) = paired_ref2.first_child() { paired_ref2.remove(&child); }
             populate_paired(&paired_ref2);
 
-            // Show nearby (unpaired) devices
             let unpaired: Vec<_> = devices.iter().filter(|d| !d.paired).cloned().collect();
             if unpaired.is_empty() {
                 let row = adw::ActionRow::new();
@@ -226,15 +226,16 @@ fn build_ui(app: &adw::Application) {
                 row.set_subtitle("Make sure the device is in pairing mode");
                 nearby_ref2.add(&row);
             } else {
-                for dev in unpaired {
-                    nearby_ref2.add(&make_nearby_row(&dev, &paired_ref2));
+                for dev in &unpaired {
+                    nearby_ref2.add(&make_nearby_row(dev, &paired_ref2));
                 }
             }
             nearby_ref2.set_visible(true);
 
+            scan_ref2.set_sensitive(true);
             scan_ref2.set_child(gtk4::Widget::NONE);
             scan_ref2.set_icon_name("view-refresh-symbolic");
-            scan_ref2.set_sensitive(true);
+            glib::ControlFlow::Break
         });
     });
 

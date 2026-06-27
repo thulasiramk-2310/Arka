@@ -2,3 +2,12 @@
 name = "arka-shell-common"
 version = "0.1.0"
 edition = "2021"
+
+[features]
+# `gtk` pulls in gtk4 for the shared theme module. Off by default so arkad can
+# depend on this crate (dns/sandbox only) in the static musl build without GTK.
+default = []
+gtk = ["dep:gtk4"]
+
+[dependencies]
+gtk4 = { version = "0.9", optional = true }

@@ -1,0 +1,12 @@
+# Build artifacts — never needed in the image build context
+**/target/
+output/
+*.qcow2
+OVMF_*.qcow2
+
+# Boot/test scratch + screenshots
+*.png
+*.log
+
+# VCS
+.git/

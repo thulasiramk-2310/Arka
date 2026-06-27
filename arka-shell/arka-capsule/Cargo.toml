@@ -8,6 +8,7 @@ name = "arka-capsule"
 path = "src/main.rs"
 
 [dependencies]
+arka-shell-common = { path = "../arka-shell-common", features = ["gtk"] }
 gtk4 = "0.9"
 libadwaita = { version = "0.7", features = ["v1_4"] }
 glib = "0.20"

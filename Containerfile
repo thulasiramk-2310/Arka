@@ -87,10 +87,11 @@ COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-sett
 COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
 COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
 COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
+COPY --from=shell-builder /build/target/release/arka-dock       /usr/bin/arka-dock
 RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher /usr/bin/arka-wifi \
               /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
               /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome \
-              /usr/bin/arka-sound /usr/bin/arka-bluetooth
+              /usr/bin/arka-sound /usr/bin/arka-bluetooth /usr/bin/arka-dock
 
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
@@ -122,24 +123,43 @@ RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
     echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
       > /etc/sudoers.d/99-arkaos-settings
 
-# ArkaOS branded wallpaper (generated at build time — no binary assets in repo)
+# ArkaOS signature wallpaper — deep black + blue glow + triangle grid + identity mark
 RUN dnf install -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
-    magick \
-      \( -size 1920x1080 gradient:"#07080f-#0a1220" \) \
-      \( -size 1920x1080 radial-gradient:"#0d2a50-#07080f" \) \
+    magick -size 1920x1080 xc:"#07080e" \
+      \( -size 1920x1080 radial-gradient:"#0d3060-#07080e" -sigmoidal-contrast 4,50% \) \
       -compose Screen -composite \
-      \( -size 32x32 xc:none -fill "rgba(255,255,255,0.04)" \
-         -draw "point 16,16" -write mpr:dot +delete \
-         -size 1920x1080 tile:mpr:dot \) \
+      \( -size 1920x1080 radial-gradient:"#051828-#07080e" \
+         -distort SRT "960,680 1 0 960,680" \) \
+      -compose Multiply -composite \
+      \( -size 40x40 xc:none \
+         -fill "rgba(30,90,160,0.18)" -draw "point 0,0" \
+         -fill "rgba(30,90,160,0.10)" -draw "point 20,0" \
+         -fill "rgba(30,90,160,0.10)" -draw "point 0,20" \
+         -fill "rgba(30,90,160,0.06)" -draw "point 20,20" \
+         -write mpr:grid +delete \
+         -size 1920x1080 tile:mpr:grid \) \
       -compose Over -composite \
-      -fill "#c8d8f0" -gravity Center \
+      \( -size 1920x1080 xc:none \
+         -fill "rgba(0,160,255,0.04)" \
+         -draw "polygon 960,300 860,480 1060,480" \
+         -fill "rgba(0,160,255,0.025)" \
+         -draw "polygon 960,220 810,490 1110,490" \
+         -fill "rgba(0,160,255,0.015)" \
+         -draw "polygon 960,140 760,500 1160,500" \) \
+      -compose Over -composite \
       -font /usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf \
-      -pointsize 78 -draw "text 0,-60 '▲  ARKA'" \
-      -fill "#3d6080" \
+      -fill "rgba(30,210,140,0.90)" \
+      -gravity Center -pointsize 92 -draw "text 0,-52 'ARKAOS'" \
+      -fill "rgba(30,210,140,0.35)" \
+      -gravity Center -pointsize 92 -draw "text 2,-50 'ARKAOS'" \
+      -fill "rgba(200,220,245,0.75)" \
       -font /usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf \
-      -pointsize 21 -kerning 3 \
-      -draw "text 0,40 'Your Computer Is Yours'" \
+      -pointsize 18 -kerning 5 \
+      -gravity Center -draw "text 0,56 'YOUR COMPUTER IS YOURS'" \
+      -fill "rgba(30,90,160,0.40)" \
+      -gravity Center -pointsize 18 -kerning 5 \
+      -draw "text 0,86 'privacy  ·  security  ·  freedom'" \
       /usr/share/arka/wallpapers/default.png && \
     dnf remove -y -q ImageMagick
 

@@ -21,6 +21,7 @@ fn main() {
 
 fn build_window(app: &adw::Application) {
     adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    arka_shell_common::theme::install_adw();
 
     let (tx, rx) = std::sync::mpsc::channel::<state::StateUpdate>();
     let rx = Arc::new(Mutex::new(rx));

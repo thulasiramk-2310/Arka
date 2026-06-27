@@ -24,7 +24,7 @@ fn load_css() {
 }
 
 fn score_markup(score: u8) -> String {
-    let c = if score >= 90 { "#4ade80" } else if score >= 70 { "#fbbf24" } else { "#f87171" };
+    let c = if score >= 90 { "#22c55e" } else if score >= 70 { "#f59e0b" } else { "#ef4444" };
     format!("<span foreground='{c}' font_size='xx-large' font_weight='900'>{score}</span>")
 }
 
@@ -174,10 +174,10 @@ fn event_icon(cat: &str, ev: &str) -> &'static str {
 
 fn event_color(ev: &str) -> &'static str {
     match ev {
-        "drift"     => "#fb923c",
-        "recovered" => "#4ade80",
-        "started" | "ready" | "active" => "#4fc3f7",
-        _           => "#8ab0cc",
+        "drift"     => "#f59e0b",
+        "recovered" => "#22c55e",
+        "started" | "ready" | "active" => "#3b82f6",
+        _           => "#7d7d8a",
     }
 }
 
@@ -268,7 +268,7 @@ pub fn build(
     header_card.set_margin_top(32);
     header_card.set_margin_bottom(8);
 
-    let brand = gtk4::Label::new(Some("▲  A R K A"));
+    let brand = gtk4::Label::new(Some("A R K A"));
     brand.add_css_class("arka-brand");
 
     let score_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);

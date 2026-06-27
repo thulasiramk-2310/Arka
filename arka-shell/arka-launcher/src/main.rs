@@ -3,92 +3,111 @@ mod apps;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use arka_shell_common::theme;
 use gtk4::prelude::*;
 use gtk4::{
-    Application, ApplicationWindow, Box as GtkBox, Entry, Image, Label,
+    Application, ApplicationWindow, Box as GtkBox, Button, Entry, Image, Label,
     ListBox, ListBoxRow, Orientation, ScrolledWindow, SelectionMode,
 };
-use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "org.arka.launcher";
 
 const STYLE: &str = "
-window { background: transparent; }
+window { background-color: alpha(@bg_sunken, 0.55); }
 
-.brand-title {
-    color: #4fc3f7;
-    font-size: 30px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    text-shadow: 0 0 40px rgba(79,195,247,0.5);
-}
-.brand-sub {
-    color: #2e4d6a;
-    font-size: 13px;
-    letter-spacing: 1px;
-    margin-bottom: 18px;
-}
-.launcher-bg {
-    background-color: rgba(8, 12, 26, 0.95);
+.launcher-card {
+    background-color: @bg_raised;
     border-radius: 14px;
-    border: 1px solid rgba(40, 80, 140, 0.5);
-    padding: 12px;
-    min-width: 580px;
-    max-width: 580px;
+    border: 1px solid @border_ui;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    min-width: 560px;
+    max-width: 560px;
 }
-.search-box {
-    background-color: rgba(16, 26, 50, 0.95);
-    border-radius: 8px;
-    border: 1px solid rgba(50, 90, 160, 0.7);
-    padding: 10px 14px;
-    font-size: 15px;
-    color: #d0dff0;
-    margin-bottom: 6px;
-    caret-color: #4fc3f7;
+
+/* Search row */
+.search-row {
+    padding: 16px 20px;
+    border-bottom: 1px solid @border_sub;
 }
-.search-box:focus { border-color: #4fc3f7; }
-.app-list { background: transparent; }
-.app-list row { background: transparent; border-radius: 8px; }
-.app-list row:hover    { background-color: rgba(20, 55, 100, 0.7); }
-.app-list row:selected { background-color: rgba(20, 55, 100, 0.5); }
-.app-name  { color: #d8e8f8; font-size: 14px; font-weight: 600; }
-.app-exec  { color: #2e4d6a; font-size: 11px; }
-.chevron   { color: #2a4a6a; font-size: 18px; margin-left: 6px; }
-.sandbox-badge {
-    color: #4ade80;
-    font-size: 10px;
-    font-weight: 700;
-    background-color: rgba(74,222,128,0.12);
+.search-icon { color: @text_muted; margin-right: 10px; }
+.search-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    color: @text_hi;
+    caret-color: @accent;
+}
+.search-input:focus { box-shadow: none; }
+.esc-hint {
+    font-size: 10px; font-weight: 600; color: @text_lo;
+    background-color: @bg_overlay;
+    border: 1px solid @border_ui;
     border-radius: 4px;
-    padding: 1px 5px;
-    margin-left: 6px;
+    padding: 3px 8px;
 }
-.kbd-key {
-    border: 1px solid #1e3a5a;
-    border-radius: 3px;
-    padding: 0 5px;
-    font-size: 10px;
-    color: #2e5070;
-    background-color: rgba(30,60,100,0.2);
+
+/* Section label */
+.section-label {
+    font-size: 10px; font-weight: 600; color: @text_muted;
+    letter-spacing: 0.8px;
+    padding: 12px 20px 4px;
 }
-.hint-bar { color: #1e3050; font-size: 11px; }
-.dot-active { color: #4fc3f7; font-size: 9px; }
-.dot-dim    { color: #1a2a3a; font-size: 9px; }
-scrolledwindow { background: transparent; }
-scrolledwindow undershoot { background: transparent; }
-separator { background-color: rgba(30, 60, 110, 0.25); margin: 0 10px; }
+
+/* App grid */
+.apps-grid-wrap { padding: 4px 14px 10px; }
+.app-grid-btn {
+    background: transparent; border: none; box-shadow: none;
+    border-radius: 8px;
+    padding: 12px 4px;
+    min-width: 88px;
+}
+.app-grid-btn:hover { background-color: @bg_overlay; }
+.app-grid-btn image { color: @text_hi; }
+.app-grid-name { font-size: 11px; color: @text_lo; margin-top: 8px; }
+
+/* Results list */
+.results-list { background: transparent; padding: 6px; }
+.results-list row { background: transparent; border-radius: 6px; padding: 0; border: none; }
+.results-list row:hover { background-color: @bg_overlay; }
+.results-list row:selected { background-color: alpha(@accent, 0.10); }
+.result-row { padding: 8px 12px; min-height: 36px; }
+.result-icon { min-width: 28px; color: @text_lo; }
+.result-title { font-size: 14px; color: @text_hi; font-weight: 500; }
+.result-sub { font-size: 11px; color: @text_lo; }
+.result-action { font-size: 11px; color: @accent; }
+
+/* Power row */
+.power-sep { background-color: @border_sub; margin: 0 16px; }
+.power-row-box { padding: 10px 16px 12px; }
 .power-btn {
     background: transparent;
-    border: 1px solid rgba(30,60,110,0.3);
-    border-radius: 8px;
-    padding: 6px 10px;
-    min-width: 110px;
-    color: #4a6a88;
-    font-size: 12px;
+    border: 1px solid @border_ui;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: @text_lo; font-size: 12px;
+    min-width: 96px;
 }
-.power-btn:hover { background-color: rgba(20,50,90,0.5); color: #8ab0cc; border-color: rgba(60,100,150,0.5); }
-.power-btn.destructive:hover { background-color: rgba(90,20,20,0.4); color: #f87171; border-color: rgba(150,40,40,0.5); }
+.power-btn image { color: @text_lo; margin-right: 4px; }
+.power-btn:hover { background-color: @bg_overlay; color: @text_hi; border-color: @border_emph; }
+.power-btn:hover image { color: @text_hi; }
+.power-btn.destruct:hover { background-color: alpha(@danger, 0.10); color: @danger; border-color: alpha(@danger, 0.30); }
+.power-btn.destruct:hover image { color: @danger; }
 ";
+
+const GRID_APPS: &[(&str, &str, &str)] = &[
+    ("folder-symbolic",              "Files",     "thunar"),
+    ("utilities-terminal-symbolic",  "Terminal",  "foot"),
+    ("web-browser-symbolic",         "Firefox",   "firefox"),
+    ("security-high-symbolic",       "Privacy",   "arka-dashboard"),
+    ("application-x-addon-symbolic", "Capsule",   "arka-capsule"),
+    ("emblem-system-symbolic",       "Settings",  "arka-settings-gtk"),
+    ("bluetooth-symbolic",           "Bluetooth", "arka-bluetooth"),
+    ("network-wireless-signal-good-symbolic", "Wi-Fi", "arka-wifi"),
+    ("audio-volume-high-symbolic",   "Sound",     "arka-sound"),
+    ("view-refresh-symbolic",        "Updates",   "arka-update"),
+];
 
 fn main() {
     let app = Application::builder().application_id(APP_ID).build();
@@ -109,7 +128,13 @@ fn build_ui(app: &Application) {
     window.init_layer_shell();
     window.set_layer(Layer::Overlay);
     window.set_keyboard_mode(KeyboardMode::Exclusive);
+    // Fill the screen so the dimmed backdrop covers the whole desktop.
+    window.set_anchor(Edge::Top, true);
+    window.set_anchor(Edge::Bottom, true);
+    window.set_anchor(Edge::Left, true);
+    window.set_anchor(Edge::Right, true);
 
+    theme::install_base();
     let provider = gtk4::CssProvider::new();
     provider.load_from_data(STYLE);
     gtk4::style_context_add_provider_for_display(
@@ -118,174 +143,187 @@ fn build_ui(app: &Application) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // Outer column: brand + card + dots, centered horizontally, ~1/3 from top
     let outer = GtkBox::new(Orientation::Vertical, 0);
     outer.set_halign(gtk4::Align::Center);
-    outer.set_valign(gtk4::Align::Start);
-    outer.set_margin_top(110);
+    outer.set_valign(gtk4::Align::Center);
 
-    // Brand above card
-    let brand_title = Label::new(Some("▲  ARKA"));
-    brand_title.add_css_class("brand-title");
-    brand_title.set_halign(gtk4::Align::Center);
-
-    let brand_sub = Label::new(Some("Your Computer Is Yours"));
-    brand_sub.add_css_class("brand-sub");
-    brand_sub.set_halign(gtk4::Align::Center);
-
-    // Card
     let card = GtkBox::new(Orientation::Vertical, 0);
-    card.add_css_class("launcher-bg");
+    card.add_css_class("launcher-card");
 
-    // Search entry
+    // ── Search row ────────────────────────────────────────────────────────
+    let search_row = GtkBox::new(Orientation::Horizontal, 0);
+    search_row.add_css_class("search-row");
+    search_row.set_valign(gtk4::Align::Center);
+
+    let search_icon = Image::from_icon_name("system-search-symbolic");
+    search_icon.set_pixel_size(16);
+    search_icon.add_css_class("search-icon");
+
     let entry = Entry::new();
-    entry.add_css_class("search-box");
-    entry.set_placeholder_text(Some("▲  Search apps..."));
+    entry.add_css_class("search-input");
+    entry.set_placeholder_text(Some("Search apps, files, settings..."));
     entry.set_hexpand(true);
+    entry.set_has_frame(false);
 
-    // App list with separators
+    let esc_hint = Label::new(Some("ESC"));
+    esc_hint.add_css_class("esc-hint");
+
+    search_row.append(&search_icon);
+    search_row.append(&entry);
+    search_row.append(&esc_hint);
+
+    // ── Apps grid ─────────────────────────────────────────────────────────
+    let apps_section_lbl = Label::new(Some("Applications"));
+    apps_section_lbl.add_css_class("section-label");
+    apps_section_lbl.set_halign(gtk4::Align::Start);
+
+    let apps_wrap = GtkBox::new(Orientation::Horizontal, 0);
+    apps_wrap.add_css_class("apps-grid-wrap");
+
+    let apps_grid = gtk4::FlowBox::new();
+    apps_grid.set_max_children_per_line(5);
+    apps_grid.set_min_children_per_line(5);
+    apps_grid.set_selection_mode(SelectionMode::None);
+    apps_grid.set_hexpand(true);
+
+    for (icon, name, cmd) in GRID_APPS {
+        let btn = Button::new();
+        btn.add_css_class("app-grid-btn");
+        let vbox = GtkBox::new(Orientation::Vertical, 0);
+        vbox.set_halign(gtk4::Align::Center);
+        let icon_img = Image::from_icon_name(icon);
+        icon_img.set_pixel_size(24);
+        let name_lbl = Label::new(Some(name));
+        name_lbl.add_css_class("app-grid-name");
+        vbox.append(&icon_img);
+        vbox.append(&name_lbl);
+        btn.set_child(Some(&vbox));
+        let cmd_owned = cmd.to_string();
+        let win = window.clone();
+        btn.connect_clicked(move |_| { launch(&cmd_owned); win.close(); });
+        apps_grid.insert(&btn, -1);
+    }
+    apps_wrap.append(&apps_grid);
+
+    // ── Results list ─────────────────────────────────────────────────────
+    let results_lbl = Label::new(Some("Quick Actions"));
+    results_lbl.add_css_class("section-label");
+    results_lbl.set_halign(gtk4::Align::Start);
+
     let list = ListBox::new();
-    list.set_selection_mode(SelectionMode::Single);
-    list.set_show_separators(true);
-    list.add_css_class("app-list");
+    list.set_selection_mode(SelectionMode::Browse);
+    list.add_css_class("results-list");
 
     let scroll = ScrolledWindow::builder()
         .min_content_height(0)
-        .max_content_height(320)
+        .max_content_height(240)
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .build();
     scroll.set_child(Some(&list));
 
-    // Hint bar
-    let hint_box = GtkBox::new(Orientation::Horizontal, 4);
-    hint_box.set_halign(gtk4::Align::Center);
-    hint_box.set_margin_top(8);
-
-    let super_key = Label::new(Some("Super"));
-    super_key.add_css_class("kbd-key");
-    let hint_rest = Label::new(Some(" + Number to open  •  ↑↓ to navigate  •  Enter to launch  •  Esc to close"));
-    hint_rest.add_css_class("hint-bar");
-    hint_box.append(&super_key);
-    hint_box.append(&hint_rest);
-
-    // Power row
+    // ── Power row ─────────────────────────────────────────────────────────
     let power_sep = gtk4::Separator::new(Orientation::Horizontal);
-    power_sep.set_margin_top(8);
+    power_sep.add_css_class("power-sep");
 
     let power_row = GtkBox::new(Orientation::Horizontal, 6);
+    power_row.add_css_class("power-row-box");
     power_row.set_halign(gtk4::Align::Center);
-    power_row.set_margin_top(8);
-    power_row.set_margin_bottom(10);
 
-    let power_items: &[(&str, &str, &str, bool)] = &[
-        ("weather-clear-night-symbolic", "Sleep",     "systemctl suspend",  false),
-        ("system-lock-screen-symbolic",  "Lock",      "swaylock",              false),
-        ("view-refresh-symbolic",        "Restart",   "systemctl reboot",   false),
-        ("system-shutdown-symbolic",     "Shut Down", "systemctl poweroff", true),
-    ];
-
-    for (icon, label, cmd, destructive) in power_items {
-        let btn = gtk4::Button::new();
+    for (icon, lbl, cmd, destruct) in &[
+        ("weather-clear-night-symbolic", "Sleep",    "systemctl suspend",  false),
+        ("system-lock-screen-symbolic",  "Lock",     "swaylock",            false),
+        ("view-refresh-symbolic",        "Restart",  "systemctl reboot",   false),
+        ("system-shutdown-symbolic",     "Shutdown", "systemctl poweroff",  true),
+    ] {
+        let btn = Button::new();
         btn.add_css_class("power-btn");
-        if *destructive { btn.add_css_class("destructive"); }
-
-        let vbox = GtkBox::new(Orientation::Vertical, 3);
-        vbox.set_halign(gtk4::Align::Center);
-        let img = gtk4::Image::from_icon_name(icon);
-        img.set_pixel_size(16);
-        let lbl = Label::new(Some(label));
-        vbox.append(&img);
-        vbox.append(&lbl);
-        btn.set_child(Some(&vbox));
-
-        let cmd_owned = cmd.to_string();
-        let window_ref = window.clone();
+        if *destruct { btn.add_css_class("destruct"); }
+        let hb = GtkBox::new(Orientation::Horizontal, 0);
+        hb.set_halign(gtk4::Align::Center);
+        let img = Image::from_icon_name(icon);
+        img.set_pixel_size(14);
+        hb.append(&img);
+        hb.append(&Label::new(Some(lbl)));
+        btn.set_child(Some(&hb));
+        let c = cmd.to_string();
+        let win = window.clone();
         btn.connect_clicked(move |_| {
-            window_ref.close();
-            let _ = std::process::Command::new("sh")
-                .args(["-c", &cmd_owned])
-                .spawn();
+            win.close();
+            let _ = std::process::Command::new("sh").args(["-c", &c]).spawn();
         });
         power_row.append(&btn);
     }
 
-    card.append(&entry);
+    card.append(&search_row);
+    card.append(&apps_section_lbl);
+    card.append(&apps_wrap);
+    card.append(&results_lbl);
     card.append(&scroll);
-    card.append(&hint_box);
     card.append(&power_sep);
     card.append(&power_row);
 
-    // Pagination dots
-    let dots = GtkBox::new(Orientation::Horizontal, 8);
-    dots.set_halign(gtk4::Align::Center);
-    dots.set_margin_top(14);
-    for i in 0..3 {
-        let dot = Label::new(Some("●"));
-        dot.add_css_class(if i == 0 { "dot-active" } else { "dot-dim" });
-        dots.append(&dot);
-    }
-
-    outer.append(&brand_title);
-    outer.append(&brand_sub);
     outer.append(&card);
-    outer.append(&dots);
+    outer.set_hexpand(true);
+    outer.set_vexpand(true);
     window.set_child(Some(&outer));
 
-    // Initial populate
-    populate(&list, &all_apps);
+    // Click on the dimmed backdrop (anywhere outside the card) dismisses.
+    // A claiming gesture on the card swallows inner clicks so they don't bubble.
+    let card_claim = gtk4::GestureClick::new();
+    card_claim.connect_pressed(move |g, _, _, _| { g.set_state(gtk4::EventSequenceState::Claimed); });
+    card.add_controller(card_claim);
 
-    // Filter on search
-    let all_apps_ref = all_apps.clone();
-    let list_ref = list.clone();
-    let filtered_ref = filtered.clone();
+    let backdrop_click = gtk4::GestureClick::new();
+    let win_bd = window.clone();
+    backdrop_click.connect_released(move |_, _, _, _| win_bd.close());
+    outer.add_controller(backdrop_click);
+
+    populate_results(&list, &all_apps, false);
+
+    // Search → filter
+    let all_apps2 = all_apps.clone();
+    let list2 = list.clone();
+    let filtered2 = filtered.clone();
+    let apps_sec = apps_section_lbl.clone();
+    let apps_wr = apps_wrap.clone();
+    let res_lbl = results_lbl.clone();
     entry.connect_changed(move |e| {
-        let query = e.text();
-        let new_filtered: Vec<_> = if query.is_empty() {
-            all_apps_ref.clone()
+        let q = e.text();
+        let searching = !q.is_empty();
+        apps_sec.set_visible(!searching);
+        apps_wr.set_visible(!searching);
+        res_lbl.set_text(if searching { "Results" } else { "Quick Actions" });
+        let new_filtered: Vec<_> = if searching {
+            all_apps2.iter().filter(|a| a.matches(&q)).cloned().collect()
         } else {
-            all_apps_ref.iter().filter(|a| a.matches(&query)).cloned().collect()
+            all_apps2.clone()
         };
-        populate(&list_ref, &new_filtered);
-        *filtered_ref.borrow_mut() = new_filtered;
+        populate_results(&list2, &new_filtered, searching);
+        *filtered2.borrow_mut() = new_filtered;
     });
 
-    // Enter launches first result
-    let filtered_ref2 = filtered.clone();
-    let window_ref = window.clone();
+    // Enter → launch first
+    let filtered3 = filtered.clone();
+    let win3 = window.clone();
     entry.connect_activate(move |_| {
-        let fa = filtered_ref2.borrow();
-        if let Some(first) = fa.first() {
-            launch(&first.exec);
-            window_ref.close();
-        }
+        let fa = filtered3.borrow();
+        if let Some(first) = fa.first() { launch(&first.exec); win3.close(); }
     });
 
     // Row click
-    let window_ref2 = window.clone();
+    let win4 = window.clone();
     list.connect_row_activated(move |_, row| {
         if let Some(exec) = row.widget_name().as_str().strip_prefix("exec:") {
             launch(exec);
-            window_ref2.close();
+            win4.close();
         }
     });
 
-    // Key handler: Escape + 1–9 shortcuts
+    // ESC
     let controller = gtk4::EventControllerKey::new();
-    let window_ref3 = window.clone();
-    let filtered_ref3 = filtered.clone();
+    let win5 = window.clone();
     controller.connect_key_pressed(move |_, key, _, _| {
-        if key == gtk4::gdk::Key::Escape {
-            window_ref3.close();
-            return glib::Propagation::Stop;
-        }
-        if let Some(idx) = key_to_index(key) {
-            let fa = filtered_ref3.borrow();
-            if let Some(app) = fa.get(idx) {
-                launch(&app.exec);
-                window_ref3.close();
-            }
-            return glib::Propagation::Stop;
-        }
+        if key == gtk4::gdk::Key::Escape { win5.close(); return glib::Propagation::Stop; }
         glib::Propagation::Proceed
     });
     window.add_controller(controller);
@@ -294,72 +332,74 @@ fn build_ui(app: &Application) {
     entry.grab_focus();
 }
 
-fn populate(list: &ListBox, apps: &[apps::AppEntry]) {
-    while let Some(child) = list.first_child() {
-        list.remove(&child);
-    }
-    for app in apps.iter().take(9) {
-        let row = ListBoxRow::new();
-        row.set_widget_name(&format!("exec:{}", app.exec));
+fn populate_results(list: &ListBox, apps: &[apps::AppEntry], searching: bool) {
+    while let Some(child) = list.first_child() { list.remove(&child); }
 
-        let hbox = GtkBox::new(Orientation::Horizontal, 12);
-        hbox.set_margin_start(14);
-        hbox.set_margin_end(14);
-        hbox.set_margin_top(10);
-        hbox.set_margin_bottom(10);
-
-        // Icon
-        let icon = if app.icon.is_empty() {
-            Image::from_icon_name("application-x-executable-symbolic")
-        } else {
-            Image::from_icon_name(&app.icon)
-        };
-        icon.set_pixel_size(28);
-        hbox.append(&icon);
-
-        // Name + exec
-        let vbox = GtkBox::new(Orientation::Vertical, 2);
-        vbox.set_hexpand(true);
-
-        let name_row = GtkBox::new(Orientation::Horizontal, 0);
-        let name_lbl = Label::new(Some(&app.name));
-        name_lbl.set_halign(gtk4::Align::Start);
-        name_lbl.add_css_class("app-name");
-        name_row.append(&name_lbl);
-        if app.sandboxed {
-            let badge = Label::new(Some("SANDBOX"));
-            badge.add_css_class("sandbox-badge");
-            badge.set_valign(gtk4::Align::Center);
-            name_row.append(&badge);
+    if !searching {
+        let quick: &[(&str, &str, &str, &str)] = &[
+            ("security-high-symbolic", "Privacy Dashboard",  "Score: all protections active", "arka-dashboard"),
+            ("view-refresh-symbolic",  "Check for Updates",  "bootc upgrade · atomic OTA",    "arka-update"),
+            ("preferences-desktop-keyboard-symbolic", "Keyboard Shortcuts", "Super+D / Super+W / Super+T …", "arka-hotkeys"),
+        ];
+        for (icon, title, sub, cmd) in quick {
+            let row = make_result_row(icon, title, sub, "Open →", &format!("exec:{cmd}"));
+            list.append(&row);
         }
+        return;
+    }
 
-        let exec_lbl = Label::new(Some(&app.exec));
-        exec_lbl.set_halign(gtk4::Align::Start);
-        exec_lbl.add_css_class("app-exec");
-
-        vbox.append(&name_row);
-        vbox.append(&exec_lbl);
-        hbox.append(&vbox);
-
-        // Chevron
-        let chevron = Label::new(Some("›"));
-        chevron.add_css_class("chevron");
-        chevron.set_valign(gtk4::Align::Center);
-        hbox.append(&chevron);
-
-        row.set_child(Some(&hbox));
+    for app in apps.iter().take(6) {
+        let icon = app_icon_symbolic(&app.name);
+        let row = make_result_row(icon, &app.name, &app.exec, "Launch →", &format!("exec:{}", app.exec));
         list.append(&row);
     }
 }
 
-fn key_to_index(key: gtk4::gdk::Key) -> Option<usize> {
-    use gtk4::gdk::Key;
-    match key {
-        Key::_1 => Some(0), Key::_2 => Some(1), Key::_3 => Some(2),
-        Key::_4 => Some(3), Key::_5 => Some(4), Key::_6 => Some(5),
-        Key::_7 => Some(6), Key::_8 => Some(7), Key::_9 => Some(8),
-        _ => None,
-    }
+fn make_result_row(icon: &str, title: &str, sub: &str, action: &str, name: &str) -> ListBoxRow {
+    let row = ListBoxRow::new();
+    if !name.is_empty() { row.set_widget_name(name); }
+    let hbox = GtkBox::new(Orientation::Horizontal, 10);
+    hbox.add_css_class("result-row");
+    let icon_lbl = Image::from_icon_name(icon);
+    icon_lbl.set_pixel_size(18);
+    icon_lbl.add_css_class("result-icon");
+    icon_lbl.set_valign(gtk4::Align::Center);
+    let vbox = GtkBox::new(Orientation::Vertical, 1);
+    vbox.set_hexpand(true);
+    let t = Label::new(Some(title));
+    t.add_css_class("result-title");
+    t.set_halign(gtk4::Align::Start);
+    let s = Label::new(Some(sub));
+    s.add_css_class("result-sub");
+    s.set_halign(gtk4::Align::Start);
+    vbox.append(&t);
+    vbox.append(&s);
+    let a = Label::new(Some(action));
+    a.add_css_class("result-action");
+    a.set_valign(gtk4::Align::Center);
+    hbox.append(&icon_lbl);
+    hbox.append(&vbox);
+    hbox.append(&a);
+    row.set_child(Some(&hbox));
+    row
+}
+
+fn app_icon_symbolic(name: &str) -> &'static str {
+    let n = name.to_lowercase();
+    if n.contains("privacy") || n.contains("dashboard") { return "security-high-symbolic"; }
+    if n.contains("wifi") || n.contains("wi-fi")        { return "network-wireless-signal-good-symbolic"; }
+    if n.contains("bluetooth")                           { return "bluetooth-symbolic"; }
+    if n.contains("sound") || n.contains("volume")      { return "audio-volume-high-symbolic"; }
+    if n.contains("update")                              { return "view-refresh-symbolic"; }
+    if n.contains("setting")                             { return "emblem-system-symbolic"; }
+    if n.contains("file") || n.contains("thunar")       { return "folder-symbolic"; }
+    if n.contains("firefox") || n.contains("browser")   { return "web-browser-symbolic"; }
+    if n.contains("terminal") || n.contains("foot")     { return "utilities-terminal-symbolic"; }
+    if n.contains("capsule") || n.contains("store")     { return "application-x-addon-symbolic"; }
+    if n.contains("perm")                                { return "dialog-password-symbolic"; }
+    if n.contains("hotkey")                              { return "preferences-desktop-keyboard-symbolic"; }
+    if n.contains("welcome")                             { return "user-available-symbolic"; }
+    "application-x-executable-symbolic"
 }
 
 fn launch(exec: &str) {

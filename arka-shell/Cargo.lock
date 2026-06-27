@@ -50,6 +50,7 @@ dependencies = [
 name = "arka-capsule"
 version = "0.1.0"
 dependencies = [
+ "arka-shell-common",
  "glib",
  "gtk4",
  "libadwaita",
@@ -71,6 +72,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-dock"
+version = "0.1.0"
+dependencies = [
+ "arka-shell-common",
+ "glib",
+ "gtk4",
+ "gtk4-layer-shell",
+]
+
+[[package]]
 name = "arka-hotkeys"
 version = "0.1.0"
 dependencies = [
@@ -82,6 +93,7 @@ dependencies = [
 name = "arka-launcher"
 version = "0.1.0"
 dependencies = [
+ "arka-shell-common",
  "glib",
  "gtk4",
  "gtk4-layer-shell",
@@ -99,6 +111,7 @@ dependencies = [
 name = "arka-settings"
 version = "0.1.0"
 dependencies = [
+ "arka-shell-common",
  "gtk4",
  "libadwaita",
 ]
@@ -106,6 +119,9 @@ dependencies = [
 [[package]]
 name = "arka-shell-common"
 version = "0.1.0"
+dependencies = [
+ "gtk4",
+]
 
 [[package]]
 name = "arka-sound"

@@ -1,10 +1,10 @@
 [package]
-name = "arka-bar"
+name = "arka-dock"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "arka-bar"
+name = "arka-dock"
 path = "src/main.rs"
 
 [dependencies]
@@ -12,5 +12,3 @@ arka-shell-common = { path = "../arka-shell-common", features = ["gtk"] }
 gtk4 = "0.9"
 gtk4-layer-shell = "0.4"
 glib = "0.20"
-zbus = { version = "4", features = ["blocking"] }
-chrono = "0.4"
