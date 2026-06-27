@@ -62,13 +62,24 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox
 
-# Graphical session: Hyprland + launcher + file manager + user tools
-RUN dnf install -y hyprland swaybg foot xorg-x11-server-Xwayland \
-    pipewire wireplumber pipewire-pulseaudio \
-    thunar dbus-daemon pciutils gtk4-layer-shell mesa-libGLES \
-    libadwaita mako grim slurp pavucontrol \
-    wl-clipboard fzf flatpak xdg-user-dirs brightnessctl \
-    bluez bluez-tools swaylock
+# Graphical session: full KDE Plasma spin + SDDM login manager.
+# Plasma provides the panel, launcher, settings, file manager, window
+# management and login — replacing the custom Hyprland shell. The ArkaOS
+# privacy apps (dashboard, capsule, settings) run as regular Plasma apps.
+# rootfiles is excluded: it ships /root dotfiles that already exist in the
+# bootc base, so its cpio unpack fails the whole transaction. It's cosmetic.
+RUN dnf install -y --exclude=rootfiles @kde-desktop-environment sddm \
+    pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
+    libadwaita gtk4-layer-shell flatpak xdg-user-dirs brightnessctl \
+    bluez bluez-tools && \
+    dnf clean all
+
+# Enable SDDM (started once firstboot flips the default to graphical.target).
+# Default to the Plasma Wayland session.
+RUN systemctl enable sddm.service && \
+    mkdir -p /etc/sddm.conf.d && \
+    printf '[General]\nDisplayServer=wayland\n\n[Wayland]\nSessionDir=/usr/share/wayland-sessions\n' \
+      > /etc/sddm.conf.d/10-wayland.conf
 
 
 # Install arka-bar (replaces waybar)
@@ -166,10 +177,6 @@ RUN dnf install -y -q ImageMagick && \
 # arka-tools .desktop files for launcher search
 COPY desktop-files/ /usr/share/applications/
 
-# Hyprland config + autostart via /etc/skel
-RUN mkdir -p /etc/skel/.config/hypr
-COPY arkaos-hyprland-config    /etc/skel/.config/hypr/hyprland.conf
-COPY swaylock-config           /etc/skel/.config/swaylock/config
-COPY sway-autostart            /etc/skel/.bash_profile
+# KDE/SDDM owns the graphical session — no tty autostart, no Hyprland config.
 
 RUN bootc container lint
