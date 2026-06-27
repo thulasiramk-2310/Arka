@@ -1,0 +1,21 @@
+#!/bin/bash
+# ArkaOS: apply the branded wallpaper + accent on first Plasma login, then
+# disable this autostart entry. The dark color scheme is already preset via
+# /etc/skel/.config/kdeglobals, so this only handles what needs the running
+# Plasma session (the official plasma-apply-* tools talk to plasmashell).
+
+# Give plasmashell a moment to be ready for the apply tools.
+sleep 3
+
+WALL=/usr/share/arka/wallpapers/default.png
+
+# Re-assert dark + green accent (harmless if already set), then the wallpaper.
+plasma-apply-colorscheme BreezeDark 2>/dev/null || true
+[ -x "$(command -v kwriteconfig6)" ] && {
+    kwriteconfig6 --file kdeglobals --group General --key AccentColor "34,197,94"
+    kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
+}
+[ -f "$WALL" ] && plasma-apply-wallpaperimage "$WALL" 2>/dev/null || true
+
+# One-shot: remove the autostart entry so this never runs again.
+rm -f "$HOME/.config/autostart/arka-plasma-firstrun.desktop"

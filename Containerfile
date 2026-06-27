@@ -177,6 +177,30 @@ RUN dnf install -y -q ImageMagick && \
 # arka-tools .desktop files for launcher search
 COPY desktop-files/ /usr/share/applications/
 
-# KDE/SDDM owns the graphical session — no tty autostart, no Hyprland config.
+# ── ArkaWM: brand KDE Plasma as ArkaOS ──────────────────────────────────────
+# Dark + green-accent defaults for every new user (read from /etc/skel on
+# account creation), so the desktop is dark from the first frame.
+RUN mkdir -p /etc/skel/.config && \
+    printf '[General]\nColorScheme=BreezeDark\nAccentColor=34,197,94\naccentColorFromWallpaper=false\n\n[KDE]\nwidgetStyle=Breeze\nLookAndFeelPackage=org.kde.breezedark.desktop\n\n[Icons]\nTheme=breeze-dark\n' \
+      > /etc/skel/.config/kdeglobals
+
+# First-login one-shot: apply the ArkaOS wallpaper + accent via the official
+# Plasma CLI tools (reliable across versions), then disable itself.
+RUN mkdir -p /etc/skel/.config/autostart
+COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
+RUN chmod 755 /usr/libexec/arka-plasma-firstrun && \
+    printf '[Desktop Entry]\nType=Application\nName=ArkaOS Branding\nExec=/usr/libexec/arka-plasma-firstrun\nX-KDE-autostart-phase=2\nOnlyShowIn=KDE\nNoDisplay=true\n' \
+      > /etc/skel/.config/autostart/arka-plasma-firstrun.desktop
+
+# Branded SDDM login: ArkaOS wallpaper behind the breeze login theme.
+RUN mkdir -p /usr/share/sddm/themes/breeze && \
+    printf '[General]\ntype=image\nbackground=/usr/share/arka/wallpapers/default.png\n' \
+      > /usr/share/sddm/themes/breeze/theme.conf.user && \
+    printf '[Theme]\nCurrent=breeze\n' > /etc/sddm.conf.d/30-arka-theme.conf
+
+# Brand the session name shown in SDDM.
+RUN if [ -f /usr/share/wayland-sessions/plasma.desktop ]; then \
+      sed -i 's/^Name=.*/Name=ArkaOS Desktop/' /usr/share/wayland-sessions/plasma.desktop; \
+    fi
 
 RUN bootc container lint
