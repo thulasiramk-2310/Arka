@@ -108,7 +108,7 @@ fn current_version() -> String {
 }
 
 fn run_in_terminal(cmd: &str) {
-    let _ = std::process::Command::new("foot")
+    let _ = std::process::Command::new("konsole")
         .args(["-e", "sh", "-c", cmd])
         .spawn();
 }

@@ -103,11 +103,13 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/wizard.png" width="72%" alt="ArkaOS first-boot welcome wizard — privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
+  <img src="assets/screenshots/lockscreen.png" width="49%" alt="ArkaOS lock screen — KDE kscreenlocker showing a large clock and date over the branded ARKAOS wallpaper"/>
+  <img src="assets/screenshots/wizard.png" width="49%" alt="ArkaOS first-boot welcome wizard — privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
 </p>
 
-<p align="center"><em>Live DP1 captures (2026-07-11): the branded KDE Plasma desktop and the
-first-boot welcome wizard. Launcher · Dashboard · Capsule · Settings grid to follow.</em></p>
+<p align="center"><em>Live DP1 captures (2026-07-11): the branded KDE Plasma desktop, the
+KDE lock screen, and the first-boot welcome wizard. Launcher · Dashboard ·
+Capsule · Settings grid to follow.</em></p>
 
 ## Roadmap
 

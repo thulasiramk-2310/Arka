@@ -44,6 +44,12 @@ every app.
 - GTK/Qt widget metrics don't match 1:1 yet (audit in progress).
 - No installer ISO yet — DP1 ships as a qcow2 disk image.
 - English only.
+- **Capsule "Lock Screen" quick action is a no-op.** It still references the
+  legacy Hyprland locker (`swaylock`), which isn't installed in the KDE image.
+  The actual lock screen (KDE kscreenlocker, e.g. via Meta+L or the system
+  tray) works normally. Fixed on `main` (`loginctl lock-session`); ships in DP2.
+  Same root cause as a few other Capsule/Settings actions that referenced
+  Hyprland-era tools (`foot`, `thunar`) — all fixed on `main` for DP2.
 
 ## Requirements
 

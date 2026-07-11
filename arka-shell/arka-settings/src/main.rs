@@ -501,7 +501,7 @@ fn page_box() -> gtk4::Box {
 }
 
 fn run_in_terminal(cmd: &str) {
-    let _ = Command::new("foot").args(["-e", "sh", "-c", cmd]).spawn();
+    let _ = Command::new("konsole").args(["-e", "sh", "-c", cmd]).spawn();
 }
 
 fn is_autologin_enabled() -> bool {

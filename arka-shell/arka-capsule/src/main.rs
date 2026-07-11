@@ -5,6 +5,8 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use adw::prelude::*;
 
+use arka_shell_common::window_service;
+
 const APP_ID: &str = "org.arka.capsule";
 
 // Smart search entries: (keywords, icon, display name, subtitle, cmd)
@@ -30,8 +32,8 @@ const SMART_ACTIONS: &[(&str, &str, &str, &str, &str)] = &[
 
 // ArkaOS built-in apps
 const SYSTEM_APPS: &[(&str, &str, &str)] = &[
-    ("folder-symbolic",                       "Files",           "thunar"),
-    ("utilities-terminal-symbolic",           "Terminal",        "foot"),
+    ("folder-symbolic",                       "Files",           "dolphin"),
+    ("utilities-terminal-symbolic",           "Terminal",        "konsole"),
     ("web-browser-symbolic",                  "Firefox",         "firefox"),
     ("security-high-symbolic",                "Privacy",         "arka-dashboard"),
     ("emblem-system-symbolic",                "Settings",        "arka-settings-gtk"),
@@ -194,25 +196,24 @@ fn build_ui(app: &adw::Application) {
     let (running_page, running_list) = build_running_tab();
     stack.add_titled(&running_page, Some("running"), "Running");
 
-    // Poll running windows every 2s
+    // Populate once now; thereafter refresh only when the Running tab is
+    // shown (see the visible-child handler below). Each list() drives a KWin
+    // script, so polling on a timer would spam the compositor.
     refresh_running(&running_list);
-    glib::timeout_add_seconds_local(2, {
-        let running_list = running_list.clone();
-        move || { refresh_running(&running_list); glib::ControlFlow::Continue }
-    });
 
     // ── Tab 3: Favorites ────────────────────────────────────────────────────
     let (fav_page, fav_grid) = build_favorites_tab(&favorites);
     stack.add_titled(&fav_page, Some("favorites"), "Favorites");
 
-    // Refresh favorites when switching to that tab
+    // Refresh a tab's contents when the user switches to it.
     stack.connect_visible_child_notify({
         let fav_grid = fav_grid.clone();
         let favorites = favorites.clone();
-        move |s| {
-            if s.visible_child_name().as_deref() == Some("favorites") {
-                repopulate_favorites(&fav_grid, &favorites.borrow());
-            }
+        let running_list = running_list.clone();
+        move |s| match s.visible_child_name().as_deref() {
+            Some("favorites") => repopulate_favorites(&fav_grid, &favorites.borrow()),
+            Some("running") => refresh_running(&running_list),
+            _ => {}
         }
     });
 
@@ -497,7 +498,11 @@ fn build_running_tab() -> (gtk4::Box, gtk4::ListBox) {
 fn refresh_running(list: &gtk4::ListBox) {
     while let Some(child) = list.first_child() { list.remove(&child); }
 
-    let windows = get_hyprctl_clients();
+    // Speak only the window-management abstraction — never a specific
+    // compositor's IPC. Backend (KWin today, ArkaWM later) is chosen inside
+    // arka_shell_common::window_service().
+    let wm = window_service();
+    let windows = wm.list();
     if windows.is_empty() {
         let lbl = gtk4::Label::new(Some("No open windows"));
         lbl.add_css_class("empty-label");
@@ -513,7 +518,7 @@ fn refresh_running(list: &gtk4::ListBox) {
         let row_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
         row_box.add_css_class("win-row");
 
-        let icon = gtk4::Image::from_icon_name(wm_class_icon(&win.class));
+        let icon = gtk4::Image::from_icon_name(wm_class_icon(&win.app_id));
         icon.set_pixel_size(20);
 
         let vb = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
@@ -523,7 +528,7 @@ fn refresh_running(list: &gtk4::ListBox) {
         title.set_halign(gtk4::Align::Start);
         title.set_max_width_chars(50);
         title.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-        let class = gtk4::Label::new(Some(&win.class));
+        let class = gtk4::Label::new(Some(&win.app_id));
         class.add_css_class("win-class");
         class.set_halign(gtk4::Align::Start);
         vb.append(&title);
@@ -531,20 +536,16 @@ fn refresh_running(list: &gtk4::ListBox) {
 
         let focus_btn = gtk4::Button::with_label("Focus");
         focus_btn.add_css_class("win-focus-btn");
-        let addr = win.address.clone();
+        let focus_id = win.id.clone();
         focus_btn.connect_clicked(move |_| {
-            let _ = std::process::Command::new("hyprctl")
-                .args(["dispatch", "focuswindow", &format!("address:{}", addr)])
-                .spawn();
+            window_service().focus(&focus_id);
         });
 
         let close_btn = gtk4::Button::with_label("✕");
         close_btn.add_css_class("win-close-btn");
-        let addr2 = win.address.clone();
+        let close_id = win.id.clone();
         close_btn.connect_clicked(move |_| {
-            let _ = std::process::Command::new("hyprctl")
-                .args(["dispatch", "closewindow", &format!("address:{}", addr2)])
-                .spawn();
+            window_service().close(&close_id);
         });
 
         row_box.append(&icon);
@@ -559,60 +560,11 @@ fn refresh_running(list: &gtk4::ListBox) {
     }
 }
 
-struct HyprWindow {
-    address: String,
-    title:   String,
-    class:   String,
-}
-
-fn get_hyprctl_clients() -> Vec<HyprWindow> {
-    let out = std::process::Command::new("hyprctl")
-        .args(["clients", "-j"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-
-    let mut windows = Vec::new();
-    let mut rest = out.as_str();
-
-    while let Some(pos) = rest.find("\"address\"") {
-        rest = &rest[pos + 9..];
-        let addr = extract_json_str(rest).unwrap_or_default();
-        if addr.is_empty() { continue; }
-
-        let title = find_json_field(rest, "\"title\"").unwrap_or_default();
-        let class = find_json_field(rest, "\"class\"").unwrap_or_default();
-
-        // Skip Capsule itself and bar/dock
-        if class.contains("arka.capsule") || class.contains("arka.bar") || class.contains("arka.dock") {
-            continue;
-        }
-        if !class.is_empty() || !title.is_empty() {
-            windows.push(HyprWindow { address: addr, title, class });
-        }
-    }
-    windows
-}
-
-fn find_json_field(json: &str, key: &str) -> Option<String> {
-    let pos = json.find(key)?;
-    let after = json[pos + key.len()..].trim_start_matches([' ', ':']);
-    extract_json_str(after)
-}
-
-fn extract_json_str(s: &str) -> Option<String> {
-    let s = s.trim_start_matches([' ', ':']);
-    let s = s.trim_start_matches('"');
-    let end = s.find('"')?;
-    Some(s[..end].to_string())
-}
-
 fn wm_class_icon(class: &str) -> &'static str {
     let c = class.to_lowercase();
     if c.contains("firefox") || c.contains("browser") { return "web-browser-symbolic"; }
-    if c.contains("foot") || c.contains("terminal") { return "utilities-terminal-symbolic"; }
-    if c.contains("thunar") || c.contains("file") { return "folder-symbolic"; }
+    if c.contains("konsole") || c.contains("terminal") || c.contains("foot") { return "utilities-terminal-symbolic"; }
+    if c.contains("dolphin") || c.contains("file") || c.contains("thunar") { return "folder-symbolic"; }
     if c.contains("thunderbird") { return "mail-unread-symbolic"; }
     if c.contains("signal") { return "chat-symbolic"; }
     if c.contains("vlc") { return "multimedia-player-symbolic"; }
@@ -765,7 +717,7 @@ fn install_app(id: &str) {
         "flatpak install -y flathub '{}' && echo '✓ Installed!' || echo '✗ Installation failed'; read -p 'Press Enter...'",
         id
     );
-    let _ = std::process::Command::new("foot")
+    let _ = std::process::Command::new("konsole")
         .args(["-e", "sh", "-c", &cmd])
         .spawn();
 }
