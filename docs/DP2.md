@@ -1,14 +1,15 @@
-# DP2 — Developer Preview 2 (planning)
+# DP2 — post-DP1 work already landed on `main`
 
-DP1 is frozen as a historical milestone (tag `v0.1.0-dp1`). DP2 is the first
-release that **pays down architectural debt** left by the Hyprland → Plasma
-pivot, while continuing to daily-drive ArkaOS and populate this file from real
-usage.
+DP1 is frozen as a historical milestone (tag `v0.1.0-dp1`). This file records
+the concrete work that has **already landed on `main` since DP1** and will ship
+in the next image build — it is a record of what's queued, not a plan.
 
-DP2 is not primarily about new features. It is about *abstraction* — removing
-the last places where the desktop applications assume a specific window
-manager, so that ArkaOS can one day replace Plasma/KWin (with ArkaWM) without
-rewriting the apps.
+**DP2's actual scope is not decided here.** It is determined after a month of
+daily driving, from real experience (`docs/FIELD-NOTES.md`). Candidate future
+work — hardware, FDE, installer, the service-abstraction direction, and the rest
+— lives in `docs/FUTURE-CONSIDERATIONS.md`, which is committed to nothing.
+
+The theme of what has landed so far is *paying down Hyprland → Plasma debt*.
 
 ## Carried over from DP1 (fixed on `main`, ships in DP2)
 
@@ -82,13 +83,16 @@ Flathub's AppStream instead of hand-curating, so branding stays aligned and
 self-updates; and let proprietary-app EULAs be accepted by the user at install
 time, not by ArkaOS.
 
-## Screenshot grid
+## Screenshot grid — done
 
-Real captures only — no mockups. Target set: Desktop · Launcher · Dashboard ·
-Capsule · Settings · Welcome/Wizard · Lock Screen · Wallpaper · Privacy Report.
-DP1 shipped with Desktop + Wizard; the rest land as DP2 is daily-driven.
+Real captures only — no mockups. The full DP1 set was captured live (2026-07-11)
+and archived under `assets/screenshots/dp1/`: desktop, lock screen, wizard,
+launcher, Privacy Dashboard, Privacy Report, Capsule, Settings, Wi-Fi. Shown in
+the README.
 
-## Later (not DP2)
+---
 
-- Real-hardware support, live ISO, thin installer (the DP2→Beta arc).
-- ArkaWM as a `WindowService` backend — the payoff of this DP2 abstraction.
+Forward-looking candidate work (hardware, FDE, installer, service abstractions,
+ecosystem, accessibility, …) is intentionally **not** here — it lives in
+`docs/FUTURE-CONSIDERATIONS.md`, committed to nothing, so this file stays a
+factual record of landed work rather than a speculative roadmap.
