@@ -99,17 +99,30 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
+  <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/lockscreen.png" width="49%" alt="ArkaOS lock screen — KDE kscreenlocker showing a large clock and date over the branded ARKAOS wallpaper"/>
-  <img src="assets/screenshots/wizard.png" width="49%" alt="ArkaOS first-boot welcome wizard — privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
+  <img src="assets/screenshots/dp1/lockscreen.png" width="49%" alt="ArkaOS lock screen — KDE kscreenlocker showing a large clock and date over the branded ARKAOS wallpaper"/>
+  <img src="assets/screenshots/dp1/wizard.png" width="49%" alt="ArkaOS first-boot welcome wizard — privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
 </p>
 
-<p align="center"><em>Live DP1 captures (2026-07-11): the branded KDE Plasma desktop, the
-KDE lock screen, and the first-boot welcome wizard. Launcher · Dashboard ·
-Capsule · Settings grid to follow.</em></p>
+<p align="center">
+  <img src="assets/screenshots/dp1/launcher.png" width="100%" alt="ArkaOS full-screen application launcher (kickerdash) — search, favorites, application categories and power actions over the ARKAOS wallpaper"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/dp1/dashboard.png" width="49%" alt="ArkaOS Privacy Dashboard — a 100/100 privacy score with network and browser protections listed as active"/>
+  <img src="assets/screenshots/dp1/privacy-report.png" width="49%" alt="ArkaOS Privacy Report — this week's privacy events, drifts caught, encrypted-DNS coverage and a live event timeline"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/dp1/capsule.png" width="49%" alt="ArkaOS Capsule — first-party app grid plus a privacy-first install catalog (Signal, Bitwarden, KeePassXC, ProtonVPN) served from Flathub"/>
+  <img src="assets/screenshots/dp1/settings.png" width="49%" alt="ArkaOS Settings — General page with automatic login, ArkaOS version and hostname, and a category sidebar"/>
+</p>
+
+<p align="center"><em>Live DP1 captures (2026-07-11): desktop, KDE lock screen, first-boot
+wizard, full-screen launcher, Privacy Dashboard, Privacy Report, Capsule, and Settings.</em></p>
 
 ## Roadmap
 
