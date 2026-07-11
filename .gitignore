@@ -19,4 +19,5 @@ sway-foot*
 # config.toml tracked — remove from ignore
 arkad/target/
 arka-shell/target/
+legacy/target/
 .claude/

@@ -49,20 +49,20 @@ correctness.)
 
 ## Remaining Hyprland-era debt to clear
 
-- **Vestigial shell crates.** `arka-bar`, `arka-dock`, `arka-launcher` were the
-  custom Hyprland shell; under Plasma they are replaced by the panel,
-  icontasks dock, and kickerdash launcher (see `arka-layout.js`) and are **not
-  autostarted**. They still ship in the image and still contain `foot`/`thunar`
-  references. Decision for DP2: **deprecate, don't delete yet.** Move them to a
-  `legacy/` area (or mark them clearly) with a short README:
+- **Vestigial shell crates — DONE (moved to `legacy/`).** `arka-bar`,
+  `arka-dock`, `arka-launcher` were the custom Hyprland shell; under Plasma they
+  are replaced by the panel, icontasks dock, and kickerdash launcher (see
+  `arka-layout.js`) and were never autostarted. Confirmed no desktop-file,
+  autostart, layout, or keybinding referenced them. They are now:
+  - moved to `legacy/` (own Cargo workspace; see `legacy/README.md`),
+  - removed from the active `arka-shell` workspace,
+  - no longer built or `COPY`'d into the image, and
+  - the now-unused `gtk4-layer-shell` toolchain was dropped from both the
+    builder and the runtime package set.
 
-  > These components are from the Hyprland prototype phase and are retained for
-  > historical reference. They are no longer part of the active ArkaOS desktop.
-
-  Stop shipping them in the image (drop the Containerfile `COPY`s) so they carry
-  no runtime weight, but keep the source for one or two releases. Remove for good
-  only once they're confirmed truly unused. This preserves project history
-  without cluttering the active codebase.
+  Source kept for a release or two rather than deleted, to preserve project
+  history. Remove for good once confirmed truly unused. (The active `arka-shell`
+  workspace now `cargo check`s cleanly on a host with no layer-shell.)
 - Audit any other `hyprctl` / `swaymsg` / `foot` / `thunar` / `wofi` residue
   and route real needs through the appropriate abstraction or KDE equivalent.
 

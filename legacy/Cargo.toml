@@ -1,0 +1,11 @@
+# Legacy Hyprland-era shell workspace — NOT part of the active ArkaOS image.
+# See legacy/README.md. Kept buildable for historical reference; depends on the
+# still-active arka-shell-common crate via a path outside this workspace.
+[workspace]
+members = ["arka-bar", "arka-dock", "arka-launcher"]
+resolver = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

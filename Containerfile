@@ -6,9 +6,9 @@ COPY arka-shell/arka-shell-common/ /arka-shell/arka-shell-common/
 WORKDIR /build
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
-# Stage 2: build arka-bar (GTK4 layer-shell bar — glibc required, not musl)
+# Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
 FROM docker.io/fedora:42 AS shell-builder
-RUN dnf install -y -q gtk4-devel gtk4-layer-shell-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
+RUN dnf install -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
 COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --release
@@ -60,7 +60,7 @@ RUN dnf install -y --setopt=retries=25 --setopt=fastestmirror=True \
     --setopt=max_parallel_downloads=4 --exclude=rootfiles \
     @kde-desktop-environment sddm \
     pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
-    libadwaita gtk4-layer-shell flatpak xdg-user-dirs brightnessctl \
+    libadwaita flatpak xdg-user-dirs brightnessctl \
     bluez bluez-tools && \
     dnf clean all
 
@@ -82,13 +82,10 @@ RUN chmod 755 /usr/bin/arkad && \
     mkdir -p /etc/arkad && \
     systemctl enable arkad.service
 
-# Install arka-bar (replaces waybar)
-COPY --from=shell-builder /build/target/release/arka-bar /usr/bin/arka-bar
-RUN chmod 755 /usr/bin/arka-bar
-
-# Install arka-shell binaries
+# Install arka-shell binaries. arka-bar / arka-dock / arka-launcher are NOT
+# shipped: the Plasma panel, icontasks dock, and kickerdash launcher replace
+# them. Their source is archived under legacy/ (see legacy/README.md).
 COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
-COPY --from=shell-builder /build/target/release/arka-launcher  /usr/bin/arka-launcher
 COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
 COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
 COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
@@ -98,11 +95,10 @@ COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-sett
 COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
 COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
 COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
-COPY --from=shell-builder /build/target/release/arka-dock       /usr/bin/arka-dock
-RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-launcher /usr/bin/arka-wifi \
+RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-wifi \
               /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
               /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome \
-              /usr/bin/arka-sound /usr/bin/arka-bluetooth /usr/bin/arka-dock
+              /usr/bin/arka-sound /usr/bin/arka-bluetooth
 
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
