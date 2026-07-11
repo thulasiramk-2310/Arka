@@ -12,22 +12,23 @@
 /// Palette + base widget styling shared by every shell surface.
 /// Prepend to a component's local CSS: `format!("{}{}", theme::TOKENS, LOCAL)`.
 pub const TOKENS: &str = "
-/* ── palette ─────────────────────────────────────────── */
-@define-color bg_base    #0c0c0e;
-@define-color bg_raised  #111113;
-@define-color bg_overlay #17171a;
-@define-color bg_sunken  #0a0a0c;
-@define-color border_sub  #1f1f23;
-@define-color border_ui   #27272c;
-@define-color border_emph #3a3a42;
-@define-color text_hi    #ededf0;
-@define-color text_lo    #7d7d8a;
-@define-color text_muted #3d3d48;
-@define-color accent     #22c55e;
-@define-color accent_dim #15803d;
-@define-color danger     #ef4444;
-@define-color warn       #f59e0b;
-@define-color info       #3b82f6;
+/* ── ArkaOS design system palette (v1.0) ─────────────── */
+@define-color bg_base    #07080e;
+@define-color bg_raised  #0f141a;
+@define-color bg_overlay #161c24;
+@define-color bg_sunken  #050609;
+@define-color border_sub  #161c24;
+@define-color border_ui   #1e2630;
+@define-color border_emph #2a3340;
+@define-color text_hi    #f5f7fa;
+@define-color text_lo    #9aa4b2;
+@define-color text_muted #5b6675;
+@define-color accent     #16c784;
+@define-color accent_dim #0e8f5d;
+@define-color secondary  #2e7bff;
+@define-color danger     #ff4d4f;
+@define-color warn       #f5a623;
+@define-color info       #2e7bff;
 
 /* ── base surfaces ───────────────────────────────────── */
 window { background-color: @bg_base; color: @text_hi; }
@@ -85,26 +86,26 @@ scrollbar slider:hover { background-color: #4a4a54; }
 /// so overriding them is the supported way to re-skin without fighting the
 /// stylesheet. Accent is green (privacy = safe); everything else stays neutral.
 pub const ADW_OVERRIDES: &str = "
-@define-color window_bg_color    #0c0c0e;
-@define-color window_fg_color    #ededf0;
-@define-color view_bg_color      #0c0c0e;
-@define-color view_fg_color      #ededf0;
-@define-color headerbar_bg_color #111113;
-@define-color headerbar_fg_color #ededf0;
-@define-color sidebar_bg_color   #0a0a0c;
-@define-color sidebar_fg_color   #ededf0;
-@define-color card_bg_color      #17171a;
-@define-color card_fg_color      #ededf0;
-@define-color dialog_bg_color    #111113;
-@define-color popover_bg_color   #17171a;
-@define-color popover_fg_color   #ededf0;
-@define-color accent_color       #2ec36a;
-@define-color accent_bg_color    #22c55e;
-@define-color accent_fg_color    #0a0a0c;
-@define-color destructive_color  #ef4444;
-@define-color destructive_bg_color #ef4444;
-@define-color destructive_fg_color #0a0a0c;
-@define-color borders            #27272c;
+@define-color window_bg_color    #07080e;
+@define-color window_fg_color    #f5f7fa;
+@define-color view_bg_color      #07080e;
+@define-color view_fg_color      #f5f7fa;
+@define-color headerbar_bg_color #0f141a;
+@define-color headerbar_fg_color #f5f7fa;
+@define-color sidebar_bg_color   #050609;
+@define-color sidebar_fg_color   #f5f7fa;
+@define-color card_bg_color      #161c24;
+@define-color card_fg_color      #f5f7fa;
+@define-color dialog_bg_color    #0f141a;
+@define-color popover_bg_color   #161c24;
+@define-color popover_fg_color   #f5f7fa;
+@define-color accent_color       #16c784;
+@define-color accent_bg_color    #16c784;
+@define-color accent_fg_color    #07080e;
+@define-color destructive_color  #ff4d4f;
+@define-color destructive_bg_color #ff4d4f;
+@define-color destructive_fg_color #07080e;
+@define-color borders            #1e2630;
 ";
 
 /// Install the shared tokens as a low-priority base provider on the default

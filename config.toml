@@ -3,3 +3,11 @@
 
 [customizations.kernel]
 append = "quiet loglevel=1"
+
+# KDE image is ~9 GB; default 10 GB disk overflows during ostree deploy.
+[[customizations.disk.partition]]
+type = "plain"
+label = "root"
+mount_point = "/"
+fs_type = "xfs"
+minsize = "18 GiB"

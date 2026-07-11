@@ -3,6 +3,6 @@ Type=Application
 Name=Install Apps
 Comment=Install additional applications via Flatpak
 Exec=arka-capsule
-Icon=system-software-install-symbolic
+Icon=arka-capsule
 Keywords=install;apps;software;flatpak;store;package;
 Categories=System;PackageManager;

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="260" rx="18" fill="#07080e"/>
+  <text x="600" y="48" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">HOW ARKAOS IS BUILT — EVERY CHANGE, EVERY TIME</text>
+
+  <!-- nodes -->
+  <g font-size="14" font-weight="600" fill="#f5f7fa" text-anchor="middle">
+    <rect x="60"  y="100" width="140" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="130" y="130">Code</text>
+    <text x="130" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">Rust · QML · config</text>
+
+    <rect x="250" y="100" width="150" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="325" y="130">Container</text>
+    <text x="325" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">podman build</text>
+
+    <rect x="450" y="100" width="150" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="525" y="130">Disk Image</text>
+    <text x="525" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">bootc-image-builder</text>
+
+    <rect x="650" y="100" width="150" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="725" y="130">Boot in VM</text>
+    <text x="725" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">QEMU/KVM · verify</text>
+
+    <rect x="850" y="100" width="130" height="66" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/>
+    <text x="915" y="130">QA</text>
+    <text x="915" y="151" font-size="10.5" font-weight="400" fill="#16c784">boot-loop · budgets</text>
+
+    <rect x="1030" y="100" width="120" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="1090" y="130">Release</text>
+    <text x="1090" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">tag · notes</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#1e2630" stroke-width="2">
+    <line x1="200" y1="133" x2="250" y2="133"/><line x1="400" y1="133" x2="450" y2="133"/>
+    <line x1="600" y1="133" x2="650" y2="133"/><line x1="800" y1="133" x2="850" y2="133"/>
+    <line x1="980" y1="133" x2="1030" y2="133"/>
+  </g>
+  <!-- fail-back loop -->
+  <path d="M915 166 C915 215 325 215 325 166" stroke="#f5a623" stroke-width="1.5" fill="none" opacity="0.5" stroke-dasharray="6 5"/>
+  <text x="620" y="228" text-anchor="middle" font-size="11" fill="#f5a623" opacity="0.8">any failure → fix → rebuild (compile success ≠ runtime correctness)</text>
+
+  <!-- particles -->
+  <g fill="#16c784" filter="url(#g)">
+    <circle r="3.2"><animateMotion path="M200 133 H250" dur="1.1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.1s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M400 133 H450" dur="1.1s" begin="0.22s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.1s" begin="0.22s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M600 133 H650" dur="1.1s" begin="0.44s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.1s" begin="0.44s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M800 133 H850" dur="1.1s" begin="0.66s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.1s" begin="0.66s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M980 133 H1030" dur="1.1s" begin="0.88s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.1s" begin="0.88s" repeatCount="indefinite"/></circle>
+  </g>
+</svg>

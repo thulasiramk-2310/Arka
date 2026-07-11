@@ -181,6 +181,53 @@ fn event_color(ev: &str) -> &'static str {
     }
 }
 
+/// "This week" report card: aggregates the last 7 days of privacy.jsonl into
+/// the numbers a user actually cares about — protections enforced, drifts
+/// caught and fixed, sandboxed launches, and whether DNS stayed encrypted.
+fn weekly_report_card(all: &[LogEvent]) -> adw::PreferencesGroup {
+    let now = glib::DateTime::now_local()
+        .map(|d| d.to_unix() as u64)
+        .unwrap_or(0);
+    let week_ago = now.saturating_sub(7 * 24 * 3600);
+    let week: Vec<&LogEvent> = all.iter().filter(|e| e.ts >= week_ago).collect();
+
+    let drifts    = week.iter().filter(|e| e.ev == "drift").count();
+    let recovered = week.iter().filter(|e| e.ev == "recovered").count();
+    let sandboxed = week.iter().filter(|e| e.cat == "sandbox").count();
+    let dns_ok    = !week.iter().any(|e| e.cat == "dns" && e.ev == "drift");
+
+    let group = adw::PreferencesGroup::new();
+    group.set_title("This Week");
+    group.set_description(Some("Privacy report · last 7 days"));
+
+    let stats: [(&str, String, &str); 4] = [
+        ("Privacy events", week.len().to_string(), "view-list-symbolic"),
+        (
+            "Drifts caught &amp; fixed",
+            if drifts == 0 { "0 — clean".into() } else { format!("{drifts} caught / {recovered} fixed") },
+            "security-high-symbolic",
+        ),
+        ("Sandboxed launches", sandboxed.to_string(), "system-lock-screen-symbolic"),
+        (
+            "Encrypted DNS",
+            if dns_ok { "100% (DoT · Quad9)".into() } else { "interrupted — re-enforced".into() },
+            "network-server-symbolic",
+        ),
+    ];
+
+    for (title, value, icon_name) in stats {
+        let row = adw::ActionRow::new();
+        row.set_title(title);
+        let icon = gtk4::Image::from_icon_name(icon_name);
+        row.add_prefix(&icon);
+        let val = gtk4::Label::new(Some(&value));
+        val.add_css_class("accent");
+        row.add_suffix(&val);
+        group.add(&row);
+    }
+    group
+}
+
 fn populate_timeline(container: &gtk4::Box) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
@@ -190,9 +237,14 @@ fn populate_timeline(container: &gtk4::Box) {
     let today_str = today.unwrap_or_default();
 
     let content = std::fs::read_to_string("/var/log/arkaos/privacy.jsonl").unwrap_or_default();
-    let mut events: Vec<LogEvent> = content
-        .lines()
-        .filter_map(parse_log_line)
+    let all_events: Vec<LogEvent> = content.lines().filter_map(parse_log_line).collect();
+
+    let report = weekly_report_card(&all_events);
+    report.set_margin_bottom(16);
+    container.append(&report);
+
+    let mut events: Vec<LogEvent> = all_events
+        .into_iter()
         .filter(|e| {
             glib::DateTime::from_unix_local(e.ts as i64)
                 .map(|d| d.format("%Y-%m-%d").unwrap_or_default() == today_str)
@@ -236,8 +288,8 @@ fn populate_timeline(container: &gtk4::Box) {
             .unwrap_or_else(|_| "??:??".to_string());
 
         let row = adw::ActionRow::new();
-        row.set_title(&ev.msg);
-        row.set_subtitle(&format!("{time_str}  ·  {}", ev.cat));
+        row.set_title(&glib::markup_escape_text(&ev.msg));
+        row.set_subtitle(&glib::markup_escape_text(&format!("{time_str}  ·  {}", ev.cat)));
 
         let icon = gtk4::Image::from_icon_name(event_icon(&ev.cat, &ev.ev));
         icon.set_pixel_size(16);
@@ -468,6 +520,28 @@ pub fn build(
     let switcher_bar = adw::ViewSwitcherBar::new();
     switcher_bar.set_stack(Some(&stack));
     switcher_bar.set_reveal(true);
+
+    // Keyboard access: the switcher bar isn't in the focus chain, so give the
+    // tabs shortcuts (Ctrl+1 Status, Ctrl+2 Timeline).
+    let keys = gtk4::EventControllerKey::new();
+    let stack_keys = stack.clone();
+    keys.connect_key_pressed(move |_, key, _, modifier| {
+        if modifier.contains(gtk4::gdk::ModifierType::CONTROL_MASK) {
+            match key {
+                gtk4::gdk::Key::_1 => {
+                    stack_keys.set_visible_child_name("status");
+                    return glib::Propagation::Stop;
+                }
+                gtk4::gdk::Key::_2 => {
+                    stack_keys.set_visible_child_name("timeline");
+                    return glib::Propagation::Stop;
+                }
+                _ => {}
+            }
+        }
+        glib::Propagation::Proceed
+    });
+    window.add_controller(keys);
 
     // ── assemble ─────────────────────────────────────────────────────────────
     let toolbar = adw::ToolbarView::new();

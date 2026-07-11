@@ -3,6 +3,6 @@ Type=Application
 Name=Bluetooth
 Comment=Pair and connect Bluetooth devices
 Exec=arka-bluetooth
-Icon=bluetooth-symbolic
+Icon=arka-bluetooth
 Keywords=bluetooth;wireless;headphones;speaker;keyboard;mouse;pair;
 Categories=System;Hardware;

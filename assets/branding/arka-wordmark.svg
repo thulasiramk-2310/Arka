@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- triangle mark -->
+  <g filter="url(#glow)">
+    <path d="M60 18 L98 88 H22 Z" fill="none" stroke="#16c784" stroke-width="5" stroke-linejoin="round">
+      <animate attributeName="opacity" values="1;0.65;1" dur="4s" repeatCount="indefinite"/>
+    </path>
+    <path d="M60 44 L79 80 H41 Z" fill="#16c784" opacity="0.45">
+      <animate attributeName="opacity" values="0.45;0.2;0.45" dur="4s" repeatCount="indefinite"/>
+    </path>
+  </g>
+  <!-- wordmark -->
+  <text x="122" y="76" font-family="Inter, -apple-system, 'Segoe UI', sans-serif" font-size="52"
+        font-weight="700" letter-spacing="10" fill="#f5f7fa">ARKA</text>
+  <text x="124" y="100" font-family="Inter, -apple-system, 'Segoe UI', sans-serif" font-size="13"
+        letter-spacing="4" fill="#9aa4b2">YOUR COMPUTER IS YOURS</text>
+</svg>

@@ -3,6 +3,6 @@ Type=Application
 Name=Privacy Dashboard
 Comment=View and control ArkaOS privacy settings
 Exec=arka-dashboard
-Icon=security-high-symbolic
+Icon=arka-dashboard
 Keywords=privacy;security;dns;tracking;protection;shield;
 Categories=System;Security;

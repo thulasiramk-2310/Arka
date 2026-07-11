@@ -1,0 +1,93 @@
+// ArkaOS boot splash: three triangles fade in staggered, glow pulses,
+// ARKA wordmark rises beneath. Design tokens: bg #07080e, accent #16C784.
+
+Window.SetBackgroundTopColor(0.027, 0.031, 0.055);
+Window.SetBackgroundBottomColor(0.020, 0.024, 0.035);
+
+screen.w = Window.GetWidth();
+screen.h = Window.GetHeight();
+
+// Triangle layers (small -> large), pre-rendered PNGs.
+tri1.image = Image("tri1.png");
+tri2.image = Image("tri2.png");
+tri3.image = Image("tri3.png");
+mark.image = Image("wordmark.png");
+
+fun center_sprite(img, dy) {
+    s = Sprite(img);
+    s.SetX(screen.w / 2 - img.GetWidth() / 2);
+    s.SetY(screen.h / 2 - img.GetHeight() / 2 + dy);
+    return s;
+}
+
+tri1.sprite = center_sprite(tri1.image, -40);
+tri2.sprite = center_sprite(tri2.image, -40);
+tri3.sprite = center_sprite(tri3.image, -40);
+mark.sprite = center_sprite(mark.image, 110);
+
+tri1.sprite.SetOpacity(0);
+tri2.sprite.SetOpacity(0);
+tri3.sprite.SetOpacity(0);
+mark.sprite.SetOpacity(0);
+
+// Progress bar: thin green line near the bottom.
+bar.h = 3;
+bar.maxw = Math.Int(screen.w * 0.24);
+bar.image = Image("bar.png");
+bar.back = Sprite();
+bar.back.SetImage(Image("barback.png").Scale(bar.maxw, bar.h));
+bar.back.SetX(screen.w / 2 - bar.maxw / 2);
+bar.back.SetY(Math.Int(screen.h * 0.82));
+bar.sprite = Sprite();
+bar.sprite.SetX(screen.w / 2 - bar.maxw / 2);
+bar.sprite.SetY(Math.Int(screen.h * 0.82));
+
+counter = 0;
+
+fun clamp01(v) {
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+}
+
+fun refresh_callback() {
+    counter++;
+    t = counter / 50.0;   // refresh runs at 50 fps
+
+    // Staggered fade-in: tri1 at 0.0s, tri2 at 0.4s, tri3 at 0.8s, mark at 1.3s
+    tri1.sprite.SetOpacity(clamp01((t - 0.0) / 0.5));
+    tri2.sprite.SetOpacity(clamp01((t - 0.4) / 0.5) * 0.65);
+    tri3.sprite.SetOpacity(clamp01((t - 0.8) / 0.5) * 0.35);
+    mark.sprite.SetOpacity(clamp01((t - 1.3) / 0.6));
+
+    // After intro, gently pulse the outer glow triangle.
+    if (t > 1.8) {
+        tri3.sprite.SetOpacity(0.25 + 0.15 * Math.Sin((t - 1.8) * 2.2));
+    }
+}
+
+fun progress_callback(duration, progress) {
+    w = Math.Int(bar.maxw * progress);
+    if (w < 1) w = 1;
+    bar.sprite.SetImage(bar.image.Scale(w, bar.h));
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+Plymouth.SetBootProgressFunction(progress_callback);
+
+// LUKS / password prompt support (future-proof).
+fun display_password_callback(prompt, bullets) {
+    prompt.image = Image.Text("Enter passphrase", 0.96, 0.97, 0.98);
+    prompt.sprite = center_sprite(prompt.image, 180);
+    dots = "";
+    for (i = 0; i < bullets; i++) dots += "• ";
+    entry.image = Image.Text(dots, 0.09, 0.78, 0.52);
+    entry.sprite = center_sprite(entry.image, 210);
+}
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+fun quit_callback() {
+    tri1.sprite.SetOpacity(1);
+    mark.sprite.SetOpacity(1);
+}
+Plymouth.SetQuitFunction(quit_callback);

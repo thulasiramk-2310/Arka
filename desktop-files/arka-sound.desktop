@@ -3,6 +3,6 @@ Type=Application
 Name=Sound & Volume
 Comment=Control audio volume and devices
 Exec=arka-sound
-Icon=audio-volume-high-symbolic
+Icon=arka-sound
 Keywords=sound;volume;audio;speaker;microphone;mic;music;media;
 Categories=AudioVideo;Audio;

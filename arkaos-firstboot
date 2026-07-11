@@ -1,6 +1,45 @@
 #!/bin/bash
 exec </dev/tty1 >/dev/tty1 2>&1
+# Plymouth must release the console before the TUI draws. quit is async —
+# wait for the daemon to actually die or the first draw races it and lands
+# on a display plymouth still owns (black screen until a keypress).
+plymouth quit 2>/dev/null || true
+for _ in $(seq 1 25); do
+    plymouth --ping 2>/dev/null || break
+    sleep 0.2
+done
+# QEMU/virtio: plymouth's DRM handoff can destroy the fbdev (fb0 vanishes and
+# text VTs render nothing). Reloading virtio_gpu recreates it. No-op on real
+# hardware (guarded on the virtio_gpu module actually being loaded).
+if [ ! -e /sys/class/graphics/fb0 ] && grep -q '^virtio_gpu' /proc/modules; then
+    modprobe -r virtio_gpu 2>/dev/null || true
+    modprobe virtio_gpu 2>/dev/null || true
+    sleep 2   # fbcon rebind is async
+fi
 stty sane 2>/dev/null
+printf '\033c'   # full terminal reset — clears any state plymouth left behind
+
+# After plymouth drops DRM master the fbcon is left BLANKED (DPMS off): the
+# wizard draws fine into the VT buffer but the panel stays dark until a
+# keystroke, and the user can't know to press one. Console *writes* don't wake
+# a DRM console — only *input* does, via the kernel's TIOCL_UNBLANKSCREEN path.
+# setterm can't help here (it aborts with "terminal vt220 does not support
+# --blank" under this service's TERM), and there is no /dev/fb0 or sysfs
+# blank node — it's pure DRM/KMS. So issue the ioctl a keystroke would:
+# TIOCLINUX(0x541C) subcode 4 on tty1. Verified live: blanked console (0% lit)
+# → fully restored after this call. Idempotent and harmless on real hardware.
+wake_console() {
+    python3 - <<'PY' 2>/dev/null || true
+import fcntl, struct, os
+try:
+    fd = os.open("/dev/tty1", os.O_RDWR)
+    fcntl.ioctl(fd, 0x541C, struct.pack("b", 4))  # TIOCL_UNBLANKSCREEN
+    os.close(fd)
+except Exception:
+    pass
+PY
+}
+wake_console
 
 dmesg -n 1 2>/dev/null
 echo 0 > /proc/sys/kernel/printk 2>/dev/null || true
@@ -119,6 +158,7 @@ while true; do
             "" "   Create a username." \
             "   ${D}Lowercase, numbers, _ or -${E}" ""
     fi
+    wake_console   # ensure the panel is awake before the first prompt
     [[ -n "$err" ]] && printf "\n   ${R}! %s${E}\n" "$err" || printf "\n"
     printf "   Username  > "
     read -r username
@@ -236,6 +276,13 @@ else
     rm -f /etc/sddm.conf.d/20-autologin.conf
     al_note="${Y}Autologin OFF${E} -- SDDM shows a login page each boot"
 fi
+
+# Seed SDDM's last-user state so the login page greets the account we just
+# created (otherwise the first login has an empty username).
+mkdir -p /var/lib/sddm
+printf '[Last]\nUser=%s\nSession=/usr/share/wayland-sessions/plasma.desktop\n' "$username" \
+    > /var/lib/sddm/state.conf
+chown sddm:sddm /var/lib/sddm/state.conf 2>/dev/null || true
 
 # Switch to the graphical target so SDDM/Plasma starts after this reboot.
 spin "Enabling desktop" systemctl set-default graphical.target

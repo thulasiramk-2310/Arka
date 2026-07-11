@@ -1,0 +1,16 @@
+[SddmGreeterTheme]
+Name=ArkaOS
+Description=ArkaOS branded login — dark with green accent
+Author=ArkaOS
+Copyright=ArkaOS
+License=MIT
+Type=sddm-theme
+Version=1.0
+Website=https://github.com/thulasiramk-2310/Arka
+Screenshot=
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=
+Email=
+Theme-Id=arkaos
+Theme-API=2.0

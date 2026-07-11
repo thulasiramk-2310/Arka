@@ -64,8 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    // Notify systemd we're ready
-    let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
+    // Notify systemd we're ready. unset_env must stay false — unsetting
+    // NOTIFY_SOCKET here would silence every later watchdog keepalive and
+    // systemd would kill us on schedule (WatchdogSec) forever.
+    let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Ready]);
 
     info!(score = initial_score, "arkad ready");
 

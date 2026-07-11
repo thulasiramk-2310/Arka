@@ -8,6 +8,13 @@ OVMF_VARS.4m.fd.bak
 *.ppm
 sway-screenshot*
 sway-foot*
+hyprland-desktop.png
+# dev-scratch preview screenshots (unreferenced)
+arka-post-boot.png
+dash-final.png
+launcher.png
+launcher2.png
+wp.png
 # config.toml tracked — remove from ignore
 arkad/target/
 arka-shell/target/

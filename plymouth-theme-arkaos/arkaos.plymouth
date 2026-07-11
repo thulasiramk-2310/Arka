@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ArkaOS
+Description=ArkaOS boot splash — triangle glow into ARKA wordmark
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/arkaos
+ScriptFile=/usr/share/plymouth/themes/arkaos/arkaos.script

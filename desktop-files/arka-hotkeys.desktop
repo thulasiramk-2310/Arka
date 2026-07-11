@@ -3,6 +3,6 @@ Type=Application
 Name=Keyboard Shortcuts
 Comment=View all ArkaOS keyboard shortcuts
 Exec=arka-hotkeys
-Icon=preferences-desktop-keyboard-symbolic
+Icon=arka-hotkeys
 Keywords=keyboard;shortcuts;hotkeys;keybindings;help;cheat;
 Categories=System;

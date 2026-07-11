@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16c784" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#16c784" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#16c784" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="760" rx="18" fill="#07080e"/>
+  <!-- faint triangle watermark -->
+  <path d="M600 120 L980 640 H220 Z" fill="none" stroke="#16c784" stroke-width="1" opacity="0.06"/>
+
+  <!-- USER -->
+  <text x="600" y="52" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">USER</text>
+  <circle cx="600" cy="78" r="5" fill="#16c784" filter="url(#g)">
+    <animate attributeName="opacity" values="1;0.4;1" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- flow lines -->
+  <g stroke="url(#fade)" stroke-width="2">
+    <line x1="600" y1="90" x2="600" y2="128"/>
+    <line x1="600" y1="238" x2="600" y2="276"/>
+    <line x1="600" y1="386" x2="600" y2="424"/>
+    <line x1="600" y1="534" x2="600" y2="572"/>
+    <line x1="600" y1="646" x2="600" y2="676"/>
+  </g>
+
+  <!-- particles -->
+  <g fill="#16c784">
+    <circle r="3.2"><animateMotion path="M600 92 L600 126" dur="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="1.6s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M600 240 L600 274" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="0.4s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M600 388 L600 422" dur="1.6s" begin="0.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="0.8s" repeatCount="indefinite"/></circle>
+    <circle r="3.2"><animateMotion path="M600 536 L600 570" dur="1.6s" begin="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="1.2s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- LAYER: Desktop Shell -->
+  <g>
+    <rect x="270" y="130" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <rect x="270" y="130" width="660" height="108" rx="14" fill="none" stroke="#16c784" stroke-width="1.5" opacity="0.5">
+      <animate attributeName="opacity" values="0.5;0.12;0.5" dur="4s" repeatCount="indefinite"/>
+    </rect>
+    <path d="M310 196 L328 164 L346 196 Z" fill="none" stroke="#16c784" stroke-width="3" stroke-linejoin="round"/>
+    <text x="600" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Arka Desktop Shell</text>
+    <text x="600" y="200" text-anchor="middle" font-size="13.5" fill="#9aa4b2">Launcher · Dashboard · Capsule · Settings · Welcome</text>
+    <text x="600" y="222" text-anchor="middle" font-size="11.5" fill="#5b6675">KDE Plasma, branded to the pixel — one design system</text>
+  </g>
+
+  <!-- LAYER: Arka Core -->
+  <g>
+    <rect x="270" y="278" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <rect x="270" y="278" width="660" height="108" rx="14" fill="none" stroke="#16c784" stroke-width="1.5" opacity="0.5">
+      <animate attributeName="opacity" values="0.12;0.5;0.12" dur="4s" repeatCount="indefinite"/>
+    </rect>
+    <circle cx="328" cy="332" r="17" fill="none" stroke="#16c784" stroke-width="3"/>
+    <path d="M321 332 l5 5 9 -10" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="600" y="320" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Arka Core</text>
+    <text x="600" y="348" text-anchor="middle" font-size="13.5" fill="#9aa4b2">arkad daemon · Privacy Score · Permissions · Browser Sandbox</text>
+    <text x="600" y="370" text-anchor="middle" font-size="11.5" fill="#5b6675">enforce on boot → re-verify every 60 s → show the user everything</text>
+  </g>
+
+  <!-- LAYER: Immutable Platform -->
+  <g>
+    <rect x="270" y="426" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <rect x="270" y="426" width="660" height="108" rx="14" fill="none" stroke="#2e7bff" stroke-width="1.5" opacity="0.4">
+      <animate attributeName="opacity" values="0.4;0.1;0.4" dur="5s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="312" y="462" width="32" height="26" rx="5" fill="none" stroke="#2e7bff" stroke-width="3"/>
+    <path d="M318 462 v-7 a10 10 0 0 1 20 0 v7" fill="none" stroke="#2e7bff" stroke-width="3"/>
+    <text x="600" y="468" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Immutable Platform</text>
+    <text x="600" y="496" text-anchor="middle" font-size="13.5" fill="#9aa4b2">bootc · composefs read-only root · atomic updates · rollback</text>
+    <text x="600" y="518" text-anchor="middle" font-size="11.5" fill="#5b6675">the OS is one reproducible image — nothing persists that you didn't choose</text>
+  </g>
+
+  <!-- LAYER: Kernel -->
+  <g>
+    <rect x="270" y="574" width="660" height="72" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="600" y="606" text-anchor="middle" font-size="18" font-weight="700" fill="#f5f7fa">Linux Kernel</text>
+    <text x="600" y="630" text-anchor="middle" font-size="12.5" fill="#9aa4b2">the proven foundation — Fedora 42 LTS-class base</text>
+  </g>
+
+  <!-- HARDWARE -->
+  <text x="600" y="708" text-anchor="middle" font-size="15" letter-spacing="6" fill="#5b6675">HARDWARE</text>
+  <line x1="440" y1="726" x2="760" y2="726" stroke="#1e2630" stroke-width="2"/>
+</svg>

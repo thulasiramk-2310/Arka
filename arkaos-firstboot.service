@@ -1,7 +1,7 @@
 [Unit]
 Description=ArkaOS First Boot User Setup
 DefaultDependencies=no
-After=basic.target
+After=basic.target plymouth-quit-wait.service
 Before=getty@tty1.service
 ConditionPathExists=!/var/lib/arkaos-firstboot-done
 

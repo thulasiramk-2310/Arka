@@ -7,12 +7,27 @@
 # Give plasmashell a moment to be ready for the apply tools.
 sleep 3
 
+# In a VM the virtual display often defaults to 640x480; bump it to a usable
+# size by resolving the mode ID for a comfortable resolution. No-op on real
+# hardware (the output name won't match Virtual-*).
+VOUT=$(kscreen-doctor -o 2>/dev/null | grep -oE 'Virtual-[0-9]+' | head -1)
+if [ -n "$VOUT" ]; then
+    INFO=$(kscreen-doctor -o 2>/dev/null)
+    for RES in 1440x900 1600x900 1280x800 1280x720 1024x768; do
+        MID=$(printf '%s' "$INFO" | grep -oE "[0-9]+:${RES}@" | head -1 | cut -d: -f1)
+        if [ -n "$MID" ]; then
+            kscreen-doctor "output.$VOUT.mode.$MID" 2>/dev/null && { sleep 1; break; }
+        fi
+    done
+fi
+
 WALL=/usr/share/arka/wallpapers/default.png
 
-# Re-assert dark + green accent (harmless if already set), then the wallpaper.
-plasma-apply-colorscheme BreezeDark 2>/dev/null || true
+# Apply the ArkaOS color scheme + green #16C784 accent (harmless if already
+# set from skel), then the wallpaper.
+plasma-apply-colorscheme ArkaOS 2>/dev/null || true
 [ -x "$(command -v kwriteconfig6)" ] && {
-    kwriteconfig6 --file kdeglobals --group General --key AccentColor "34,197,94"
+    kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
     kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
 }
 [ -f "$WALL" ] && plasma-apply-wallpaperimage "$WALL" 2>/dev/null || true

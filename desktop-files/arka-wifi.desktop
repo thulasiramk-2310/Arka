@@ -3,6 +3,6 @@ Type=Application
 Name=WiFi Networks
 Comment=Connect to wireless networks
 Exec=arka-wifi
-Icon=network-wireless-symbolic
+Icon=arka-wifi
 Keywords=wifi;wireless;network;internet;connection;hotspot;
 Categories=System;Network;

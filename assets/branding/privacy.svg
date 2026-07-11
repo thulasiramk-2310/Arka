@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="440" rx="18" fill="#07080e"/>
+  <text x="600" y="50" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">WHAT HAPPENS WHEN AN APP WANTS SOMETHING</text>
+
+  <!-- app -->
+  <g>
+    <rect x="70" y="150" width="180" height="90" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="160" y="188" text-anchor="middle" font-size="16" font-weight="700" fill="#f5f7fa">Application</text>
+    <text x="160" y="212" text-anchor="middle" font-size="11.5" fill="#9aa4b2">wants camera, mic, files…</text>
+  </g>
+
+  <!-- permission manager -->
+  <g>
+    <rect x="330" y="150" width="200" height="90" rx="14" fill="#0f141a" stroke="#16c784" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="1;0.35;1" dur="3s" repeatCount="indefinite"/>
+    </rect>
+    <text x="430" y="182" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Permission</text>
+    <text x="430" y="202" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Manager</text>
+    <text x="430" y="226" text-anchor="middle" font-size="11" fill="#16c784">you decide · it remembers</text>
+  </g>
+
+  <!-- sandbox -->
+  <g>
+    <rect x="610" y="150" width="200" height="90" rx="14" fill="#0f141a" stroke="#16c784" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.35;1;0.35" dur="3s" repeatCount="indefinite"/>
+    </rect>
+    <text x="710" y="188" text-anchor="middle" font-size="16" font-weight="700" fill="#f5f7fa">Sandbox</text>
+    <text x="710" y="212" text-anchor="middle" font-size="11" fill="#9aa4b2">home hidden · /etc allowlist</text>
+  </g>
+
+  <!-- kernel/hw -->
+  <g>
+    <rect x="890" y="150" width="240" height="90" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <text x="1010" y="188" text-anchor="middle" font-size="16" font-weight="700" fill="#f5f7fa">Linux → Hardware</text>
+    <text x="1010" y="212" text-anchor="middle" font-size="11" fill="#9aa4b2">only what was granted</text>
+  </g>
+
+  <!-- flow -->
+  <g stroke="#1e2630" stroke-width="2"><line x1="250" y1="195" x2="330" y2="195"/><line x1="530" y1="195" x2="610" y2="195"/><line x1="810" y1="195" x2="890" y2="195"/></g>
+  <g fill="#16c784" filter="url(#g)">
+    <circle r="3.4"><animateMotion path="M250 195 H330" dur="1.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.3s" repeatCount="indefinite"/></circle>
+    <circle r="3.4"><animateMotion path="M530 195 H610" dur="1.3s" begin="0.43s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.3s" begin="0.43s" repeatCount="indefinite"/></circle>
+    <circle r="3.4"><animateMotion path="M810 195 H890" dur="1.3s" begin="0.86s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.3s" begin="0.86s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- denied path -->
+  <path d="M430 240 C430 300 300 300 250 300" stroke="#ff4d4f" stroke-width="1.6" fill="none" opacity="0.55" stroke-dasharray="5 5"/>
+  <text x="285" y="325" font-size="11.5" fill="#ff4d4f" opacity="0.85">denied → app never knows the difference</text>
+
+  <!-- meanwhile, below: arkad -->
+  <g>
+    <rect x="330" y="330" width="480" height="70" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
+    <circle cx="370" cy="365" r="7" fill="#16c784">
+      <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <text x="392" y="360" font-size="13.5" font-weight="600" fill="#f5f7fa">arkad — always on, underneath everything</text>
+    <text x="392" y="382" font-size="11.5" fill="#9aa4b2">random MAC · encrypted DNS · generic hostname · IPv6 privacy · every event logged for you</text>
+  </g>
+</svg>
