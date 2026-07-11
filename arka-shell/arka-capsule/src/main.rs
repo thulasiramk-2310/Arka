@@ -18,7 +18,7 @@ const SMART_ACTIONS: &[(&str, &str, &str, &str, &str)] = &[
     ("update upgrade system software",         "view-refresh-symbolic",        "System Updates",     "Check and install updates",                 "arka-update"),
     ("general login about version hostname",   "emblem-system-symbolic",       "General Settings",   "Login · About · Hostname",                  "arka-settings-gtk"),
     // Quick actions
-    ("lock screen swaylock security",          "system-lock-screen-symbolic",  "Lock Screen",        "Lock your session now",                     "swaylock"),
+    ("lock screen security",                    "system-lock-screen-symbolic",  "Lock Screen",        "Lock your session now",                     "loginctl lock-session"),
     ("sleep suspend rest hibernate",           "weather-clear-night-symbolic", "Sleep",              "Suspend the computer",                      "systemctl suspend"),
     ("reboot restart",                         "view-refresh-symbolic",        "Restart",            "Reboot the computer",                       "systemctl reboot"),
     ("shutdown poweroff turn off",             "system-shutdown-symbolic",     "Shutdown",           "Turn off the computer",                     "systemctl poweroff"),

@@ -352,7 +352,7 @@ fn build_ui(app: &Application) {
     let pop_box = GtkBox::new(Orientation::Vertical, 2);
     pop_box.add_css_class("power-popover");
     for (icon, label, cmd, destruct) in &[
-        ("system-lock-screen-symbolic",  "Lock Screen", "swaylock",          false),
+        ("system-lock-screen-symbolic",  "Lock Screen", "loginctl lock-session", false),
         ("weather-clear-night-symbolic", "Sleep",       "systemctl suspend", false),
         ("view-refresh-symbolic",        "Restart",     "systemctl reboot",  false),
         ("system-shutdown-symbolic",     "Shutdown",    "systemctl poweroff", true),

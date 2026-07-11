@@ -98,10 +98,16 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 
 ## Screenshots
 
-<!-- DP1 verification captures land here:
-boot splash · login · desktop · launcher · dashboard · capsule · settings -->
-*DP1 screenshot grid arrives with the verification pass — boot splash, login,
-desktop, launcher, Dashboard, Capsule, Settings.*
+<p align="center">
+  <img src="assets/screenshots/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/wizard.png" width="72%" alt="ArkaOS first-boot welcome wizard — privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
+</p>
+
+<p align="center"><em>Live DP1 captures (2026-07-11): the branded KDE Plasma desktop and the
+first-boot welcome wizard. Launcher · Dashboard · Capsule · Settings grid to follow.</em></p>
 
 ## Roadmap
 
