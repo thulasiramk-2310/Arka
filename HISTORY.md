@@ -53,6 +53,13 @@ exit criteria, and a repeatable build pipeline.
 root-caused and fixed), and shipped with real screenshots and honest known
 issues. The difference between a project and a product.
 
+> Developer Preview 1 wasn't the moment ArkaOS became *usable*. It was the
+> moment it became *sustainable* — frozen releases, decision records, a threat
+> model, build gates, exit criteria, field notes, factual milestones, a future
+> parking lot, and the willingness to change direction when the evidence
+> demanded it. Anyone can fork the Rust, the icons, the wallpaper. The
+> discipline is the part a fork can't copy overnight.
+
 ---
 
 ## Milestones
