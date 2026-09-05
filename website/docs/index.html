@@ -280,8 +280,8 @@
           </tbody>
         </table>
       </div>
-      <p>The main loop enforces all four on start, then re-verifies every <strong>60 seconds</strong> and re-enforces on drift. It deliberately uses no async runtime (<code>thread::sleep</code>, not tokio) and no <code>nix</code> crate — every change is made through well-known CLI tools (<code>nmcli</code>, <code>hostnamectl</code>, <code>sysctl</code>). Configuration lives at <code>/etc/arkad/arkad.toml</code>, with secure defaults baked in so it works correctly with no config file at all.</p>
-      <div class="callout note"><span class="ic">i</span><p><code>arkad</code> does <em>not</em> use D-Bus to enforce these invariants — it calls the same tools an administrator would, which keeps its surface small and auditable.</p></div>
+      <p>The main loop enforces all four on start, then re-verifies every <strong>60 seconds</strong> and re-enforces on drift. Every change is made through well-known CLI tools (<code>nmcli</code>, <code>hostnamectl</code>, <code>sysctl</code>) rather than direct system calls, which keeps the enforcement surface small and auditable. Configuration lives at <code>/etc/arkad/arkad.toml</code>, with secure defaults baked in so it works correctly with no config file at all.</p>
+      <div class="callout note"><span class="ic">i</span><p><code>arkad</code> exposes a read-only D-Bus service (<code>org.arka.arkad</code>) so the desktop can read privacy status — but it never <em>enforces</em> through D-Bus. Enforcement always goes through the same CLI tools an administrator would use.</p></div>
 
       <h2 id="sandbox">Browser sandbox</h2>
       <p>Firefox runs inside a <strong>bubblewrap</strong> sandbox. <code>/usr/bin/firefox</code> is a symlink to a wrapper; the real binary lives at <code>/usr/bin/firefox-unwrapped</code>. The wrapper is baked in at build time, and <code>composefs</code> locks it read-only at runtime.</p>
