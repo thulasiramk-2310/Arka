@@ -6,6 +6,7 @@
 //! concrete implementations. See `docs/RELIABILITY-ARKA-PULSE.md`.
 
 pub mod detect;
+pub mod explain;
 pub mod model;
 pub mod monitor;
 pub mod predict;

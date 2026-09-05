@@ -16,6 +16,7 @@ use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::detect;
+use crate::explain::{Explainer, Explanation, FallbackExplainer, Incident};
 use crate::model::{Finding, Severity};
 use crate::monitor::{self, CpuMeter, Telemetry};
 use crate::predict::{self, History, Prediction, Sample, HISTORY_CAP};
@@ -28,6 +29,10 @@ pub struct HealthSnapshot {
     pub worst: Severity,
     pub findings: Vec<Finding>,
     pub predictions: Vec<Prediction>,
+    /// A plain-language account, present only when there is something to
+    /// explain (a warning-or-worse finding, or a prediction). Deterministic
+    /// today; the seam for a future local-LLM explainer.
+    pub explanation: Option<Explanation>,
     pub telemetry: Telemetry,
 }
 
@@ -99,10 +104,24 @@ impl ReliabilityService for PulseEngine {
             .map(|f| f.severity)
             .max()
             .unwrap_or(Severity::Ok);
+
+        // Explain only when there's something worth explaining, so a healthy
+        // system stays quiet.
+        let explanation = if worst >= Severity::Warning || !predictions.is_empty() {
+            let incident = Incident {
+                findings: &findings,
+                predictions: &predictions,
+            };
+            Some(FallbackExplainer.explain(&incident))
+        } else {
+            None
+        };
+
         Ok(HealthSnapshot {
             worst,
             findings,
             predictions,
+            explanation,
             telemetry,
         })
     }

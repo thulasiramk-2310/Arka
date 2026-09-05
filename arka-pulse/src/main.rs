@@ -1,14 +1,18 @@
 //! arka-pulse — the ArkaOS reliability engine (experimental foundation).
 //!
-//! Status: this binary implements the first three stages of the loop
+//! Status: this binary implements the first four stages of the loop
 //! described in `docs/RELIABILITY-ARKA-PULSE.md`:
 //!
-//!     MONITOR ──▶ DETECT ──▶ PREDICT   (implemented — read-only, deterministic)
-//!     EXPLAIN · RECOVER · VERIFY       (designed, NOT implemented)
+//!     MONITOR ──▶ DETECT ──▶ PREDICT ──▶ EXPLAIN   (implemented, deterministic)
+//!     RECOVER · VERIFY                             (designed, NOT implemented)
 //!
-//! It reads `/proc` and `/sys`, applies deterministic threshold rules and
-//! trend projection through the [`ReliabilityService`] interface, and prints
-//! findings and predictions. It has **no** AI,
+//! EXPLAIN runs deterministically (a fallback explainer) and already carries
+//! the "model is untrusted" gate — a sanitiser and a validator — ready for a
+//! future local-LLM backend that is NOT implemented. So no model runs today.
+//!
+//! It reads `/proc` and `/sys`, works through the [`ReliabilityService`]
+//! interface, and prints findings, predictions, and an explanation. It has
+//! **no** AI running,
 //! takes **no** recovery action, and writes **nothing** to the system.
 //!
 //! This crate is clean-room ArkaOS code; it is not wired into the OS image.
@@ -81,7 +85,7 @@ fn report(s: &HealthSnapshot) {
     }
     for p in &s.predictions {
         println!(
-            "    PRED {}: {} — p={:.0}% conf={:.0}%",
+            "    PRED {}: {} — est. probability ~{:.0}%, heuristic confidence ~{:.0}%",
             p.domain,
             p.summary,
             p.probability * 100.0,
@@ -89,13 +93,22 @@ fn report(s: &HealthSnapshot) {
         );
         println!("         {}", p.evidence);
     }
+    if let Some(ex) = &s.explanation {
+        println!("    EXPLAIN [{}] {}", ex.source.label(), ex.diagnosis);
+        println!("            impact: {}", ex.impact);
+        println!(
+            "            proposed intent: {} (risk: {}) — NOT executed (no RECOVER stage)",
+            ex.intent.id(),
+            ex.intent.risk()
+        );
+    }
 }
 
 fn main() {
     let args = parse_args();
 
     eprintln!(
-        "arka-pulse 0.0.1 — MONITOR + DETECT + PREDICT. Read-only, dry-run: makes no changes.\n\
+        "arka-pulse 0.0.1 — MONITOR + DETECT + PREDICT + EXPLAIN (deterministic). Read-only, dry-run.\n\
          See docs/RELIABILITY-ARKA-PULSE.md for the full design.\n"
     );
 
