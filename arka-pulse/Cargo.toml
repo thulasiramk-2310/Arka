@@ -1,0 +1,25 @@
+[package]
+name = "arka-pulse"
+version = "0.0.1"
+edition = "2021"
+description = "ArkaOS reliability engine (experimental foundation: MONITOR + DETECT, read-only)"
+
+[lib]
+name = "arka_pulse"
+path = "src/lib.rs"
+
+[[bin]]
+name = "arka-pulse"
+path = "src/main.rs"
+
+# No dependencies — the deterministic core reads /proc and /sys with std only.
+# This keeps the foundation zero-footprint and trivially auditable, matching
+# arkad's discipline. An optional AI explanation layer, if it ever ships, stays
+# entirely separate from this safety-critical core.
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
