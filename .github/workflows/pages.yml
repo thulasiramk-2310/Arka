@@ -31,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # turn Pages on via this workflow's token — no manual Settings step
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
