@@ -33,9 +33,11 @@ Pages* → *Run workflow*.
 - **GitHub** (nav + footer) → the repository.
 - **Read the architecture** → in-page `#architecture` section.
 - **Docs** (footer) → `docs/` on GitHub.
-- **Download DP1 (qcow2)** → the repo **Releases** page. This stays empty until
-  a qcow2 asset is attached to a release — upload one, and the button works with
-  no code change.
+- **Build DP1 (qcow2)** → `docs/BUILDING.md`. DP1 is built from source (no
+  installer, by design). The built qcow2 is ~4 GB — over GitHub's 2 GB
+  release-asset limit — so it is *not* a release download. To offer a hosted
+  image later, compress it and host it externally (or split it), then repoint
+  this button.
 
 ## Design notes
 
