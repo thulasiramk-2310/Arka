@@ -70,7 +70,9 @@ fn clock() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let s = secs % 86_400;
-    format!("{:02}:{:02}:{:02}", s / 3600, (s % 3600) / 60, s % 60)
+    // UTC — std has no timezone support and arka-pulse stays zero-dependency,
+    // so the label is explicit rather than silently showing UTC as if local.
+    format!("{:02}:{:02}:{:02} UTC", s / 3600, (s % 3600) / 60, s % 60)
 }
 
 fn print_findings_and_predictions(s: &HealthSnapshot) {
