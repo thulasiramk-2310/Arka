@@ -142,7 +142,8 @@ WindowService → KWin         (today)  →  ArkaWM       (tomorrow)   — no UI
 
 Candidate services: `WindowService` (exists), `PowerService`, `NetworkService`,
 `NotificationService`, `PermissionService`, `PrivacyService`, `UpdateService`,
-`ThemeService`. None of them name KDE. This is what keeps the "swap Plasma /
+`ThemeService`, `ReliabilityService` (see
+[`RELIABILITY-ARKA-PULSE.md`](RELIABILITY-ARKA-PULSE.md)). None of them name KDE. This is what keeps the "swap Plasma /
 bring ArkaWM" door open without rewriting the desktop apps — so defining the
 trait first (even when KDE is the only implementation) is the discipline worth
 keeping during the freeze.

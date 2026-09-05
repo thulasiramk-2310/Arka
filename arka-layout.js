@@ -19,7 +19,7 @@ var topId = top.id;
 // --- Floating dock (icons-only task manager) --------------------------------
 var dock = new Panel;
 dock.location = 'bottom';
-dock.height = 48;
+dock.height = 64;   // 48 felt cramped in daily use — bigger icons, easier hit targets (see docs/FIELD-NOTES.md)
 try { dock.floating = true; } catch (e) {}
 try { dock.lengthMode = 'fit'; } catch (e) {}
 try { dock.alignment = 'center'; } catch (e) {}

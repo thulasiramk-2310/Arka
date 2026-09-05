@@ -68,6 +68,27 @@ person living in it, or the assistant during a review).
 
 ---
 
+## 2026-09-04 — dock too small (Ram, daily use)
+
+**Awkward or frustrating**
+- The floating bottom dock felt too small to use comfortably — icons undersized,
+  hit targets fiddly. This is a *sizing* miss, not a paradigm one: the dock
+  identity (floating, centered, icons-only — the mac-flavoured shape) is right;
+  it was just too thin.
+
+**Decision / fix applied (DP2)**
+- Kept the dock paradigm — did **not** switch to a Windows-style taskbar (that
+  would collapse the deliberate two-surface layout: slim top bar for status +
+  floating dock for apps) and did **not** reach for Latte-dock magnification
+  (unmaintained on Plasma 6 — a maintain-forever trap).
+- Bumped the dock in `arka-layout.js` from `height = 48` → `64`; Plasma's
+  `icontasks` scales icon size with panel thickness, so this gives larger icons
+  and easier hit targets while staying dock-shaped (floating, centered, `fit`).
+- Not yet proven in a booted VM — verify on real desktop before calling it done;
+  72px is the next step if 64 still feels tight on hardware.
+
+---
+
 <!-- Daily entry template:
 
 ## Day N — YYYY-MM-DD (<who>)

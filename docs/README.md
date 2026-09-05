@@ -20,6 +20,7 @@ exactly one job. Nothing slowly becomes "the roadmap."
 | [`FIELD-NOTES.md`](FIELD-NOTES.md) | **What using it feels like** — the experiential lens |
 | [`DP2.md`](DP2.md) | **Facts already merged** since DP1 (queued for the next build) |
 | [`FUTURE-CONSIDERATIONS.md`](FUTURE-CONSIDERATIONS.md) | **Ideas** — candidate work, committed to nothing |
+| [`RELIABILITY-ARKA-PULSE.md`](RELIABILITY-ARKA-PULSE.md) | **A candidate reliability layer** — arka-pulse, committed to nothing |
 | [`../arka-design-system/README.md`](../arka-design-system/README.md) | **The design system** — tokens, motion, components |
 | [`../legacy/README.md`](../legacy/README.md) | **The archive** — the retired Hyprland-era shell |
 
