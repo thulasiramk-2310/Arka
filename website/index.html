@@ -1,0 +1,505 @@
+<title>ArkaOS</title>
+<meta name="description" content="Privacy-first, immutable desktop Linux — your computer is yours.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* ArkaOS site — light by default, dark switchable. Every color is a token so
+     both themes resolve as a set. "arka" = ray of light → warm amber accent. */
+
+  /* LIGHT (default, professional + simple) */
+  :root {
+    --bg:        #FBFAF8;   /* warm off-white ground */
+    --bg-2:      #F4F2EE;   /* alt band */
+    --surface:   #FFFFFF;   /* raised card */
+    --surface-2: #F7F5F1;   /* inset / hover */
+    --line:      #E6E2DA;   /* hairline */
+    --line-soft: #EEEBE4;
+    --text:      #1A1D24;   /* near-black, slight blue */
+    --muted:     #565E6E;   /* secondary */
+    --faint:     #8B92A1;   /* captions */
+    --accent:    #E9A23B;   /* brand fill (amber ray) */
+    --accent-ink:#B26410;   /* accent text — contrast-safe on light */
+    --accent-deep:#8F4E0B;
+    --ok:        #1E8A5A;   /* semantic active/verified */
+    --ok-bg:     rgba(30,138,90,.10);
+    --ok-line:   rgba(30,138,90,.28);
+    --glow:      rgba(201,121,30,.12);
+    --card-sh:   0 1px 2px rgba(20,24,34,.04), 0 8px 24px -16px rgba(20,24,34,.18);
+    --dash-top:  #FCFAF6;
+    --dash-bot:  #FFFFFF;
+    --radius:    14px;
+    --maxw:      1080px;
+  }
+  /* DARK via system default (only when no explicit light choice) */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B0E15; --bg-2: #0E121B; --surface: #151A26; --surface-2: #1B2130;
+      --line: #262D3D; --line-soft: #1E2532;
+      --text: #ECEEF4; --muted: #97A0B5; --faint: #626C82;
+      --accent: #F0A63C; --accent-ink: #F5BE6A; --accent-deep: #C9791E;
+      --ok: #57C99A; --ok-bg: rgba(87,201,154,.10); --ok-line: rgba(87,201,154,.28);
+      --glow: rgba(240,166,60,.20);
+      --card-sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -18px rgba(0,0,0,.7);
+      --dash-top: #12213a; --dash-bot: #0a0e17;
+    }
+  }
+  /* DARK via explicit toggle (wins in both directions) */
+  :root[data-theme="dark"] {
+    --bg: #0B0E15; --bg-2: #0E121B; --surface: #151A26; --surface-2: #1B2130;
+    --line: #262D3D; --line-soft: #1E2532;
+    --text: #ECEEF4; --muted: #97A0B5; --faint: #626C82;
+    --accent: #F0A63C; --accent-ink: #F5BE6A; --accent-deep: #C9791E;
+    --ok: #57C99A; --ok-bg: rgba(87,201,154,.10); --ok-line: rgba(87,201,154,.28);
+    --glow: rgba(240,166,60,.20);
+    --card-sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -18px rgba(0,0,0,.7);
+    --dash-top: #12213a; --dash-bot: #0a0e17;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    transition: background .25s ease, color .25s ease;
+  }
+  a { color: inherit; text-decoration: none; }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  ::selection { background: rgba(233,162,59,.28); }
+
+  .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--accent-ink); font-weight: 500;
+  }
+
+  /* ---- Nav ---- */
+  header.nav {
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 600; letter-spacing: .01em; }
+  .glyph {
+    width: 26px; height: 26px; flex: none; border-radius: 7px; position: relative;
+    background: radial-gradient(circle at 50% 118%, #F5BE6A, var(--accent-deep) 60%, #6b3d0f 100%);
+    box-shadow: 0 0 16px rgba(233,162,59,.4);
+  }
+  .glyph::after {
+    content: ""; position: absolute; inset: 0; border-radius: 7px;
+    background: linear-gradient(180deg, rgba(255,255,255,.4), transparent 45%);
+  }
+  .nav-right { display: flex; align-items: center; gap: 22px; }
+  .nav-links { display: flex; align-items: center; gap: 26px; }
+  .nav-links a.link { color: var(--muted); font-size: 14.5px; transition: color .15s; }
+  .nav-links a.link:hover { color: var(--text); }
+  .toggle {
+    width: 36px; height: 36px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    font-size: 15px; line-height: 1; display: grid; place-items: center;
+    transition: background .15s, border-color .15s, transform .12s;
+  }
+  .toggle:hover { border-color: var(--accent-ink); }
+  .toggle:active { transform: translateY(1px); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 500;
+    border-radius: 9px; padding: 9px 16px; border: 1px solid transparent; cursor: pointer;
+    transition: transform .12s ease, background .15s, border-color .15s, filter .15s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-ghost { border-color: var(--line); color: var(--text); background: var(--surface); }
+  .btn-ghost:hover { border-color: var(--accent-ink); }
+  .btn-ray {
+    background: linear-gradient(180deg, #F5BE6A, var(--accent)); color: #2a1804; font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 8px 22px -12px rgba(233,162,59,.8);
+  }
+  .btn-ray:hover { filter: brightness(1.04); }
+  :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 6px; }
+
+  @media (max-width: 720px) { .nav-links .link { display: none; } }
+
+  /* ---- Hero ---- */
+  .hero { position: relative; overflow: hidden; padding: 88px 0 68px; }
+  .hero::before {
+    content: ""; position: absolute; left: 50%; top: -240px; transform: translateX(-50%);
+    width: 900px; height: 620px; pointer-events: none;
+    background: radial-gradient(ellipse at center, var(--glow), transparent 66%);
+  }
+  .hero-grid {
+    position: absolute; inset: 0; pointer-events: none; opacity: .6;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  }
+  .hero .wrap { position: relative; }
+  h1.headline {
+    font-family: "Fraunces", Georgia, serif; font-optical-sizing: auto; font-weight: 500;
+    font-size: clamp(44px, 8.2vw, 86px); line-height: .98; letter-spacing: -0.02em; margin: 20px 0 0;
+  }
+  h1.headline em { font-style: italic; color: var(--accent-ink); }
+  .lede { max-width: 42ch; margin: 22px 0 0; font-size: clamp(16.5px, 2.4vw, 19px); color: var(--muted); line-height: 1.55; }
+  .tagchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .chip {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--muted);
+    border: 1px solid var(--line); padding: 5px 11px; border-radius: 999px; background: var(--surface);
+  }
+  .chip b { color: var(--accent-ink); font-weight: 500; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .cta-row .btn { padding: 12px 20px; font-size: 15px; }
+  .cta-note { margin-top: 14px; font-size: 13px; color: var(--faint); font-family: "IBM Plex Mono", monospace; }
+
+  /* ---- Sections ---- */
+  section { padding: 76px 0; border-top: 1px solid var(--line-soft); }
+  .band { background: var(--bg-2); }
+  .sec-head { max-width: 60ch; margin-bottom: 40px; }
+  .sec-head h2 { font-family: "Fraunces", Georgia, serif; font-weight: 500; font-size: clamp(28px, 4.4vw, 40px); letter-spacing: -0.015em; margin-top: 12px; }
+  .sec-head p { color: var(--muted); margin: 14px 0 0; font-size: 16.5px; }
+  .h2-serif { font-family: "Fraunces", Georgia, serif; font-weight: 500; font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.015em; margin: 12px 0 18px; }
+
+  /* ---- Layer stack ---- */
+  .stack-layout { display: grid; grid-template-columns: 1.15fr .85fr; gap: 44px; align-items: center; }
+  @media (max-width: 860px) { .stack-layout { grid-template-columns: 1fr; gap: 30px; } }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .layer {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    padding: 15px 18px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line);
+  }
+  .layer .lname { font-weight: 600; font-size: 15px; flex: 1 1 auto; }
+  .layer .ldesc { color: var(--faint); font-size: 12.5px; font-family: "IBM Plex Mono", monospace; text-align: right; flex: 0 0 auto; }
+  .layer .lname small { color: var(--muted); font-weight: 400; font-family: "IBM Plex Mono", monospace; font-size: 11px; margin-left: 8px; }
+  .layer.core {
+    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 10px 30px -20px var(--accent-deep);
+  }
+  .layer.core .lname { color: var(--accent-ink); }
+  .layer.base { background: var(--surface-2); }
+  .layer.metal { background: var(--surface-2); border-style: dashed; }
+  @media (max-width: 560px) {
+    .layer { flex-direction: column; align-items: flex-start; gap: 5px; }
+    .layer .ldesc { text-align: left; }
+    .layer .lname small { display: block; margin-left: 0; margin-top: 2px; }
+  }
+  .stack-caption p { color: var(--muted); font-size: 16px; }
+  .stack-caption .arka-note { border-left: 2px solid var(--accent); padding-left: 16px; color: var(--muted); font-size: 15px; margin-top: 16px; }
+  .stack-caption .arka-note b { color: var(--text); font-weight: 600; }
+  .kbd, .feat code {
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--accent-ink);
+    background: var(--surface-2); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-soft);
+  }
+
+  /* ---- Feature matrix ---- */
+  .matrix { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 680px) { .matrix { grid-template-columns: 1fr; } }
+  .feat {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 26px 24px; display: flex; flex-direction: column; gap: 11px;
+    box-shadow: var(--card-sh); transition: border-color .18s, transform .18s;
+  }
+  .feat:hover { border-color: var(--accent-ink); transform: translateY(-2px); }
+  .feat .fnum { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent-ink); letter-spacing: .1em; }
+  .feat h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .feat p { color: var(--muted); font-size: 14.5px; margin: 0; }
+  .feat .caveat { font-size: 12.5px; color: var(--faint); font-family: "IBM Plex Mono", monospace; }
+
+  /* ---- Dashboard mockup ---- */
+  .dash-layout { display: grid; grid-template-columns: .9fr 1.1fr; gap: 44px; align-items: center; }
+  @media (max-width: 860px) { .dash-layout { grid-template-columns: 1fr; gap: 30px; } }
+  .dash {
+    border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--dash-top), var(--dash-bot));
+    box-shadow: var(--card-sh);
+  }
+  .dash-bar { display: flex; align-items: center; gap: 8px; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); background: var(--surface-2); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dash-bar .t { margin-left: 10px; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--faint); }
+  .dash-body { padding: 26px 24px 28px; }
+  .dash-score { display: flex; align-items: center; gap: 16px; }
+  .dash-score .ring {
+    width: 56px; height: 56px; flex: none; border-radius: 50%;
+    background: conic-gradient(var(--ok) 0 100%, var(--ok-line) 0);
+    display: grid; place-items: center;
+  }
+  .dash-score .ring i {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--surface);
+    display: grid; place-items: center; font-style: normal; font-weight: 600; font-size: 16px; color: var(--ok);
+  }
+  .dash-score .st { font-family: "Fraunces", serif; font-size: 22px; font-weight: 500; }
+  .dash-score .sub { color: var(--faint); font-size: 12.5px; font-family: "IBM Plex Mono", monospace; }
+  .enforcers { margin-top: 22px; display: flex; flex-direction: column; }
+  .enf { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 2px; border-top: 1px solid var(--line-soft); }
+  .enf .l { display: flex; flex-direction: column; gap: 2px; }
+  .enf .l .n { font-size: 14px; font-weight: 500; }
+  .enf .l .d { font-size: 12px; color: var(--faint); font-family: "IBM Plex Mono", monospace; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: .04em;
+    color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-line); border-radius: 999px; padding: 4px 10px;
+  }
+  .pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dash-caption p { color: var(--muted); font-size: 16px; }
+  .dash-caption .mocktag {
+    display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); border: 1px dashed var(--line); border-radius: 6px; padding: 3px 9px; margin-bottom: 16px;
+  }
+
+  /* ---- Status ---- */
+  .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 720px) { .status-grid { grid-template-columns: 1fr; } }
+  .stat { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--surface); box-shadow: var(--card-sh); }
+  .stat .k { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent-ink); letter-spacing: .08em; }
+  .stat .v { margin-top: 8px; font-size: 15px; color: var(--text); }
+  .stat .v span { color: var(--muted); }
+
+  /* ---- Footer ---- */
+  footer { border-top: 1px solid var(--line-soft); padding: 42px 0 56px; background: var(--bg-2); }
+  .foot-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  footer .brand { font-size: 15px; }
+  footer .tag { color: var(--faint); font-size: 13px; font-family: "IBM Plex Mono", monospace; }
+  footer .fl { display: flex; gap: 22px; }
+  footer .fl a { color: var(--muted); font-size: 14px; }
+  footer .fl a:hover { color: var(--text); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<script>
+  /* Set theme before paint to avoid a flash. No stored choice → follow system. */
+  (function () {
+    try {
+      var t = localStorage.getItem("arkaos-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><span class="glyph" aria-hidden="true"></span> ArkaOS</a>
+    <div class="nav-right">
+      <nav class="nav-links">
+        <a class="link" href="#architecture">Architecture</a>
+        <a class="link" href="#features">Features</a>
+        <a class="link" href="#status">Status</a>
+        <a class="btn btn-ghost" href="https://github.com/thulasiramk-2310/Arka" target="_blank" rel="noopener">GitHub ↗</a>
+      </nav>
+      <button class="toggle" id="themeToggle" aria-label="Switch to dark theme" title="Switch theme">☾</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" style="border-top:none">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="wrap">
+      <p class="eyebrow">Developer Preview 1 · privacy-first Linux</p>
+      <h1 class="headline">Your computer<br>is <em>yours.</em></h1>
+      <p class="lede">
+        A privacy-first, immutable desktop operating system. Built on the Linux
+        kernel, delivered as one verified image — read-only at runtime, atomic to
+        update, and defended by default.
+      </p>
+      <div class="tagchips">
+        <span class="chip"><b>Privacy-first</b></span>
+        <span class="chip">Immutable</span>
+        <span class="chip">Built on Linux</span>
+        <span class="chip">Designed for people</span>
+      </div>
+      <div class="cta-row">
+        <a class="btn btn-ray" href="https://github.com/thulasiramk-2310/Arka/releases" target="_blank" rel="noopener">Download DP1 (qcow2)</a>
+        <a class="btn btn-ghost" href="#architecture">Read the architecture →</a>
+      </div>
+      <p class="cta-note">DP1 targets QEMU/KVM. No hardware installer yet — by design, for a developer audience.</p>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="wrap">
+      <div class="stack-layout">
+        <div class="stack" role="img" aria-label="ArkaOS runtime layer stack, from the person at the top down to hardware at the bottom">
+          <div class="layer"><span class="lname">You</span><span class="ldesc">the person</span></div>
+          <div class="layer"><span class="lname">Arka Shell <small>KDE Plasma, branded</small></span><span class="ldesc">dock · top bar · first-boot</span></div>
+          <div class="layer"><span class="lname">Applications</span><span class="ldesc">Firefox (bubblewrap) · Capsule</span></div>
+          <div class="layer core"><span class="lname">arkad — privacy daemon</span><span class="ldesc">Rust · static musl</span></div>
+          <div class="layer base"><span class="lname">Immutable base</span><span class="ldesc">bootc + composefs · read-only</span></div>
+          <div class="layer base"><span class="lname">Linux kernel</span><span class="ldesc">fedora-bootc 42 · LTS</span></div>
+          <div class="layer metal"><span class="lname">Hardware</span><span class="ldesc">bare metal / VM</span></div>
+        </div>
+        <div class="stack-caption">
+          <p class="eyebrow">The stack</p>
+          <h2 class="h2-serif">One image, top to bottom.</h2>
+          <p>The whole OS is declared in a single container image and deployed with
+            <span class="kbd">bootc</span> and <span class="kbd">composefs</span>. The root
+            filesystem is read-only at runtime; updates are atomic and roll back to a
+            byte-identical prior state. No configuration drift — the machine you boot
+            is the image you built.</p>
+          <p class="arka-note"><b>arka</b> — Sanskrit for <i>ray of light</i>. The
+            daemon at the center of the stack, <b>arkad</b>, is the layer that keeps
+            the light yours: it enforces privacy invariants and re-checks them every 60&nbsp;seconds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="band">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">What it actually does</p>
+        <h2>Defense that ships turned on.</h2>
+        <p>Four load-bearing guarantees — each verified in a booted image, not just compiled.</p>
+      </div>
+      <div class="matrix">
+        <article class="feat">
+          <span class="fnum">01</span>
+          <h3>Read-only root</h3>
+          <p><code>composefs</code> mounts the root filesystem read-only and structurally
+            immutable. Upgrades are atomic through <code>bootc</code>; a bad update rolls
+            back to the exact previous image.</p>
+        </article>
+        <article class="feat">
+          <span class="fnum">02</span>
+          <h3>Rust privacy daemon</h3>
+          <p><code>arkad</code> — a static musl binary — continuously enforces MAC
+            randomization, DNS-over-TLS to Quad9, a masked hostname, and IPv6 temporary
+            addresses. It re-verifies every 60s and re-enforces on drift.</p>
+          <span class="caveat">no tokio · no shell interpolation · secure defaults with no config file</span>
+        </article>
+        <article class="feat">
+          <span class="fnum">03</span>
+          <h3>Sandboxed browser</h3>
+          <p>Firefox runs inside a <code>bubblewrap</code> jail: your real home is hidden
+            behind a <code>tmpfs</code>, network credentials and machine-id are absent,
+            and only <code>~/Downloads</code> is bound back in.</p>
+        </article>
+        <article class="feat">
+          <span class="fnum">04</span>
+          <h3>Measured boot</h3>
+          <p>TPM measurements cover PCRs 0–10 with a <code>composefs</code>-pinned root,
+            establishing a hardware root of trust for the boot chain.</p>
+          <span class="caveat">honest status: PCR 11–15 (UKI) pending real-hardware validation</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="dash-layout">
+        <div class="dash-caption">
+          <span class="mocktag">DP1 UI mockup</span>
+          <p class="eyebrow">Privacy, made legible</p>
+          <h2 class="h2-serif">You can see what protects you.</h2>
+          <p>Privacy is expressed as a state of being, not a wall of switches. The
+            dashboard reports what <code class="kbd">arkad</code> is enforcing right now —
+            each protection in plain language, each with a live status. This is a
+            product mockup of the DP1 screen, not a security rating.</p>
+        </div>
+        <div class="dash" role="img" aria-label="ArkaOS Privacy Dashboard mockup showing four active privacy enforcers">
+          <div class="dash-bar">
+            <span class="dot" style="background:#ff5f57"></span>
+            <span class="dot" style="background:#febc2e"></span>
+            <span class="dot" style="background:#28c840"></span>
+            <span class="t">Privacy Dashboard — ArkaOS</span>
+          </div>
+          <div class="dash-body">
+            <div class="dash-score">
+              <div class="ring" aria-hidden="true"><i>✓</i></div>
+              <div>
+                <div class="st">Your computer is yours</div>
+                <div class="sub">All privacy protections active</div>
+              </div>
+            </div>
+            <div class="enforcers">
+              <div class="enf">
+                <div class="l"><span class="n">Hardware address randomized</span><span class="d">NetworkManager · MAC per-connection</span></div>
+                <span class="pill"><span class="led"></span>Active</span>
+              </div>
+              <div class="enf">
+                <div class="l"><span class="n">Encrypted DNS (DNS-over-TLS)</span><span class="d">Quad9 · 9.9.9.9</span></div>
+                <span class="pill"><span class="led"></span>Active</span>
+              </div>
+              <div class="enf">
+                <div class="l"><span class="n">Hostname masked</span><span class="d">hostname → arka</span></div>
+                <span class="pill"><span class="led"></span>Active</span>
+              </div>
+              <div class="enf">
+                <div class="l"><span class="n">IPv6 privacy addresses</span><span class="d">use_tempaddr = 2</span></div>
+                <span class="pill"><span class="led"></span>Active</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="status" class="band">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Honest status</p>
+        <h2>Where DP1 really is.</h2>
+        <p>ArkaOS is built on the principle of honesty over marketing. This is what's
+          proven, and what isn't yet.</p>
+      </div>
+      <div class="status-grid">
+        <div class="stat">
+          <div class="k">SHIPPING</div>
+          <div class="v">Immutable base, <span>arkad privacy daemon, browser sandbox, KDE Plasma desktop — all verified in a booted VM.</span></div>
+        </div>
+        <div class="stat">
+          <div class="k">TARGET</div>
+          <div class="v">QEMU / KVM. <span>DP1 is a developer preview delivered as a qcow2 image — no bare-metal installer yet.</span></div>
+        </div>
+        <div class="stat">
+          <div class="k">NEXT</div>
+          <div class="v">Real hardware. <span>Drivers, suspend, full-disk encryption and PCR 11–15 measured boot are the unknowns a VM can't answer.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-inner">
+    <div>
+      <a class="brand" href="#top"><span class="glyph" aria-hidden="true"></span> ArkaOS</a>
+      <div class="tag" style="margin-top:8px">your computer is yours · Developer Preview 1</div>
+    </div>
+    <nav class="fl">
+      <a href="#architecture">Architecture</a>
+      <a href="#features">Features</a>
+      <a href="https://github.com/thulasiramk-2310/Arka" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/thulasiramk-2310/Arka/tree/master/docs" target="_blank" rel="noopener">Docs</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById("themeToggle");
+    function effective() {
+      var t = root.getAttribute("data-theme");
+      if (t) return t;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    function paint() {
+      var dark = effective() === "dark";
+      btn.textContent = dark ? "☀" : "☾";
+      btn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+    }
+    btn.addEventListener("click", function () {
+      var next = effective() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("arkaos-theme", next); } catch (e) {}
+      paint();
+    });
+    paint();
+  })();
+</script>
