@@ -21,3 +21,8 @@ arkad/target/
 arka-shell/target/
 legacy/target/
 .claude/
+
+# secrets — never commit
+tokens
+.arka_pat
+*.pat
