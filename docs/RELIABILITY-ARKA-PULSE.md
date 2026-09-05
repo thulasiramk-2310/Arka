@@ -189,24 +189,68 @@ Recommended: restart network service     Risk: Low
 
 ## Honest status
 
-Being accurate about maturity matters here as much as anywhere in ArkaOS. The
-Kernelpulse prototype is **not** a finished self-healing system:
+Being accurate about maturity matters here as much as anywhere in ArkaOS.
 
-- **Implemented today (Phase 2):** monitoring + anomaly *detection* (rule engine
-  + `IsolationForest`). This answers *"what is abnormal?"* only.
-- **Designed, partially built:** failure *prediction* (Phase 3), the local-AI
-  *explanation* layer (Phase 4), and *safe recovery + policy* (Phase 5). The
-  architecture exists and is described above; treat it as design, not proven
-  capability.
-- **Recovery is off by default.** It ships disabled and dry-run.
-- **Prediction accuracy is unmeasured on real hardware.** Lead-time metrics come
-  from *simulated* controlled-fault datasets; real-world driver-failure accuracy
-  has not been measured. This mirrors the DP1 lesson — a VM answers none of the
-  hardware questions.
+**What exists now** (in `arka-pulse/`): a **clean-room Rust** crate — not the
+Python Kernelpulse prototype — implementing the *entire* loop end-to-end,
+**read-only and dry-run**, zero dependencies, 29 unit tests:
 
-So the honest one-line summary: **a strong architecture and a working detector;
-the predictive and self-healing parts are promising design that has not earned
-its claims yet.**
+- `MONITOR → DETECT → PREDICT` are deterministic and read `/proc` + `/sys` only.
+- `PREDICT` is least-squares trend projection, hard-gated against false alarms
+  (history, slope, fit, horizon), reported as a labelled *heuristic* — never a
+  calibrated figure.
+- `EXPLAIN` is a **deterministic fallback**; no model runs. The
+  model-is-untrusted boundary already exists in code — a sanitiser and a
+  validator that rejects malformed/command-like output and maps `intent` to a
+  fixed action registry.
+- `RECOVER` is **dry-run only**: registry → policy engine → an executor that
+  *logs* a fixed argv and **never spawns a process**. No real executor exists;
+  it ships disabled.
+- `VERIFY` re-samples and refuses to claim recovery when nothing was applied.
+
+**What is NOT proven:** prediction *calibration* on real hardware. Synthetic
+correctness holds; real-world precision, false-positive rate, and lead-time are
+**unmeasured** — a VM answers none of the hardware questions, exactly the DP1
+lesson.
+
+So the honest one-line summary: **the loop and its safety boundaries are
+implemented and demonstrated in dry-run; the predictive and self-healing claims
+are not yet earned on real hardware.**
+
+---
+
+## The evidence ladder
+
+The engine is paused here deliberately. Each stage must *earn* the next — the
+next uncertainty is not "can we build it?" (demonstrated) but "does prediction
+hold on real behaviour well enough to justify an LLM and privileged recovery?"
+
+```
+1  Synthetic correctness        ✅ done (dry-run loop + tests)
+2  Read-only real-hardware deployment
+3  Prediction calibration       ← the gate that earns everything after it
+4  Local explanation (LLM)
+5  Policy-gated recovery (real executor)
+6  Verified autonomous recovery
+```
+
+**Do not call a prediction a success merely because it produced a prediction.**
+Before EXPLAIN gains an LLM or RECOVER gains a real executor, measure prediction
+quality on real telemetry:
+
+- **precision** — how often predicted instability actually develops;
+- **false-positive rate** — the metric that decides whether users trust it;
+- **lead time** — how far ahead, per warning;
+- **missed failures** — what it failed to see coming;
+- **per-class performance** — memory / swap / thermal separately;
+- **stability across machines** — does it generalise, or overfit one box.
+
+Future telemetry sources that make prediction real (not in scope now): SMART
+attributes, EDAC (memory ECC), MCE (machine-check exceptions), and eBPF probes.
+
+Only stage 3 passing justifies stage 4; only stage 4 justifies stage 5. Filling
+the architecture's LLM/executor slots ahead of that evidence is precisely the
+mistake this ladder exists to prevent.
 
 ---
 
