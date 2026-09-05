@@ -22,7 +22,7 @@ use crate::model::{Finding, Severity};
 use crate::predict::Prediction;
 
 /// Risk tier of a proposed action — the input to the (future) policy engine.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Risk {
     Low,
     Medium,

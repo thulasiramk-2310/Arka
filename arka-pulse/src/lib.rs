@@ -10,4 +10,6 @@ pub mod explain;
 pub mod model;
 pub mod monitor;
 pub mod predict;
+pub mod recover;
 pub mod service;
+pub mod verify;

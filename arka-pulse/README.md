@@ -7,19 +7,26 @@ arkad       → privacy      → protect the person
 arka-pulse  → reliability  → protect the machine
 ```
 
-**Status: experimental foundation.** This crate implements the first four
-stages of the loop in [`docs/RELIABILITY-ARKA-PULSE.md`](../docs/RELIABILITY-ARKA-PULSE.md):
+**Status: experimental foundation.** The whole loop in
+[`docs/RELIABILITY-ARKA-PULSE.md`](../docs/RELIABILITY-ARKA-PULSE.md) now runs
+end-to-end — but the acting stage is inert:
 
 ```
-MONITOR ──▶ DETECT ──▶ PREDICT ──▶ EXPLAIN   ← implemented (deterministic)
-RECOVER · VERIFY                             ← designed, NOT implemented
+MONITOR ─▶ DETECT ─▶ PREDICT ─▶ EXPLAIN ─▶ RECOVER ─▶ VERIFY
+└──────── read-only, deterministic ───────┘  dry-run   re-sample
 ```
 
-It reads `/proc` and `/sys`, applies deterministic threshold rules, projects
-recent trends toward those thresholds, and produces a plain-language account. It
-has **no AI running**, takes **no recovery action**, and writes **nothing** to
-the system. It is **not wired into the OS image** — it is built and run
-standalone while the design is proven against real behaviour.
+It reads `/proc` and `/sys`, applies deterministic rules, projects trends,
+produces a plain-language account, and plans a gated recovery — but it has **no
+AI running**, takes **no recovery action**, and writes **nothing** to the
+system. It is **not wired into the OS image** — it is built and run standalone
+while the design is proven against real behaviour.
+
+See the full loop yourself on a synthetic incident (touches nothing):
+
+```
+cargo run -- --demo
+```
 
 - **PREDICT** is ordinary least-squares over a time window, gated hard against
   false alarms (needs enough consistent history, a real upward slope, a good
@@ -61,6 +68,8 @@ src/
   predict/        PREDICT — least-squares trend projection (history + gates)
   explain/        EXPLAIN — deterministic account + the untrusted-model boundary
     sanitize.rs   redact secrets/tokens/home-paths before any model sees context
+  recover/        RECOVER — action registry + policy engine + dry-run executor
+  verify/         VERIFY — re-sample and confirm; never "dispatched = success"
   service.rs      ReliabilityService trait + PulseEngine (its implementation)
   main.rs         thin driver over the service
 ```
