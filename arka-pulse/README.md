@@ -7,18 +7,24 @@ arkad       → privacy      → protect the person
 arka-pulse  → reliability  → protect the machine
 ```
 
-**Status: experimental foundation.** This crate implements only the first two
+**Status: experimental foundation.** This crate implements the first three
 stages of the loop in [`docs/RELIABILITY-ARKA-PULSE.md`](../docs/RELIABILITY-ARKA-PULSE.md):
 
 ```
-MONITOR  ──▶  DETECT      ← implemented here (read-only, deterministic)
-PREDICT · EXPLAIN · RECOVER · VERIFY   ← designed, NOT implemented
+MONITOR ──▶ DETECT ──▶ PREDICT   ← implemented here (read-only, deterministic)
+EXPLAIN · RECOVER · VERIFY       ← designed, NOT implemented
 ```
 
-It reads `/proc` and `/sys`, applies deterministic threshold rules, and reports
-findings. It has **no AI**, takes **no recovery action**, and writes **nothing**
-to the system. It is **not wired into the OS image** — it is built and run
-standalone while the design is proven against real behaviour.
+It reads `/proc` and `/sys`, applies deterministic threshold rules, projects
+recent trends toward those thresholds, and reports findings and predictions. It
+has **no AI**, takes **no recovery action**, and writes **nothing** to the
+system. It is **not wired into the OS image** — it is built and run standalone
+while the design is proven against real behaviour.
+
+PREDICT is ordinary least-squares over a time window, gated hard against false
+alarms (needs enough consistent history, a real upward slope, a good fit, and a
+crossing inside a 30-min horizon — otherwise it stays silent). Its probability
+is an honest heuristic, not a calibrated figure; see the doc's *Honest status*.
 
 ## Design commitments (held from day one)
 

@@ -13,7 +13,8 @@ use crate::model::{Finding, Severity};
 use crate::monitor::Telemetry;
 
 /// Thresholds, named so the policy is legible and tunable in one place.
-mod thresh {
+/// Public so PREDICT projects toward the *same* thresholds DETECT fires on.
+pub mod thresh {
     pub const MEM_WARN_PCT: f64 = 90.0;
     pub const MEM_CRIT_PCT: f64 = 97.0;
     pub const SWAP_WARN_PCT: f64 = 80.0;

@@ -8,4 +8,5 @@
 pub mod detect;
 pub mod model;
 pub mod monitor;
+pub mod predict;
 pub mod service;

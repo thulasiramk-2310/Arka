@@ -13,16 +13,21 @@
 //! explicit, policy-gated interface — never smuggled into a "read" call.
 
 use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::detect;
 use crate::model::{Finding, Severity};
 use crate::monitor::{self, CpuMeter, Telemetry};
+use crate::predict::{self, History, Prediction, Sample, HISTORY_CAP};
 
-/// A UI-facing verdict: the single worst severity, the findings that justify
-/// it, and the raw telemetry they were derived from.
+/// A UI-facing verdict: the single worst *current* severity, the findings that
+/// justify it, the forward-looking predictions, and the raw telemetry behind
+/// them. `worst` reflects the present (DETECT) only — predictions are separate,
+/// carrying their own probability and lead time rather than a severity.
 pub struct HealthSnapshot {
     pub worst: Severity,
     pub findings: Vec<Finding>,
+    pub predictions: Vec<Prediction>,
     pub telemetry: Telemetry,
 }
 
@@ -32,10 +37,12 @@ pub trait ReliabilityService {
     fn health(&mut self) -> io::Result<HealthSnapshot>;
 }
 
-/// Deterministic reliability engine: sample telemetry, run the rule set.
+/// Deterministic reliability engine: sample telemetry, run the rule set, and
+/// project recent history forward. Holds the history ring buffer across calls.
 pub struct PulseEngine {
     meter: CpuMeter,
     ncpu: f64,
+    history: History,
 }
 
 impl PulseEngine {
@@ -47,7 +54,18 @@ impl PulseEngine {
         let ncpu = std::thread::available_parallelism()
             .map(|n| n.get() as f64)
             .unwrap_or(1.0);
-        PulseEngine { meter, ncpu }
+        PulseEngine {
+            meter,
+            ncpu,
+            history: History::new(HISTORY_CAP),
+        }
+    }
+
+    fn now_secs() -> f64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0)
     }
 }
 
@@ -60,7 +78,22 @@ impl Default for PulseEngine {
 impl ReliabilityService for PulseEngine {
     fn health(&mut self) -> io::Result<HealthSnapshot> {
         let telemetry = monitor::sample(&mut self.meter)?;
+
+        // Record this reading so PREDICT has a trend to fit.
+        let swap_pct = if telemetry.memory.swap_total_kb > 0 {
+            Some(telemetry.memory.swap_used_pct())
+        } else {
+            None
+        };
+        self.history.push(Sample {
+            t: Self::now_secs(),
+            mem_pct: telemetry.memory.used_pct(),
+            swap_pct,
+            temp_max: telemetry.thermal.max_c(),
+        });
+
         let findings: Vec<Finding> = detect::evaluate(&telemetry, self.ncpu);
+        let predictions: Vec<Prediction> = predict::evaluate(&self.history);
         let worst = findings
             .iter()
             .map(|f| f.severity)
@@ -69,6 +102,7 @@ impl ReliabilityService for PulseEngine {
         Ok(HealthSnapshot {
             worst,
             findings,
+            predictions,
             telemetry,
         })
     }

@@ -1,13 +1,14 @@
 //! arka-pulse — the ArkaOS reliability engine (experimental foundation).
 //!
-//! Status: this binary implements only the first two stages of the loop
+//! Status: this binary implements the first three stages of the loop
 //! described in `docs/RELIABILITY-ARKA-PULSE.md`:
 //!
-//!     MONITOR  ──▶  DETECT      (implemented — read-only, deterministic)
-//!     PREDICT · EXPLAIN · RECOVER · VERIFY   (designed, NOT implemented)
+//!     MONITOR ──▶ DETECT ──▶ PREDICT   (implemented — read-only, deterministic)
+//!     EXPLAIN · RECOVER · VERIFY       (designed, NOT implemented)
 //!
-//! It reads `/proc` and `/sys`, applies deterministic threshold rules through
-//! the [`ReliabilityService`] interface, and prints findings. It has **no** AI,
+//! It reads `/proc` and `/sys`, applies deterministic threshold rules and
+//! trend projection through the [`ReliabilityService`] interface, and prints
+//! findings and predictions. It has **no** AI,
 //! takes **no** recovery action, and writes **nothing** to the system.
 //!
 //! This crate is clean-room ArkaOS code; it is not wired into the OS image.
@@ -78,13 +79,23 @@ fn report(s: &HealthSnapshot) {
             f.severity, f.domain, f.summary, f.evidence
         );
     }
+    for p in &s.predictions {
+        println!(
+            "    PRED {}: {} — p={:.0}% conf={:.0}%",
+            p.domain,
+            p.summary,
+            p.probability * 100.0,
+            p.confidence * 100.0
+        );
+        println!("         {}", p.evidence);
+    }
 }
 
 fn main() {
     let args = parse_args();
 
     eprintln!(
-        "arka-pulse 0.0.1 — MONITOR + DETECT only. Read-only, dry-run: makes no changes.\n\
+        "arka-pulse 0.0.1 — MONITOR + DETECT + PREDICT. Read-only, dry-run: makes no changes.\n\
          See docs/RELIABILITY-ARKA-PULSE.md for the full design.\n"
     );
 
