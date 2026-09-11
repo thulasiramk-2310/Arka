@@ -12,11 +12,25 @@ path = "src/lib.rs"
 name = "arka-pulse"
 path = "src/main.rs"
 
-# No dependencies — the deterministic core reads /proc and /sys with std only.
-# This keeps the foundation zero-footprint and trivially auditable, matching
-# arkad's discipline. An optional AI explanation layer, if it ever ships, stays
-# entirely separate from this safety-critical core.
+# The read-only D-Bus daemon. Only built with `--features dbus`, so the default
+# build (lib + arka-pulse CLI + tests) stays zero-dependency.
+[[bin]]
+name = "arka-pulsed"
+path = "src/bin/pulsed.rs"
+required-features = ["dbus"]
+
+# The deterministic core reads /proc and /sys with std only — zero dependencies,
+# zero-footprint, trivially auditable, matching arkad's discipline. The optional
+# `dbus` feature adds a read-only D-Bus surface (org.arka.pulse) so the desktop
+# can consume reliability state the same way it consumes arkad's privacy state;
+# it pulls zbus + a minimal tokio, and nothing in the safety-critical core
+# depends on it. An AI explanation layer, if it ever ships, stays separate too.
 [dependencies]
+zbus = { version = "4", features = ["tokio"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"], optional = true }
+
+[features]
+dbus = ["dep:zbus", "dep:tokio"]
 
 [profile.release]
 opt-level = "z"

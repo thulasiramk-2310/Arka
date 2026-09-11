@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.arka.pulse
+Exec=/usr/bin/arka-pulsed
+User=root
+SystemdService=arka-pulsed.service

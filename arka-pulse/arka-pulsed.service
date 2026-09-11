@@ -1,0 +1,17 @@
+[Unit]
+Description=ArkaOS Reliability Daemon (read-only, org.arka.pulse)
+Documentation=file:///usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
+
+[Service]
+# Plain simple service: arka-pulse has no sd_notify dependency (the core stays
+# near-zero-dep), so no Type=notify / WatchdogSec here as arkad uses. It only
+# reads /proc + /sys and publishes a snapshot; it changes nothing.
+Type=simple
+ExecStart=/usr/bin/arka-pulsed --interval 10
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -13,3 +13,8 @@ pub mod predict;
 pub mod recover;
 pub mod service;
 pub mod verify;
+
+// Read-only D-Bus surface (org.arka.pulse). Feature-gated so the core stays
+// zero-dependency by default; only `--features dbus` compiles it.
+#[cfg(feature = "dbus")]
+pub mod ipc;
