@@ -18,7 +18,9 @@
 //! This crate is clean-room ArkaOS code; it is not wired into the OS image.
 //!
 //! Usage:
-//!     arka-pulse [--once] [--interval SECONDS] [--recover-dryrun] [--demo]
+//!     arka-pulse [--once] [--interval SECONDS] [--recover-dryrun] [--demo] [--log PATH]
+
+mod record;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,12 +29,14 @@ use arka_pulse::model::{Finding, Severity};
 use arka_pulse::recover::{self, ExecOutcome, RecoveryConfig, RecoveryReport};
 use arka_pulse::service::{HealthSnapshot, PulseEngine, ReliabilityService};
 use arka_pulse::verify::{self, VerifyOutcome};
+use record::Recorder;
 
 struct Args {
     once: bool,
     interval: Duration,
     recover: bool,
     demo: bool,
+    log: Option<String>,
 }
 
 fn parse_args() -> Args {
@@ -41,6 +45,7 @@ fn parse_args() -> Args {
         interval: Duration::from_secs(10),
         recover: false,
         demo: false,
+        log: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -48,19 +53,33 @@ fn parse_args() -> Args {
             "--once" => a.once = true,
             "--recover-dryrun" => a.recover = true,
             "--demo" => a.demo = true,
+            "--log" => a.log = it.next(),
             "--interval" => {
                 if let Some(v) = it.next().and_then(|s| s.parse::<u64>().ok()) {
                     a.interval = Duration::from_secs(v.max(1));
                 }
             }
             "-h" | "--help" => {
-                println!("arka-pulse [--once] [--interval SECONDS] [--recover-dryrun] [--demo]");
+                println!(
+                    "arka-pulse [--once] [--interval SECONDS] [--recover-dryrun] [--demo] [--log PATH]\n\
+                     \n\
+                     --log PATH   append one JSON line per sample to PATH (JSONL) for\n\
+                     \x20            stage-3 prediction calibration; capture only, changes nothing."
+                );
                 std::process::exit(0);
             }
             _ => {}
         }
     }
     a
+}
+
+/// UTC seconds since the epoch as a float, for log timestamps.
+fn now_unix() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// UTC HH:MM:SS from the wall clock, without pulling in a date library.
@@ -202,6 +221,20 @@ fn main() {
         RecoveryConfig::default()
     };
 
+    // Optional calibration capture. Opening is a hard failure when requested:
+    // monitoring without recording would waste a calibration session.
+    let mut recorder = args.log.as_deref().map(|path| match Recorder::open(path) {
+        Ok(mut r) => {
+            r.write_meta(now_unix());
+            eprintln!("recording samples to {} (JSONL, capture-only)\n", r.path());
+            r
+        }
+        Err(e) => {
+            eprintln!("cannot open log {path}: {e}");
+            std::process::exit(1);
+        }
+    });
+
     let mut engine = PulseEngine::new();
 
     let mut gap = if args.once {
@@ -214,6 +247,9 @@ fn main() {
         std::thread::sleep(gap);
         match engine.health() {
             Ok(snapshot) => {
+                if let Some(r) = recorder.as_mut() {
+                    r.record(now_unix(), &snapshot);
+                }
                 println!(
                     "[{}] health={:<4} load(1/5/15)={:.2}/{:.2}/{:.2} mem={:.0}% cpu={}",
                     clock(),
@@ -228,8 +264,8 @@ fn main() {
                     }
                 );
                 print_findings_and_predictions(&snapshot);
-                if snapshot.explanation.is_some() {
-                    let rep = recover::plan(snapshot.explanation.as_ref().unwrap(), &recovery_cfg);
+                if let Some(explanation) = &snapshot.explanation {
+                    let rep = recover::plan(explanation, &recovery_cfg);
                     print_recovery(&rep, snapshot.worst);
                 }
             }

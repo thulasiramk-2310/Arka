@@ -256,6 +256,29 @@ quality on real telemetry:
 - **per-class performance** — memory / swap / thermal separately;
 - **stability across machines** — does it generalise, or overfit one box.
 
+### Capturing the data (`--log`)
+
+Calibration is measured *after the fact*, so the first concrete step of stage 3
+is capture. The engine can append one JSON object per sample to a file:
+
+```
+arka-pulse --interval 10 --log ~/pulse.jsonl
+```
+
+This is **capture-only** — it reads the same `/proc`+`/sys` telemetry and writes
+one append-only log; it changes nothing else and never influences the engine (a
+failed write is reported once and dropped, monitoring continues). The log is
+JSONL: a first `"meta"` line (schema version, start time, host + kernel, so logs
+from different machines stay distinguishable) followed by one `"sample"` line per
+reading carrying the raw telemetry (load, CPU util, memory, swap, PSI, max temp)
+plus every finding and prediction. Leaving it running across a real drive session
+— ideally through real load and the occasional genuine fault — accumulates the
+record needed to line up *what was predicted* against *what actually happened*.
+
+Analysis is deliberately **not** built yet: capture first, measure once real
+logs exist, so the metrics come from data rather than being designed around
+imagined data.
+
 Future telemetry sources that make prediction real (not in scope now): SMART
 attributes, EDAC (memory ECC), MCE (machine-check exceptions), and eBPF probes.
 
