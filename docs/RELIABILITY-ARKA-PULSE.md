@@ -227,12 +227,23 @@ hold on real behaviour well enough to justify an LLM and privileged recovery?"
 
 ```
 1  Synthetic correctness        ✅ done (dry-run loop + tests)
-2  Read-only real-hardware deployment
+2  Read-only real-hardware deployment  ✅ runs on real hardware (see below)
 3  Prediction calibration       ← the gate that earns everything after it
 4  Local explanation (LLM)
 5  Policy-gated recovery (real executor)
 6  Verified autonomous recovery
 ```
+
+**Stage 2 — real-hardware run (2026-09-11, ASUS ROG Zephyrus G14 GA403UV, Arch,
+kernel 7.1.8).** The release binary ran on a real machine for the first time (not
+a VM): MONITOR read genuine `/proc`+`/sys` telemetry — CPU util, load, memory, and
+real thermals (39–41 °C) — across multiple samples with a coherent `OK` verdict,
+and the `--demo` synthetic incident drove the full EXPLAIN → RECOVER → VERIFY chain
+with the dry-run boundary holding (logged `sysctl vm.drop_caches=1`, executed
+nothing, VERIFY reported NOT-APPLIED). What this rung proves is only that the
+engine *reads real hardware correctly and stays inert* — it does **not** touch
+stage 3. Calibration needs sustained observation across real load and real faults,
+which a single healthy idle machine cannot supply.
 
 **Do not call a prediction a success merely because it produced a prediction.**
 Before EXPLAIN gains an LLM or RECOVER gains a real executor, measure prediction
