@@ -145,6 +145,22 @@ These are likely interrelated, not four separate bugs — resolve in order:
 - **Containerfile note:** `arkaos-firefox` COPY sits *above* the KDE dnf layer, so
   editing the wrapper busts the multi-hour KDE cache. Move it below the KDE layer.
 
+**🔴 Privacy-claim honesty audit (HIGH priority — "honesty over marketing")**
+Audited every Privacy Dashboard claim against the actual implementation:
+- **Two claims are FALSE / unbacked** (no Firefox config exists anywhere in the
+  image): *"No tracking cookies — deleted on close"* and *"Computer ID is hidden —
+  websites can't fingerprint you."* Firefox runs at defaults (cookies persist, no
+  RFP). **Must fix**: implement the protection (bake `policies.json`/`user.js` —
+  session cookies + fingerprinting resistance) so the claims become true, **or**
+  remove the claims. Implement is the on-brand choice.
+- **Three claims are OVERSTATED** (backed but too absolute): DNS *"ISP cannot see
+  what you look up"* (DoT hides queries, not destination IPs/SNI); *"Anonymous on
+  local networks / can't identify your computer"* (MAC+hostname reduce ID, not
+  anonymity); IPv6 *"your home address changes regularly"* (only the IPv6 suffix
+  rotates — ISP prefix stays, IPv4 unaffected). **Reword to precise language.**
+- **Accurate, keep:** browser file isolation, Wi-Fi-creds-hidden, MAC-tracking.
+Fold the rewrites + Firefox config into the display/UX rebuild batch.
+
 **Deployment gotcha (remember this)**
 - `dd` of the BIB raw image onto a *larger* USB leaves a **"primary GPT corrupt /
   PMBR size mismatch"**; strict AMI firmware then won't enumerate the stick as
