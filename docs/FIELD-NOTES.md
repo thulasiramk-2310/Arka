@@ -89,6 +89,59 @@ person living in it, or the assistant during a review).
 
 ---
 
+## 2026-09-13 — FIRST BARE-METAL BOOT (Ram + assistant, real hardware)
+
+> ArkaOS booted on a **real laptop** for the first time ever — not a VM. Machine:
+> **Nokia PureBook, Intel Core i5-10210U, Intel UHD graphics, 8 GB RAM**, AMI
+> Aptio UEFI. Booted **externally from a USB stick** (BIB raw image `dd`'d to a
+> SanDisk 3.2Gen1); the internal Windows disk was never touched. This clears the
+> DP2 roadmap's "real hardware" line.
+
+**Surprised / better than expected**
+- It just *worked* on real metal, first try: GRUB → kernel → systemd → Plymouth →
+  firstboot wizard → KDE Plasma desktop, at **full native resolution** (the
+  low-res boot console corrected itself once i915 + Plasma took over — cosmetic).
+- **arka-pulse read a real thermal sensor — 51 °C** (plus real CPU/mem) in the
+  Privacy Dashboard's System Health card. First genuine-hardware reading ever (the
+  VM showed "—"). This is the stage-2 "real-hardware deployment" rung, and on a
+  *second* machine — exactly what the "stability across machines" calibration
+  question in RELIABILITY-ARKA-PULSE.md wants.
+
+**"It just works" (bare metal)**
+- Wi-Fi connects, touchpad works, brightness + volume keys work, suspend/resume
+  works. arkad: PrivacyScore 100/100 (DoT/MAC/hostname/IPv6 all enforced).
+
+**Awkward / bugs (real use surfaced them — batch-fix then reflash)**
+1. **No audio in sandboxed Firefox.** Volume 100 %, system audio fine (Intel sink
+   present), but the browser is silent. Cause: the bwrap wrapper `arkaos-firefox`
+   threaded only the Wayland socket into the sandbox, not the audio socket, so
+   Firefox couldn't reach PipeWire. **Fix staged** (bind `pipewire-0` + `pulse`
+   under `/run/user/UID`); pending a rebuild+reflash to verify on hardware.
+2. **Capsule (app store) install did nothing.** Root cause: the image ships **no
+   flatpak remote**, so `flatpak install … flathub …` failed with "remote not
+   found." **Fix staged** — Capsule now adds the Flathub remote at `--user` level
+   (no root) and installs `--user` before running. Pending rebuild+reflash.
+3. **App icons render monochrome / miss their real colours — OS-wide, not just
+   Capsule.** ArkaOS sets `Icons=Arka`, but `arka-icons/` is sparse and inherits
+   breeze-dark; where neither supplies a coloured app icon, KDE/GTK falls back to
+   a flat `*-symbolic` glyph. Capsule's catalogue is the same root cause (it uses
+   `chat-symbolic`, `dialog-password-symbolic`, … by name). **Not a quick fix —
+   completing/curating the icon theme is a dedicated task** (bundle real app
+   icons, or map Flathub app-ids → coloured icons). Logged for a focused pass.
+
+**Deployment gotcha (remember this)**
+- `dd` of the BIB raw image onto a *larger* USB leaves a **"primary GPT corrupt /
+  PMBR size mismatch"**; strict AMI firmware then won't enumerate the stick as
+  bootable (no UEFI-USB entry appears). Fix: `sudo sgdisk -e /dev/sdX` (relocate
+  the backup GPT to the physical end + rewrite a valid primary), then it boots.
+  Worth making BIB/first-boot self-heal this, or documenting it in BUILDING.md.
+
+**Would I miss it?** First real-hardware session, so too early — but seeing the
+green ARKA desktop fill a real panel, with Wi-Fi and the privacy score live, is
+the first time ArkaOS felt like an actual OS rather than a VM demo.
+
+---
+
 <!-- Daily entry template:
 
 ## Day N — YYYY-MM-DD (<who>)
