@@ -48,6 +48,28 @@ everything it did, in plain language.
 DP1 ships as a **qcow2 for QEMU/KVM**, developer audience, no installer yet —
 by design. Details: [Release Notes](docs/RELEASE-NOTES-DP1.md) · [Changelog](CHANGELOG.md)
 
+## Since DP1 — DP2 groundwork
+
+Progress toward Developer Preview 2, verified as it lands (see [Field Notes](docs/FIELD-NOTES.md)):
+
+- 🖥️ **First bare-metal boot.** ArkaOS booted on real hardware for the first time —
+  an Intel i5-10210U laptop, from a USB stick, internal disk untouched: GRUB → KDE
+  Plasma desktop, with Wi-Fi, touchpad, display, brightness and suspend/resume all
+  working, and `arka-pulse` reading a real thermal sensor. One machine so far —
+  early, but the roadmap's "real hardware" line has its first proof.
+- 🩺 **arka-pulse reliability engine.** A read-only *System Health* surface
+  (`org.arka.pulse`, mirroring `arkad`): deterministic monitoring, honest about
+  what it can't yet measure. See the [design](docs/RELIABILITY-ARKA-PULSE.md).
+- 🔒 **Privacy claims, audited.** Every Privacy Dashboard statement is now either
+  backed by the implementation or reworded to be precise — a managed Firefox policy
+  (Enhanced Tracking Protection + fingerprint-script blocking) makes the
+  anti-fingerprinting claim real; DNS/MAC/IPv6 wording tightened to what's actually
+  enforced. Honesty over marketing.
+- 🐞 **Fixes from real use:** browser-sandbox audio, Capsule (Flathub) app installs.
+
+Still a developer preview — no installer, one hardware data point, and known polish
+(display scaling, login theme) tracked in the field notes.
+
 ---
 
 ## Architecture
