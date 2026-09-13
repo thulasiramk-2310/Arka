@@ -53,6 +53,15 @@ BWRAP_ARGS=(
     --dir /run/user/"${UID}"
     --bind-try /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}" \
                /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}"
+    # Audio: thread the PipeWire socket and the PulseAudio-compat socket dir
+    # through so the browser can actually play sound. libpulse/libpipewire find
+    # these automatically under XDG_RUNTIME_DIR. This is a deliberate capability
+    # grant — a browser needs audio — and does not weaken the /home or
+    # credential isolation (no D-Bus session bus, no home, are exposed by it).
+    --bind-try /run/user/"${UID}"/pipewire-0 \
+               /run/user/"${UID}"/pipewire-0
+    --bind-try /run/user/"${UID}"/pulse \
+               /run/user/"${UID}"/pulse
     --setenv XDG_RUNTIME_DIR /run/user/"${UID}"
     --setenv WAYLAND_DISPLAY "${WAYLAND_DISPLAY:-wayland-0}"
     --setenv MOZ_ENABLE_WAYLAND 1

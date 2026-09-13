@@ -713,8 +713,16 @@ fn save_favorites(favorites: &[String]) {
 // ── Utils ────────────────────────────────────────────────────────────────────
 
 fn install_app(id: &str) {
+    // Self-contained install: the image ships no pre-configured flatpak remote,
+    // so ensure Flathub exists first, then install. Both are done at the USER
+    // level (--user) so no root/polkit is needed — matching ArkaOS's single-user,
+    // least-privilege model. `--if-not-exists` makes the remote-add idempotent.
     let cmd = format!(
-        "flatpak install -y flathub '{}' && echo '✓ Installed!' || echo '✗ Installation failed'; read -p 'Press Enter...'",
+        "flatpak remote-add --user --if-not-exists flathub \
+             https://dl.flathub.org/repo/flathub.flatpakrepo && \
+         flatpak install --user -y flathub '{}' \
+             && echo '✓ Installed!' || echo '✗ Installation failed'; \
+         read -p 'Press Enter...'",
         id
     );
     let _ = std::process::Command::new("konsole")
