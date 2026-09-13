@@ -227,6 +227,12 @@ RUN printf '[Theme]\nCurrent=arkaos\n' > /etc/sddm.conf.d/30-arka-theme.conf
 RUN printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=/usr/share/arka/wallpapers/default.png\n' \
       > /etc/skel/.config/kscreenlockerrc
 
+# Desktop wallpaper preset so the Arka wallpaper shows from the FIRST frame
+# (kills the default-Plasma → Arka flash). arka-plasma-firstrun still applies it
+# via plasma-apply-wallpaperimage as a fallback if the containment id differs.
+RUN printf '[Containments][1]\nwallpaperplugin=org.kde.image\n\n[Containments][1][Wallpaper][org.kde.image][General]\nImage=file:///usr/share/arka/wallpapers/default.png\n' \
+      > /etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc
+
 # KWin desktop effects for a more interactive feel: wobbly windows, magic-lamp
 # minimise, and scale on window open/close.
 RUN printf '[Plugins]\nwobblywindowsEnabled=true\nmagiclampEnabled=true\nkwin4_effect_scaleEnabled=true\n' \
