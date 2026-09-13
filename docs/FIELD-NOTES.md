@@ -129,6 +129,22 @@ person living in it, or the assistant during a review).
    completing/curating the icon theme is a dedicated task** (bundle real app
    icons, or map Flathub app-ids → coloured icons). Logged for a focused pass.
 
+**Display / UX polish pass (queued — do as ONE batch, scaling first)**
+These are likely interrelated, not four separate bugs — resolve in order:
+- **"Everything looks small" (GRUB, SDDM, general) — the keystone.** Probably a
+  **display-scaling** issue (HiDPI panel at 100 %). *Blocked on data:* need the
+  Nokia's Settings → Display **resolution + scale %** before fixing. Fixing this
+  may dissolve several of the items below.
+- **Apps don't fill when maximized** — Privacy Dashboard = `adw::Clamp
+  { maximum_size: 720 }` (centred narrow column); other Arka apps need a per-window
+  expand check. Re-evaluate *after* scaling is set.
+- **Wallpaper flash** — KDE default shows ~5–10 s, then Arka. `arka-plasma-firstrun`
+  applies the wallpaper *after* Plasma starts. Fix: pre-seed the Arka wallpaper into
+  `/etc/skel` Plasma config so it's the first frame (keep firstrun as fallback).
+- **SDDM login theme looks dated** — visual refresh (modernise the custom theme).
+- **Containerfile note:** `arkaos-firefox` COPY sits *above* the KDE dnf layer, so
+  editing the wrapper busts the multi-hour KDE cache. Move it below the KDE layer.
+
 **Deployment gotcha (remember this)**
 - `dd` of the BIB raw image onto a *larger* USB leaves a **"primary GPT corrupt /
   PMBR size mismatch"**; strict AMI firmware then won't enumerate the stick as

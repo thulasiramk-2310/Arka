@@ -148,6 +148,36 @@ bring ArkaWM" door open without rewriting the desktop apps — so defining the
 trait first (even when KDE is the only implementation) is the discipline worth
 keeping during the freeze.
 
+### Agentic Arka — the AI layer, if it comes (distant)
+
+An on-device assistant that can *operate* ArkaOS — but built on the same **"the
+model is untrusted"** spine as arka-pulse ([`RELIABILITY-ARKA-PULSE.md`](RELIABILITY-ARKA-PULSE.md)), not a
+chatbot bolted on. The agent never touches the system directly; it emits
+*structured intent* that flows through the very service interfaces and policy
+gates every other actor already uses:
+
+```
+Arka Agent
+   → Structured Intent
+   → Arka Service Interface   (WindowService, PrivacyService, ReliabilityService, …)
+   → Policy Engine            (RiskLevel: auto / ask-human / deny)
+   → Auditable Action         (predefined registry only — never free-form)
+   → Verify                   (re-check that it did what it claimed)
+```
+
+The point: this is **not** "add an AI assistant." It is the arka-pulse safety
+model generalised to the whole OS — the agent *proposes*, deterministic policy
+*decides*, every action is auditable and re-verified, and nothing bypasses the
+service layer. Local-only and privacy-first, same bar as `arkad`. It is exactly
+the service-interface + policy discipline above that makes this buildable later
+without a rewrite — which is why the discipline is worth keeping now, even though
+the agent itself is years out.
+
+**Long-horizon direction (record, don't build):** Agentic Arka · ArkaWM (own WM) ·
+a *hardened* Linux LTS kernel — hardening/config first, custom work only if it
+earns it, never a from-scratch kernel on a whim (see guardrails) · Mobile / tablet
+/ (much later) car. Desktop-first for the next few years; everything else waits.
+
 ## Guardrails (the don't-do list)
 
 - **Don't reimplement mature Linux infrastructure** — own package manager,
