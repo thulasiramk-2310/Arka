@@ -28,8 +28,11 @@ impl AsyncEnforcer for SandboxEnforcer {
             .unwrap_or(false);
         let has_unwrapped = std::path::Path::new("/usr/bin/firefox-unwrapped").exists();
 
+        // The wrapper hides /home behind a tmpfs and re-exposes only ~/Downloads,
+        // so Firefox's whole profile is discarded on close — the sandbox is
+        // Ephemeral, not Persistent. Report it honestly (see docs/PHASE4-SANDBOX.md).
         let browser = if has_wrapper && has_symlink && has_unwrapped {
-            BrowserSandbox::Persistent
+            BrowserSandbox::Ephemeral
         } else {
             BrowserSandbox::None
         };

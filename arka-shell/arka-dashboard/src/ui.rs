@@ -447,8 +447,8 @@ pub fn build(
     net_group.set_title("Network Privacy");
 
     let (dns_row, dns_badge) = make_action_row(
-        "Searches are private",
-        "Your internet provider cannot see what you look up",
+        "Encrypted DNS",
+        "Your provider can't read the sites you look up in your DNS traffic (DoT · Quad9)",
         "network-server-symbolic",
     );
     let (mac_row, mac_badge) = make_action_row(
@@ -457,13 +457,13 @@ pub fn build(
         "network-wireless-symbolic",
     );
     let (host_row, host_badge) = make_action_row(
-        "Anonymous on local networks",
-        "Nearby devices can't identify your computer",
+        "Harder to track locally",
+        "A random MAC address + generic hostname make you harder for nearby devices to identify",
         "computer-symbolic",
     );
     let (ipv6_row, ipv6_badge) = make_action_row(
-        "IP address rotates automatically",
-        "Your home address on the internet changes regularly",
+        "Rotating IPv6 address",
+        "Your IPv6 address changes periodically to limit long-term tracking",
         "preferences-system-network-symbolic",
     );
     net_group.add(&dns_row);
@@ -495,10 +495,10 @@ pub fn build(
         "Per-Session",
     ));
     browser_group.add(&static_row(
-        "Computer ID is hidden",
-        "Websites can't fingerprint your machine's identity",
+        "Blocks fingerprinting scripts",
+        "Firefox's Enhanced Tracking Protection blocks known fingerprinting scripts",
         "emblem-system-symbolic",
-        "Hidden",
+        "Blocked",
     ));
     browser_group.add(&static_row(
         "WiFi passwords are protected",

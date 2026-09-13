@@ -117,6 +117,14 @@ RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-wifi \
               /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome \
               /usr/bin/arka-sound /usr/bin/arka-bluetooth
 
+# Firefox managed privacy policy: Enhanced Tracking Protection (strict) with
+# cryptomining + fingerprinting blocking. Placed in Firefox's app-dir under /usr
+# (which the bwrap sandbox binds read-only) — NOT /etc/firefox, which the sandbox
+# deliberately does not expose. Backs the dashboard's "Blocks fingerprinting
+# scripts" claim; verify at runtime via about:policies. Below the KDE layer so
+# editing it doesn't bust the KDE cache.
+COPY firefox-policies.json /usr/lib64/firefox/distribution/policies.json
+
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
     printf '[global]\nbackground-color=#0d0d1aff\ntext-color=#d0dff0ff\nborder-color=#1a3a5aff\nborder-radius=8\nborder-size=1\nfont=Liberation Sans 12\nwidth=320\nmargin=10\npadding=12\ndefault-timeout=4000\n' \
