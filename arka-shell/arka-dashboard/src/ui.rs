@@ -125,6 +125,104 @@ impl ScoreRow {
     }
 }
 
+// --- system health (arka-pulse) ---------------------------------------------
+
+/// Handles for the live-updated widgets in the System Health group.
+struct HealthRows {
+    verdict: adw::ActionRow,
+    verdict_badge: gtk4::Label,
+    cpu: gtk4::Label,
+    mem: gtk4::Label,
+    temp: gtk4::Label,
+    pred: gtk4::Label,
+}
+
+fn value_row(title: &str, icon: &str) -> (adw::ActionRow, gtk4::Label) {
+    let row = adw::ActionRow::new();
+    row.set_title(title);
+    row.set_activatable(false);
+    row.add_prefix(&make_icon(icon));
+    let val = gtk4::Label::new(Some("…"));
+    val.set_valign(gtk4::Align::Center);
+    val.add_css_class("dim-label");
+    row.add_suffix(&val);
+    (row, val)
+}
+
+/// The "one surface, two depths" reliability view from
+/// docs/RELIABILITY-ARKA-PULSE.md: a plain verdict on top, the evidence
+/// (CPU/memory/temperature + any predicted instability) below it.
+fn build_health_group() -> (adw::PreferencesGroup, HealthRows) {
+    let group = adw::PreferencesGroup::new();
+    group.set_title("System Health");
+    group.set_description(Some("Your machine's reliability — watched locally, shared with no one"));
+
+    let verdict = adw::ActionRow::new();
+    verdict.set_title("Checking system health…");
+    verdict.add_prefix(&make_icon("emblem-ok-symbolic"));
+    verdict.set_activatable(false);
+    let verdict_badge = gtk4::Label::new(Some("…"));
+    verdict_badge.set_valign(gtk4::Align::Center);
+    verdict_badge.add_css_class("badge-yellow");
+    verdict.add_suffix(&verdict_badge);
+    group.add(&verdict);
+
+    let (cpu_row, cpu)   = value_row("Processor", "computer-symbolic");
+    let (mem_row, mem)   = value_row("Memory", "drive-harddisk-symbolic");
+    let (temp_row, temp) = value_row("Temperature", "dialog-information-symbolic");
+    let (pred_row, pred) = value_row("Predicted instability", "dialog-warning-symbolic");
+    group.add(&cpu_row);
+    group.add(&mem_row);
+    group.add(&temp_row);
+    group.add(&pred_row);
+
+    (group, HealthRows { verdict, verdict_badge, cpu, mem, temp, pred })
+}
+
+fn fmt_pct(v: f64) -> String {
+    if v < 0.0 { "—".into() } else { format!("{v:.0}%") }
+}
+
+fn fmt_temp(v: f64) -> String {
+    if v < 0.0 { "—".into() } else { format!("{v:.0}°C") }
+}
+
+fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
+    if !r.available {
+        rows.verdict.set_title("System health unavailable");
+        rows.verdict.set_subtitle("arka-pulse isn’t running on this system");
+        set_badge(&rows.verdict_badge, "Offline", false, true);
+        rows.cpu.set_text("—");
+        rows.mem.set_text("—");
+        rows.temp.set_text("—");
+        rows.pred.set_text("—");
+        return;
+    }
+
+    // health/summary are the deterministic DETECT verdict — safe to state plainly.
+    let (title, badge, good, warn) = match r.health.as_str() {
+        "OK"   => ("Your computer is healthy", "Healthy", true, false),
+        "WARN" => ("Attention may be needed", "Warning", false, true),
+        "CRIT" => ("Critical — action recommended", "Critical", false, false),
+        _      => ("Checking system health…", "…", false, true),
+    };
+    rows.verdict.set_title(title);
+    rows.verdict.set_subtitle(&glib::markup_escape_text(&r.summary));
+    set_badge(&rows.verdict_badge, badge, good, warn);
+
+    rows.cpu.set_text(&fmt_pct(r.cpu_util));
+    rows.mem.set_text(&fmt_pct(r.mem_pct));
+    rows.temp.set_text(&fmt_temp(r.temp_max));
+
+    // Predictions are a HEURISTIC — always framed as *possible*, never certain.
+    match &r.prediction {
+        Some((summary, prob)) => {
+            rows.pred.set_text(&format!("possible: {summary} (~{:.0}%)", prob * 100.0))
+        }
+        None => rows.pred.set_text("None"),
+    }
+}
+
 // --- timeline ---------------------------------------------------------------
 
 struct LogEvent {
@@ -463,7 +561,9 @@ pub fn build(
     status_content.set_margin_start(16);
     status_content.set_margin_end(16);
     status_content.set_margin_bottom(32);
+    let (health_group, health_rows) = build_health_group();
     status_content.append(&header_card);
+    status_content.append(&health_group);
     status_content.append(&net_group);
     status_content.append(&browser_group);
     status_content.append(&score_group);
@@ -575,14 +675,17 @@ pub fn build(
 
     // ── updater closure ───────────────────────────────────────────────────────
     Box::new(move |update: StateUpdate| match update {
-        StateUpdate::Full(s) => apply_state(
-            &s,
-            &score_num,
-            &dns_badge, &mac_badge, &host_badge, &ipv6_badge,
-            &bsandbox_badge, &bstatus_badge,
-            &dns_sr, &mac_sr, &host_sr, &ipv6_sr,
-            &brow_sr, &sand_sr, &tele_sr, &track_sr,
-        ),
+        StateUpdate::Full(s) => {
+            apply_state(
+                &s,
+                &score_num,
+                &dns_badge, &mac_badge, &host_badge, &ipv6_badge,
+                &bsandbox_badge, &bstatus_badge,
+                &dns_sr, &mac_sr, &host_sr, &ipv6_sr,
+                &brow_sr, &sand_sr, &tele_sr, &track_sr,
+            );
+            apply_health(&s.reliability, &health_rows);
+        }
         StateUpdate::EnforceResult(r) => {
             let msg = if r.is_ok() {
                 "All privacy controls enforced"

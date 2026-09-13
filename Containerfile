@@ -6,6 +6,14 @@ COPY arka-shell/arka-shell-common/ /arka-shell/arka-shell-common/
 WORKDIR /build
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
+# arka-pulsed: the reliability daemon, also a static musl binary (its D-Bus
+# surface uses the same zbus stack as arkad). Built after arkad so a change to
+# one does not invalidate the other's layer. --features dbus turns on the
+# optional daemon; the core stays zero-dep without it.
+COPY arka-pulse/ /arka-pulse/
+RUN cargo build --release --target x86_64-unknown-linux-musl \
+      --features dbus --manifest-path /arka-pulse/Cargo.toml
+
 # Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
 FROM docker.io/fedora:42 AS shell-builder
 RUN dnf install -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
@@ -81,6 +89,15 @@ COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.ark
 RUN chmod 755 /usr/bin/arkad && \
     mkdir -p /etc/arkad && \
     systemctl enable arkad.service
+
+# Install arka-pulsed (reliability daemon; read-only org.arka.pulse, mirrors arkad)
+COPY --from=builder /arka-pulse/target/x86_64-unknown-linux-musl/release/arka-pulsed /usr/bin/arka-pulsed
+COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
+COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
+COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
+COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
+RUN chmod 755 /usr/bin/arka-pulsed && \
+    systemctl enable arka-pulsed.service
 
 # Install arka-shell binaries. arka-bar / arka-dock / arka-launcher are NOT
 # shipped: the Plasma panel, icontasks dock, and kickerdash launcher replace

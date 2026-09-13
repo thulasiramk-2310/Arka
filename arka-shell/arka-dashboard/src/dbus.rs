@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
 use futures::StreamExt;
 
-use crate::state::{DashboardState, StateUpdate};
+use crate::state::{DashboardState, ReliabilityState, StateUpdate};
 
 #[zbus::proxy(
     interface = "org.arka.arkad",
@@ -30,6 +30,29 @@ trait Arkad {
     fn enforce_all(&self) -> zbus::Result<()>;
 }
 
+/// Read-only client for arka-pulse's reliability surface. Mirrors the Arkad
+/// proxy; every member is a property read — there is no mutating method to call.
+#[zbus::proxy(
+    interface = "org.arka.pulse",
+    default_service = "org.arka.pulse",
+    default_path = "/org/arka/pulse",
+    gen_blocking = false
+)]
+trait Pulse {
+    #[zbus(property)]
+    fn health(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn summary(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn cpu_util(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn mem_pct(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn temp_max(&self) -> zbus::Result<f64>;
+    #[zbus(property)]
+    fn predictions(&self) -> zbus::Result<Vec<(String, f64, f64, String)>>;
+}
+
 pub fn start_worker(tx: Sender<StateUpdate>) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("tokio rt");
@@ -44,8 +67,12 @@ pub fn start_worker(tx: Sender<StateUpdate>) {
 async fn worker_loop(tx: Sender<StateUpdate>) -> zbus::Result<()> {
     let conn = zbus::Connection::system().await?;
     let proxy = ArkadProxy::new(&conn).await?;
+    // Proxy creation is lazy and does not require the service to be running, so
+    // the dashboard still works if arka-pulse isn't up yet (reads just fail and
+    // reliability shows as unavailable).
+    let pulse = PulseProxy::new(&conn).await?;
 
-    fetch_full(&proxy, &tx).await.ok();
+    fetch_full(&proxy, &pulse, &tx).await.ok();
 
     let mut s_score   = proxy.receive_privacy_score_changed().await;
     let mut s_dns     = proxy.receive_dns_status_changed().await;
@@ -55,21 +82,31 @@ async fn worker_loop(tx: Sender<StateUpdate>) -> zbus::Result<()> {
     let mut s_sandbox = proxy.receive_sandbox_status_changed().await;
     let mut s_browser = proxy.receive_browser_sandbox_changed().await;
 
+    // arka-pulse properties don't emit change signals (the daemon mutates its
+    // snapshot directly), so poll them on a timer. The daemon samples every
+    // ~10s; polling at 4s keeps the health view fresh without busy-reading.
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(4));
+
     loop {
         tokio::select! {
-            v = s_score.next()   => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_dns.next()     => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_mac.next()     => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_host.next()    => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_ipv6.next()    => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_sandbox.next() => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
-            v = s_browser.next() => { if v.is_none() { break; } fetch_full(&proxy, &tx).await.ok(); }
+            v = s_score.next()   => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_dns.next()     => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_mac.next()     => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_host.next()    => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_ipv6.next()    => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_sandbox.next() => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            v = s_browser.next() => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
+            _ = tick.tick()      => { fetch_full(&proxy, &pulse, &tx).await.ok(); }
         }
     }
     Ok(())
 }
 
-async fn fetch_full(proxy: &ArkadProxy<'_>, tx: &Sender<StateUpdate>) -> zbus::Result<()> {
+async fn fetch_full(
+    proxy: &ArkadProxy<'_>,
+    pulse: &PulseProxy<'_>,
+    tx: &Sender<StateUpdate>,
+) -> zbus::Result<()> {
     let state = DashboardState {
         privacy_score:     proxy.privacy_score().await?,
         dns_status:        DnsStatus::from(proxy.dns_status().await?),
@@ -80,9 +117,33 @@ async fn fetch_full(proxy: &ArkadProxy<'_>, tx: &Sender<StateUpdate>) -> zbus::R
         browser_sandbox:   BrowserSandbox::from(proxy.browser_sandbox().await?),
         telemetry_blocked: true,
         tracking_blocked:  true,
+        // Best-effort: if arka-pulse is unreachable, reliability stays the
+        // default "unavailable" rather than failing the whole privacy fetch.
+        reliability:       fetch_reliability(pulse).await.unwrap_or_default(),
     };
     tx.send(StateUpdate::Full(Box::new(state))).ok();
     Ok(())
+}
+
+async fn fetch_reliability(pulse: &PulseProxy<'_>) -> zbus::Result<ReliabilityState> {
+    // Highest-probability prediction, if any — presented to the user as merely
+    // *possible* instability, never a certain failure.
+    let prediction = pulse
+        .predictions()
+        .await?
+        .into_iter()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(_domain, prob, _conf, summary)| (summary, prob));
+
+    Ok(ReliabilityState {
+        available: true,
+        health: pulse.health().await?,
+        summary: pulse.summary().await?,
+        cpu_util: pulse.cpu_util().await?,
+        mem_pct: pulse.mem_pct().await?,
+        temp_max: pulse.temp_max().await?,
+        prediction,
+    })
 }
 
 pub fn call_enforce_all(tx: Sender<StateUpdate>) {
