@@ -109,6 +109,24 @@ This page becomes one of the most valuable things in the project.
 - Settings state accuracy (e.g. the Automatic Login toggle reflecting the real
   SDDM state — see `docs/FIELD-NOTES.md`).
 - Backup: local + external-drive backup, restore wizard.
+- **Display adaptation (requirement, near-term):** *ArkaOS must adapt its desktop
+  presentation to the detected display — never assume a fixed resolution or scale.*
+  - **Detect** resolution, refresh, DPI/physical size from **EDID** — KDE/Wayland
+    already does this; lean on it, don't reinvent.
+  - **Auto-scale policy (the only ArkaOS-specific bit):** at first boot compute DPI
+    and pick a sensible default (≈ ≤110 dpi→100 % · 110–160→125 % · 160–210→150 % ·
+    >210→175–200 %), apply once via `kscreen-doctor`. KDE's own default is too
+    conservative (100 % on HiDPI) — that's the gap we fill. ~30-line first-boot step.
+  - **Remember per display:** free — KDE's `kscreen` daemon already stores
+    scale/config keyed by each output's EDID (laptop 125 % vs external 4K 175 %).
+  - **User override, Windows-style:** resolution / scale / refresh / multi-monitor
+    arrangement all user-changeable and remembered — **KDE's Display & Monitor panel
+    already provides this**; ArkaOS just surfaces it clearly in Settings.
+  - **Why it matters:** the first bare-metal boot's "everything looks tiny" was
+    almost certainly wrong global scale (100 % on a HiDPI panel), which cascades
+    into SDDM / panel / text / maximize all looking wrong — **one root cause, not
+    many bugs.** Diagnose the live machine from real EDID values, never hardcode a
+    per-machine fix. See the display/UX pass in `docs/FIELD-NOTES.md`.
 
 ## Performance
 
