@@ -1,0 +1,22 @@
+[package]
+name = "arka-privacy-tray"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arka-privacy-tray"
+path = "src/main.rs"
+
+# Item 1 — "Privacy Activity": a StatusNotifierItem tray applet that makes
+# arkad's enforcement visible. Read-only: it reads enforcer STATE from arkad's
+# D-Bus (org.arka.arkad) and notable EVENTS from arkad's existing world-readable
+# log (/var/log/arkaos/privacy.jsonl). No new privileged path, no per-connection
+# or per-domain logging (that is phase 2 — see docs/PHASE2-LOGGING-SCOPE.md).
+[dependencies]
+ksni = "0.3"
+zbus = { version = "5", features = ["tokio"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

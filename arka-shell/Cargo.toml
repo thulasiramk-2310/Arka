@@ -1,5 +1,5 @@
 [workspace]
-members = ["arka-shell-common", "arka-dashboard", "arka-wifi", "arka-update", "arka-hotkeys", "arka-capsule", "arka-perms", "arka-settings", "arka-welcome", "arka-sound", "arka-bluetooth"]
+members = ["arka-shell-common", "arka-dashboard", "arka-wifi", "arka-update", "arka-hotkeys", "arka-capsule", "arka-perms", "arka-settings", "arka-welcome", "arka-sound", "arka-bluetooth", "arka-oobe", "arka-privacy-tray"]
 resolver = "2"
 
 [profile.release]

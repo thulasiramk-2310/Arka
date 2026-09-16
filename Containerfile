@@ -112,10 +112,11 @@ COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-sett
 COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
 COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
 COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
+COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
 RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-wifi \
               /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
               /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome \
-              /usr/bin/arka-sound /usr/bin/arka-bluetooth
+              /usr/bin/arka-sound /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray
 
 # Firefox managed privacy policy: Enhanced Tracking Protection (strict) with
 # cryptomining + fingerprinting blocking. Placed in Firefox's app-dir under /usr
@@ -226,6 +227,11 @@ COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 RUN chmod 755 /usr/libexec/arka-plasma-firstrun && \
     printf '[Desktop Entry]\nType=Application\nName=ArkaOS Branding\nExec=/usr/libexec/arka-plasma-firstrun\nX-KDE-autostart-phase=2\nOnlyShowIn=KDE\nNoDisplay=true\n' \
       > /etc/skel/.config/autostart/arka-plasma-firstrun.desktop
+
+# Privacy Activity tray (item 1) — StatusNotifierItem that makes arkad's
+# enforcement visible. Read-only; reads arkad D-Bus + /var/log/arkaos/privacy.jsonl.
+RUN printf '[Desktop Entry]\nType=Application\nName=ArkaOS Privacy Activity\nExec=/usr/bin/arka-privacy-tray\nX-KDE-autostart-phase=2\nOnlyShowIn=KDE\nNoDisplay=true\n' \
+      > /etc/skel/.config/autostart/arka-privacy-tray.desktop
 
 # Custom ArkaOS SDDM login theme (dark, green accent, fade-in animation).
 COPY sddm-theme-arkaos/ /usr/share/sddm/themes/arkaos/
