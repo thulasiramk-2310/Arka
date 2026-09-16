@@ -155,6 +155,14 @@ RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
     echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
       > /etc/sudoers.d/99-arkaos-settings
 
+# First boot must land on the CONSOLE (multi-user.target) so the firstboot TUI
+# runs and creates the account BEFORE any display manager. The wizard then flips
+# the default to graphical.target and reboots into SDDM. Without this the image
+# defaults to graphical.target and SDDM shows an empty, unusable login on boot 1.
+# (A graphical OOBE via cage was tried and parked — cage has no seat as a
+# pre-login system service; revisit under the identity/theme phase.)
+RUN systemctl set-default multi-user.target
+
 # ArkaOS signature wallpaper — deep black + blue glow + triangle grid + identity mark
 RUN dnf install -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
