@@ -12,7 +12,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 const APP_ID: &str = "org.arka.oobe";
-const DONE_FLAG: &str = "/var/lib/arkaos-firstboot-done";
 
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -22,56 +21,34 @@ fn main() {
 
 // ── account creation (root) ─────────────────────────────────────────────────
 
-fn run(args: &[&str]) -> Result<(), String> {
-    let st = std::process::Command::new(args[0])
-        .args(&args[1..])
-        .status()
-        .map_err(|e| format!("{}: {e}", args[0]))?;
-    if st.success() { Ok(()) } else { Err(format!("{} exited with {st}", args[0])) }
-}
-
-fn set_password(user: &str, pass: &str) -> Result<(), String> {
+// Privileged account creation is delegated to /usr/libexec/arkaos-oobe-apply
+// via a tight NOPASSWD sudo rule (see Containerfile). arka-oobe itself runs
+// UNPRIVILEGED inside the arkasetup login session, so it must not touch /etc or
+// run useradd directly. The password is passed on stdin, never in argv.
+fn create_account(user: &str, pass: &str, autologin: bool) -> Result<(), String> {
     use std::io::Write;
-    let mut child = std::process::Command::new("chpasswd")
+    let mut child = std::process::Command::new("sudo")
+        .args([
+            "-n",
+            "/usr/libexec/arkaos-oobe-apply",
+            user,
+            if autologin { "1" } else { "0" },
+        ])
         .stdin(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("chpasswd: {e}"))?;
+        .map_err(|e| format!("sudo arkaos-oobe-apply: {e}"))?;
     child
         .stdin
         .take()
-        .ok_or("chpasswd: no stdin")?
-        .write_all(format!("{user}:{pass}\n").as_bytes())
-        .map_err(|e| format!("chpasswd write: {e}"))?;
-    let st = child.wait().map_err(|e| format!("chpasswd wait: {e}"))?;
-    if st.success() { Ok(()) } else { Err("chpasswd failed".into()) }
-}
-
-fn create_account(user: &str, pass: &str, autologin: bool) -> Result<(), String> {
-    run(&["useradd", "-m", "-G", "wheel", "-s", "/bin/bash", user])?;
-    set_password(user, pass)?;
-
-    let _ = std::fs::create_dir_all("/etc/sddm.conf.d");
-    if autologin {
-        std::fs::write(
-            "/etc/sddm.conf.d/20-autologin.conf",
-            format!("[Autologin]\nUser={user}\nSession=plasma.desktop\n"),
-        )
-        .map_err(|e| format!("autologin conf: {e}"))?;
+        .ok_or("apply: no stdin")?
+        .write_all(format!("{pass}\n").as_bytes())
+        .map_err(|e| format!("apply write: {e}"))?;
+    let st = child.wait().map_err(|e| format!("apply wait: {e}"))?;
+    if st.success() {
+        Ok(())
     } else {
-        let _ = std::fs::remove_file("/etc/sddm.conf.d/20-autologin.conf");
+        Err(format!("account setup failed ({st})"))
     }
-
-    // Seed SDDM's last-user so the greeter greets the new account.
-    let _ = std::fs::create_dir_all("/var/lib/sddm");
-    let _ = std::fs::write(
-        "/var/lib/sddm/state.conf",
-        format!("[Last]\nUser={user}\nSession=/usr/share/wayland-sessions/plasma.desktop\n"),
-    );
-
-    run(&["systemctl", "set-default", "graphical.target"])?;
-    // Same flag the TUI firstboot uses, so neither runs again.
-    let _ = std::fs::write(DONE_FLAG, "1");
-    Ok(())
 }
 
 fn valid_username(u: &str) -> bool {

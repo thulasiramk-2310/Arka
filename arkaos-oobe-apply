@@ -1,0 +1,46 @@
+#!/bin/bash
+# arkaos-oobe-apply — privileged tail of the graphical first-run wizard.
+#
+# Runs as root via a tight NOPASSWD sudo rule (see Containerfile), invoked by
+# arka-oobe which itself runs UNPRIVILEGED inside the arkasetup login session.
+# This is the only privileged step: create the account the user just entered,
+# set autologin, switch to the graphical target, and mark first-boot done.
+#
+#   usage: arkaos-oobe-apply <username> <autologin:0|1>   (password on stdin)
+set -euo pipefail
+
+user="${1:?username required}"
+autologin="${2:?autologin flag required}"
+
+# Validate the username here too — never trust the caller alone.
+if ! printf '%s' "$user" | grep -Eq '^[a-z][a-z0-9_-]{0,30}$'; then
+    echo "arkaos-oobe-apply: invalid username" >&2
+    exit 2
+fi
+
+# Idempotent: if the account already exists (a retried run), don't fail.
+if ! id -u "$user" >/dev/null 2>&1; then
+    useradd -m -G wheel -s /bin/bash "$user"
+fi
+
+# Password arrives on stdin so it never appears in argv / process list.
+IFS= read -r pass
+printf '%s:%s\n' "$user" "$pass" | chpasswd
+unset pass
+
+mkdir -p /etc/sddm.conf.d
+if [ "$autologin" = "1" ]; then
+    printf '[Autologin]\nUser=%s\nSession=plasma.desktop\n' "$user" \
+        > /etc/sddm.conf.d/20-autologin.conf
+else
+    rm -f /etc/sddm.conf.d/20-autologin.conf
+fi
+
+# Seed SDDM's last-user so the greeter greets the new account.
+mkdir -p /var/lib/sddm
+printf '[Last]\nUser=%s\nSession=/usr/share/wayland-sessions/plasma.desktop\n' "$user" \
+    > /var/lib/sddm/state.conf
+
+# Hand the machine to the graphical target and stop the first-run flow for good.
+systemctl set-default graphical.target
+touch /var/lib/arkaos-firstboot-done

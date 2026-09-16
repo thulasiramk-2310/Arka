@@ -152,17 +152,35 @@ COPY arkaos-firstboot         /usr/libexec/arkaos-firstboot
 COPY arkaos-firstboot.service /usr/lib/systemd/system/arkaos-firstboot.service
 COPY arkaos-settings          /usr/bin/arkaos-settings
 RUN chmod 755 /usr/libexec/arkaos-firstboot /usr/bin/arkaos-settings && \
-    systemctl enable arkaos-firstboot.service && \
     echo '%wheel ALL=(ALL) NOPASSWD: /usr/bin/arkaos-settings' \
       > /etc/sudoers.d/99-arkaos-settings
 
-# First boot must land on the CONSOLE (multi-user.target) so the firstboot TUI
+# First boot must land on the CONSOLE (multi-user.target) so the first-run flow
 # runs and creates the account BEFORE any display manager. The wizard then flips
 # the default to graphical.target and reboots into SDDM. Without this the image
 # defaults to graphical.target and SDDM shows an empty, unusable login on boot 1.
-# (A graphical OOBE via cage was tried and parked — cage has no seat as a
-# pre-login system service; revisit under the identity/theme phase.)
 RUN systemctl set-default multi-user.target
+
+# ── Graphical first-run wizard (OOBE) ────────────────────────────────────────
+# A Wayland compositor cannot get a seat as a pre-login *system* service, so the
+# wizard runs inside a real logind LOGIN SESSION — exactly how DP1's sway worked.
+# A dedicated `arkasetup` user auto-logs in on tty1 (first boot only), logind
+# grants it seat0 (DRM+input), and its login shell launches cage + the arka-oobe
+# GTK wizard. arka-oobe runs unprivileged and creates the account only through a
+# tight NOPASSWD sudo helper. If cage can't start, it falls back to the TUI.
+RUN dnf install -y --setopt=retries=25 cage && dnf clean all
+COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
+RUN chmod 755 /usr/bin/arka-oobe /usr/libexec/arkaos-oobe-apply && \
+    useradd -m -s /bin/bash arkasetup && passwd -l arkasetup && \
+    printf 'arkasetup ALL=(root) NOPASSWD: /usr/libexec/arkaos-oobe-apply, /usr/libexec/arkaos-firstboot\n' \
+      > /etc/sudoers.d/95-arkaos-oobe && \
+    mkdir -p /etc/systemd/system/getty@tty1.service.d && \
+    printf '[Unit]\nConditionPathExists=!/var/lib/arkaos-firstboot-done\n[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin arkasetup --noclear %%I $TERM\n' \
+      > /etc/systemd/system/getty@tty1.service.d/arkasetup-autologin.conf && \
+    printf 'if [ "$(tty)" = /dev/tty1 ] && [ ! -e /var/lib/arkaos-firstboot-done ]; then\n  export GSK_RENDERER=cairo GDK_BACKEND=wayland\n  cage -- /usr/bin/arka-oobe || sudo -n /usr/libexec/arkaos-firstboot\nfi\n' \
+      > /home/arkasetup/.bash_profile && \
+    chown arkasetup:arkasetup /home/arkasetup/.bash_profile
 
 # ArkaOS signature wallpaper — deep black + blue glow + triangle grid + identity mark
 RUN dnf install -y -q ImageMagick && \
