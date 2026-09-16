@@ -1,0 +1,31 @@
+[Unit]
+Description=ArkaOS first-run setup (graphical OOBE)
+DefaultDependencies=no
+After=basic.target systemd-user-sessions.service plymouth-quit-wait.service
+Before=getty@tty1.service arkaos-firstboot.service
+Conflicts=getty@tty1.service
+ConditionPathExists=!/var/lib/arkaos-firstboot-done
+
+[Service]
+# Run the graphical wizard inside the cage kiosk compositor on tty1, as root,
+# before any user exists. On success it writes /var/lib/arkaos-firstboot-done,
+# so the TUI fallback (arkaos-firstboot.service, ordered after this) skips. If
+# cage can't start (no DRM/GPU), this exits without the flag and the TUI runs.
+Type=simple
+ExecStart=/usr/bin/cage -- /usr/bin/arka-oobe
+Restart=no
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+RuntimeDirectory=arka-oobe
+Environment=XDG_RUNTIME_DIR=/run/arka-oobe
+Environment=LIBSEAT_BACKEND=builtin
+Environment=XDG_SEAT=seat0
+Environment=GTK_THEME=Adwaita:dark
+Environment=GDK_BACKEND=wayland
+
+[Install]
+WantedBy=multi-user.target
