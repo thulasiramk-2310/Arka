@@ -1,0 +1,4 @@
+{
+  "mcpServers": {},
+  "_todo": "Phase 5+: expose the READ tools (system_status, pulse_health) as a local MCP server so other clients can query ArkaOS read-only. Write tools stay CLI-only, approval-gated."
+}
