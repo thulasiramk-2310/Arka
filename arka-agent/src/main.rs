@@ -1,36 +1,33 @@
-//! arka-agent — on-device AI agent for ArkaOS.
-//!
-//! The LLM is local (Ollama) and can only *propose* tool calls. Read tools run
-//! automatically; write tools require terminal approval. Every call is audited
-//! in a hash-chained JSONL log. The hard rules are listed in the crate docs.
-
-mod agent;
-mod approval;
-mod audit;
-mod cli;
-mod config;
-mod ollama;
-mod schema;
-mod tools;
+//! arka-agent binary — thin shell over the `arka_agent` library.
 
 use clap::Parser;
-use cli::{Cli, Command, LogCmd};
+
+use arka_agent::backend::dbus::DbusBackend;
+use arka_agent::cli::{Cli, Command, LogCmd};
+use arka_agent::config::Config;
+use arka_agent::ollama::OllamaClient;
+use arka_agent::{agent, audit};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let cfg = config::Config::load(cli.config.as_deref())?;
+    let cfg = Config::load(cli.config.as_deref())?;
 
     match cli.command {
         Command::Ask { prompt } => {
-            let llm = ollama::OllamaClient::new(&cfg);
-            agent::run(&llm, &cfg, &prompt).await?;
+            let llm = OllamaClient::new(&cfg);
+            let backend = DbusBackend::new();
+            let outcome = agent::run(&llm, &backend, &cfg, &prompt).await?;
+            match outcome.final_answer {
+                Some(answer) => println!("{answer}"),
+                None => println!(
+                    "(no final answer — stopped after {} step(s))",
+                    outcome.steps_used
+                ),
+            }
         }
         Command::Log { cmd } => match cmd {
-            LogCmd::Verify => {
-                let report = audit::verify(&cfg.audit_path)?;
-                println!("{report}");
-            }
+            LogCmd::Verify => println!("{}", audit::verify(&cfg.audit_path)?),
         },
     }
     Ok(())

@@ -2,12 +2,13 @@
 //! matching runner. Read tools run automatically; write tools are approval-gated
 //! by the agent loop before `run_write` is ever called (rule 3).
 //!
-//! Phase 1 status: the control flow (parse → validate → read/auto, write/approve
-//! → audit) is fully wired, but the tool *bodies* are honest stubs. Phase 2
-//! wires the read tools to real `org.arka.arkad` / `arka_pulse` calls; Phase 3
-//! wires write execution. Nothing here invents a D-Bus method that doesn't exist.
+//! Phase 2: read tools are wired to the real system via `SystemBackend`
+//! (mock in tests, D-Bus on-device). Phase 3 wires write execution.
 
 use serde_json::Value;
+
+use crate::backend::SystemBackend;
+use crate::config::Config;
 
 pub mod arkad;
 pub mod pulse;
@@ -78,34 +79,40 @@ pub struct ToolOutput {
     pub output: String,
 }
 
-pub async fn run_read(name: &str, args: &Value) -> anyhow::Result<ToolOutput> {
+/// Run a read tool. Read tools never mutate anything.
+pub async fn run_read<B: SystemBackend>(
+    backend: &B,
+    name: &str,
+    _args: &Value,
+) -> anyhow::Result<ToolOutput> {
     match name {
-        "system_status" => arkad::system_status(args).await,
-        "pulse_health" => pulse::pulse_health(args),
+        "system_status" => arkad::system_status(backend).await,
+        "pulse_health" => pulse::pulse_health(backend).await,
         other => anyhow::bail!("'{other}' is not a read tool"),
     }
 }
 
-/// Only reached after the agent has obtained explicit approval.
-pub async fn run_write(
+/// Run a write tool. Only reached after explicit approval (rule 3).
+///
+/// Phase 3 wires real execution. Phase 2 keeps honest stubs that name the real
+/// backing call — and, where arkad has none, say so instead of inventing one.
+pub async fn run_write<B: SystemBackend>(
+    _backend: &B,
     name: &str,
-    args: &Value,
+    _args: &Value,
     dry_run: bool,
-    _cfg: &crate::config::Config,
+    _cfg: &Config,
 ) -> anyhow::Result<ToolOutput> {
-    // Phase 3 wires real execution here. Phase 1 is an honest stub that names
-    // the real backing method (or the lack of one).
     let note = match name {
         "enforce_privacy" => "TODO(phase3): call org.arka.arkad EnforceAll() on the system bus",
         "set_privacy_setting" => {
-            "TODO(phase3): arkad has NO setter method yet — stays dry-run until arkad exposes SetSetting()"
+            "not implemented in arkad — arkad exposes no per-setting setter; stays dry-run until it does"
         }
         "restart_service" => {
             "TODO(phase3): restart an allow-listed unit via systemd (approval + sudo/systemctl gate)"
         }
         other => anyhow::bail!("'{other}' is not a write tool"),
     };
-    let _ = args;
     Ok(ToolOutput {
         output: format!("{note}{}", if dry_run { " [dry-run]" } else { "" }),
     })

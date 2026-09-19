@@ -1,7 +1,12 @@
 //! The agent loop. Orchestrates: prompt → local LLM → strict parse → validate →
 //! (read: run automatically | write: preview + approve) → audit → feed result
 //! back as data. Hard-capped at 5 steps (rule 6), fail-closed throughout.
+//!
+//! Generic over the LLM and the system backend so tests drive it with a scripted
+//! `MockLlm` + `MockBackend` — no GPU, no daemon. Returns an `Outcome` instead
+//! of only printing, so tests can assert on the final answer.
 
+use crate::backend::SystemBackend;
 use crate::config::Config;
 use crate::ollama::{ChatMsg, Llm};
 use crate::{approval, audit, schema, tools};
@@ -9,14 +14,26 @@ use crate::{approval, audit, schema, tools};
 /// Absolute ceiling regardless of config (rule 6).
 const HARD_MAX_STEPS: usize = 5;
 
-pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result<()> {
+pub struct Outcome {
+    pub final_answer: Option<String>,
+    pub steps_used: usize,
+}
+
+pub async fn run<L: Llm, B: SystemBackend>(
+    llm: &L,
+    backend: &B,
+    cfg: &Config,
+    request: &str,
+) -> anyhow::Result<Outcome> {
     let steps = cfg.max_steps.clamp(1, HARD_MAX_STEPS);
     let mut messages = vec![
         ChatMsg::system(system_prompt()),
         ChatMsg::user(request.to_string()),
     ];
+    let mut used = 0usize;
 
     for step in 1..=steps {
+        used = step;
         let raw = llm.complete(&messages).await?;
 
         let result_text: String = match schema::parse_step(&raw) {
@@ -32,8 +49,10 @@ pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result
             }
 
             Ok(schema::Step::Final { answer }) => {
-                println!("{answer}");
-                return Ok(());
+                return Ok(Outcome {
+                    final_answer: Some(answer),
+                    steps_used: step,
+                });
             }
 
             Ok(schema::Step::Call { tool, args }) => {
@@ -61,11 +80,11 @@ pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result
 
                 match spec.kind {
                     tools::ToolKind::Read => {
-                        let out = tools::run_read(spec.name, &args).await.unwrap_or_else(|e| {
-                            tools::ToolOutput {
+                        let out = tools::run_read(backend, spec.name, &args)
+                            .await
+                            .unwrap_or_else(|e| tools::ToolOutput {
                                 output: format!("(tool error: {e})"),
-                            }
-                        });
+                            });
                         audit::append(
                             &cfg.audit_path,
                             request,
@@ -83,8 +102,7 @@ pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result
                             spec.name, spec.description, args, cfg.dry_run
                         );
                         // rule 3: never apply a write without an explicit yes.
-                        let approved = approval::confirm(&preview)?;
-                        if !approved {
+                        if !approval::confirm(&preview)? {
                             audit::append(
                                 &cfg.audit_path,
                                 request,
@@ -94,9 +112,12 @@ pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result
                                 "user declined",
                             )?;
                             println!("Denied — nothing was applied.");
-                            return Ok(());
+                            return Ok(Outcome {
+                                final_answer: None,
+                                steps_used: step,
+                            });
                         }
-                        let out = tools::run_write(spec.name, &args, cfg.dry_run, cfg)
+                        let out = tools::run_write(backend, spec.name, &args, cfg.dry_run, cfg)
                             .await
                             .unwrap_or_else(|e| tools::ToolOutput {
                                 output: format!("(tool error: {e})"),
@@ -124,8 +145,10 @@ pub async fn run<L: Llm>(llm: &L, cfg: &Config, request: &str) -> anyhow::Result
         )));
     }
 
-    println!("(stopped after {steps} steps without a final answer)");
-    Ok(())
+    Ok(Outcome {
+        final_answer: None,
+        steps_used: used,
+    })
 }
 
 fn system_prompt() -> String {

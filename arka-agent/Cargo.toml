@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "On-device, approval-gated AI agent for ArkaOS. Local LLM only; the model can call tools, never touch the system directly."
 
+[lib]
+name = "arka_agent"
+path = "src/lib.rs"
+
 [[bin]]
 name = "arka-agent"
 path = "src/main.rs"
@@ -19,10 +23,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json"] }
 sha2 = "0.10"
 hex = "0.4"
 anyhow = "1"
-
-# Phase 2 will add:
-#   zbus       = { version = "4", features = ["tokio"] }   # read org.arka.arkad properties
-#   arka-pulse = { path = "../arka-pulse", default-features = false }  # in-process PulseEngine::health()
+# real backend
+zbus = { version = "4", features = ["tokio"] }                         # read org.arka.arkad properties
+arka-pulse = { path = "../arka-pulse", default-features = false }      # in-process PulseEngine::health()
 
 [profile.release]
 opt-level = "z"

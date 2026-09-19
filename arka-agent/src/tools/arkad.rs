@@ -1,26 +1,35 @@
-//! arkad-backed tools.
-//!
-//! Phase 2 wires these to the real `org.arka.arkad` interface on the SYSTEM bus
-//! (path `/org/arka/arkad`), reading the properties verified in Phase 0:
-//!   PrivacyScore(u8) · MacRandomization(bool) · DnsStatus(String)
-//!   HostnamePrivacy(bool) · Ipv6Privacy(bool) · SandboxStatus(String)
-//!   BrowserSandbox(String)
-//! and, for the write path, the one real method: EnforceAll().
-//!
-//! There is intentionally NO per-setting setter here, because arkad exposes
-//! none (see the TODOs in the crate docs). Do not invent one.
+//! arkad-backed tools. Reads go through `SystemBackend` (Phase-0 properties).
+//! No per-setting setter exists in arkad, so none is called here (rule 2).
 
-use serde_json::Value;
+use crate::backend::SystemBackend;
 
 use super::ToolOutput;
 
-pub async fn system_status(_args: &Value) -> anyhow::Result<ToolOutput> {
-    // TODO(phase2): open a zbus system-bus proxy for org.arka.arkad and read
-    // the seven properties, then format them here.
-    Ok(ToolOutput {
-        output: "TODO(phase2): read org.arka.arkad properties \
-                 (PrivacyScore, MacRandomization, DnsStatus, HostnamePrivacy, \
-                 Ipv6Privacy, SandboxStatus, BrowserSandbox) over the system bus"
-            .into(),
-    })
+fn onoff(b: bool) -> &'static str {
+    if b {
+        "on"
+    } else {
+        "off"
+    }
+}
+
+pub async fn system_status<B: SystemBackend>(backend: &B) -> anyhow::Result<ToolOutput> {
+    let s = backend.privacy_status().await?;
+    let output = format!(
+        "privacy score:       {}/100\n\
+         MAC randomization:   {}\n\
+         DNS:                 {}\n\
+         hostname privacy:    {}\n\
+         IPv6 privacy:        {}\n\
+         sandbox:             {}\n\
+         browser sandbox:     {}",
+        s.privacy_score,
+        onoff(s.mac_randomization),
+        s.dns_status,
+        onoff(s.hostname_privacy),
+        onoff(s.ipv6_privacy),
+        s.sandbox_status,
+        s.browser_sandbox,
+    );
+    Ok(ToolOutput { output })
 }
