@@ -12,3 +12,6 @@ pub mod config;
 pub mod ollama;
 pub mod schema;
 pub mod tools;
+
+#[cfg(test)]
+mod write_tests;

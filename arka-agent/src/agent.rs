@@ -1,15 +1,16 @@
 //! The agent loop. Orchestrates: prompt → local LLM → strict parse → validate →
-//! (read: run automatically | write: preview + approve) → audit → feed result
-//! back as data. Hard-capped at 5 steps (rule 6), fail-closed throughout.
+//! (read: run automatically | write: validate args → preview → approve) → audit
+//! → feed result back as data. Hard-capped at 5 steps (rule 6), fail-closed.
 //!
-//! Generic over the LLM and the system backend so tests drive it with a scripted
-//! `MockLlm` + `MockBackend` — no GPU, no daemon. Returns an `Outcome` instead
-//! of only printing, so tests can assert on the final answer.
+//! Generic over the LLM, the backend, and the approver so tests drive it with a
+//! scripted `MockLlm` + `MockBackend` + `ScriptedApprover` — no GPU, no daemon,
+//! no stdin. There is no code path that runs a write without `approver.confirm`.
 
+use crate::approval::Approver;
 use crate::backend::SystemBackend;
 use crate::config::Config;
 use crate::ollama::{ChatMsg, Llm};
-use crate::{approval, audit, schema, tools};
+use crate::{audit, schema, tools};
 
 /// Absolute ceiling regardless of config (rule 6).
 const HARD_MAX_STEPS: usize = 5;
@@ -19,9 +20,10 @@ pub struct Outcome {
     pub steps_used: usize,
 }
 
-pub async fn run<L: Llm, B: SystemBackend>(
+pub async fn run<L: Llm, B: SystemBackend, A: Approver>(
     llm: &L,
     backend: &B,
+    approver: &A,
     cfg: &Config,
     request: &str,
 ) -> anyhow::Result<Outcome> {
@@ -57,7 +59,6 @@ pub async fn run<L: Llm, B: SystemBackend>(
 
             Ok(schema::Step::Call { tool, args }) => {
                 let spec = match tools::find(&tool) {
-                    // rule 4: unknown tool → reject, audit, keep going.
                     None => {
                         eprintln!("arka-agent: unknown tool '{tool}' — rejected");
                         audit::append(
@@ -97,12 +98,31 @@ pub async fn run<L: Llm, B: SystemBackend>(
                         out.output
                     }
                     tools::ToolKind::Write => {
+                        // rule 4: validate args BEFORE prompting or acting.
+                        if let Err(e) = tools::validate_write(spec.name, &args, cfg) {
+                            let msg = e.to_string();
+                            audit::append(
+                                &cfg.audit_path,
+                                request,
+                                spec.name,
+                                &args,
+                                "rejected",
+                                &msg,
+                            )?;
+                            eprintln!("arka-agent: rejected write '{}' — {msg}", spec.name);
+                            messages.push(ChatMsg::assistant(raw));
+                            messages.push(ChatMsg::user(format!(
+                                "Rejected: {msg}. Fix the args or answer."
+                            )));
+                            continue;
+                        }
+
                         let preview = format!(
                             "  tool:    {}\n  effect:  {}\n  args:    {}\n  dry-run: {}",
                             spec.name, spec.description, args, cfg.dry_run
                         );
-                        // rule 3: never apply a write without an explicit yes.
-                        if !approval::confirm(&preview)? {
+                        // rule 3: no write without an explicit yes — every time.
+                        if !approver.confirm(&preview)? {
                             audit::append(
                                 &cfg.audit_path,
                                 request,
@@ -117,17 +137,20 @@ pub async fn run<L: Llm, B: SystemBackend>(
                                 steps_used: step,
                             });
                         }
+
                         let out = tools::run_write(backend, spec.name, &args, cfg.dry_run, cfg)
                             .await
                             .unwrap_or_else(|e| tools::ToolOutput {
                                 output: format!("(tool error: {e})"),
                             });
+                        // Log the attempt — approved or dry-run, both recorded.
+                        let decision = if cfg.dry_run { "dry-run" } else { "approved" };
                         audit::append(
                             &cfg.audit_path,
                             request,
                             spec.name,
                             &args,
-                            "approved",
+                            decision,
                             &out.output,
                         )?;
                         messages.push(ChatMsg::assistant(raw));

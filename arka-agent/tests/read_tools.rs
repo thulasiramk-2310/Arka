@@ -2,6 +2,7 @@
 //! Exercises the read path, fail-closed rules, and the audit chain end to end.
 
 use arka_agent::agent;
+use arka_agent::approval::TerminalApprover;
 use arka_agent::backend::MockBackend;
 use arka_agent::config::Config;
 use arka_agent::ollama::MockLlm;
@@ -27,9 +28,15 @@ async fn ask_dns_uses_read_tool_then_answers() {
     ]);
     let cfg = tmp_cfg();
 
-    let out = agent::run(&llm, &backend, &cfg, "is DNS-over-TLS on?")
-        .await
-        .unwrap();
+    let out = agent::run(
+        &llm,
+        &backend,
+        &TerminalApprover,
+        &cfg,
+        "is DNS-over-TLS on?",
+    )
+    .await
+    .unwrap();
     assert_eq!(
         out.final_answer.as_deref(),
         Some("DNS-over-TLS is on (DoT active, Quad9).")
@@ -49,9 +56,15 @@ async fn pulse_health_result_is_fed_back_as_data() {
     ]);
     let cfg = tmp_cfg();
 
-    let out = agent::run(&llm, &backend, &cfg, "how is system health?")
-        .await
-        .unwrap();
+    let out = agent::run(
+        &llm,
+        &backend,
+        &TerminalApprover,
+        &cfg,
+        "how is system health?",
+    )
+    .await
+    .unwrap();
     assert!(out.final_answer.is_some());
 
     // The mock telemetry (temp 51) must have reached the model as a fenced result.
@@ -82,7 +95,7 @@ async fn unknown_tool_is_rejected_and_audited() {
     ]);
     let cfg = tmp_cfg();
 
-    let out = agent::run(&llm, &backend, &cfg, "delete everything")
+    let out = agent::run(&llm, &backend, &TerminalApprover, &cfg, "delete everything")
         .await
         .unwrap();
     assert_eq!(
@@ -108,7 +121,9 @@ async fn invalid_json_is_rejected_then_recovers() {
     ]);
     let cfg = tmp_cfg();
 
-    let out = agent::run(&llm, &backend, &cfg, "hello").await.unwrap();
+    let out = agent::run(&llm, &backend, &TerminalApprover, &cfg, "hello")
+        .await
+        .unwrap();
     assert_eq!(out.final_answer.as_deref(), Some("Understood."));
     let _ = std::fs::remove_file(&cfg.audit_path);
 }
@@ -123,7 +138,7 @@ async fn step_cap_is_enforced() {
     let llm = MockLlm::new(scripted);
     let cfg = tmp_cfg();
 
-    let out = agent::run(&llm, &backend, &cfg, "loop forever")
+    let out = agent::run(&llm, &backend, &TerminalApprover, &cfg, "loop forever")
         .await
         .unwrap();
     assert!(out.final_answer.is_none());

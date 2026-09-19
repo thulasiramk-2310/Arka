@@ -1,9 +1,6 @@
-//! Tool registry. Adding a tool = one row in `REGISTRY` + a match arm in the
-//! matching runner. Read tools run automatically; write tools are approval-gated
-//! by the agent loop before `run_write` is ever called (rule 3).
-//!
-//! Phase 2: read tools are wired to the real system via `SystemBackend`
-//! (mock in tests, D-Bus on-device). Phase 3 wires write execution.
+//! Tool registry. Adding a tool = one row in `REGISTRY` + a runner arm (+ arg
+//! validation for writes). Read tools run automatically; write tools are
+//! approval-gated by the agent loop before `run_write` is ever called (rule 3).
 
 use serde_json::Value;
 
@@ -23,11 +20,9 @@ pub struct ToolSpec {
     pub name: &'static str,
     pub kind: ToolKind,
     pub description: &'static str,
-    /// A one-line hint of the expected args object, for the prompt and previews.
     pub args_hint: &'static str,
 }
 
-/// The complete set of tools the model is ever allowed to name.
 pub const REGISTRY: &[ToolSpec] = &[
     ToolSpec {
         name: "system_status",
@@ -50,7 +45,7 @@ pub const REGISTRY: &[ToolSpec] = &[
     ToolSpec {
         name: "set_privacy_setting",
         kind: ToolKind::Write,
-        description: "Change one privacy setting. arkad exposes no setter yet, so this is dry-run only until it does.",
+        description: "Change one privacy setting. arkad has no setter yet, so this reports 'not implemented in arkad'.",
         args_hint: "{\"setting\":\"mac|dns|hostname|ipv6\",\"enabled\":true|false}",
     },
     ToolSpec {
@@ -73,13 +68,45 @@ pub fn names() -> String {
         .join(", ")
 }
 
-/// A tool's output. `output` is DATA and must never be treated as instructions
-/// (rule 5) — the agent fences it before handing it back to the model.
 pub struct ToolOutput {
     pub output: String,
 }
 
-/// Run a read tool. Read tools never mutate anything.
+const SETTINGS: &[&str] = &["mac", "dns", "hostname", "ipv6"];
+
+/// Validate write-tool args BEFORE approval, so bad args reject without ever
+/// prompting or touching the system (rule 4, fail closed).
+pub fn validate_write(name: &str, args: &Value, cfg: &Config) -> anyhow::Result<()> {
+    match name {
+        "enforce_privacy" => Ok(()),
+        "set_privacy_setting" => {
+            let setting = args.get("setting").and_then(|v| v.as_str());
+            let enabled = args.get("enabled").and_then(|v| v.as_bool());
+            match (setting, enabled) {
+                (Some(s), Some(_)) if SETTINGS.contains(&s) => Ok(()),
+                _ => anyhow::bail!(
+                    "bad args: expected {{\"setting\": one of {SETTINGS:?}, \"enabled\": bool}}"
+                ),
+            }
+        }
+        "restart_service" => {
+            let unit = args
+                .get("unit")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("bad args: expected {{\"unit\": string}}"))?;
+            if cfg.allowed_units.iter().any(|u| u == unit) {
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "unit '{unit}' is not in the allow-list {:?}",
+                    cfg.allowed_units
+                )
+            }
+        }
+        other => anyhow::bail!("'{other}' is not a write tool"),
+    }
+}
+
 pub async fn run_read<B: SystemBackend>(
     backend: &B,
     name: &str,
@@ -94,26 +121,53 @@ pub async fn run_read<B: SystemBackend>(
 
 /// Run a write tool. Only reached after explicit approval (rule 3).
 ///
-/// Phase 3 wires real execution. Phase 2 keeps honest stubs that name the real
-/// backing call — and, where arkad has none, say so instead of inventing one.
+/// When `dry_run` is set, this returns a description of what WOULD happen and
+/// never calls a backend write method (proven by a test). Args are assumed
+/// already validated by `validate_write`.
 pub async fn run_write<B: SystemBackend>(
-    _backend: &B,
+    backend: &B,
     name: &str,
-    _args: &Value,
+    args: &Value,
     dry_run: bool,
     _cfg: &Config,
 ) -> anyhow::Result<ToolOutput> {
-    let note = match name {
-        "enforce_privacy" => "TODO(phase3): call org.arka.arkad EnforceAll() on the system bus",
+    match name {
+        "enforce_privacy" => {
+            if dry_run {
+                return Ok(ToolOutput {
+                    output: "[dry-run] would call arkad EnforceAll() — no change made".into(),
+                });
+            }
+            Ok(ToolOutput {
+                output: backend.enforce_all().await?,
+            })
+        }
         "set_privacy_setting" => {
-            "not implemented in arkad — arkad exposes no per-setting setter; stays dry-run until it does"
+            let setting = args.get("setting").and_then(|v| v.as_str()).unwrap_or("");
+            let enabled = args
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if dry_run {
+                return Ok(ToolOutput {
+                    output: format!("[dry-run] would set {setting}={enabled} — no change made"),
+                });
+            }
+            Ok(ToolOutput {
+                output: backend.set_privacy_setting(setting, enabled).await?,
+            })
         }
         "restart_service" => {
-            "TODO(phase3): restart an allow-listed unit via systemd (approval + sudo/systemctl gate)"
+            let unit = args.get("unit").and_then(|v| v.as_str()).unwrap_or("");
+            if dry_run {
+                return Ok(ToolOutput {
+                    output: format!("[dry-run] would restart {unit} — no change made"),
+                });
+            }
+            Ok(ToolOutput {
+                output: backend.restart_service(unit).await?,
+            })
         }
         other => anyhow::bail!("'{other}' is not a write tool"),
-    };
-    Ok(ToolOutput {
-        output: format!("{note}{}", if dry_run { " [dry-run]" } else { "" }),
-    })
+    }
 }

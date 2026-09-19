@@ -2,6 +2,7 @@
 
 use clap::Parser;
 
+use arka_agent::approval::TerminalApprover;
 use arka_agent::backend::dbus::DbusBackend;
 use arka_agent::cli::{Cli, Command, LogCmd};
 use arka_agent::config::Config;
@@ -17,7 +18,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Ask { prompt } => {
             let llm = OllamaClient::new(&cfg);
             let backend = DbusBackend::new();
-            let outcome = agent::run(&llm, &backend, &cfg, &prompt).await?;
+            let approver = TerminalApprover;
+            let outcome = agent::run(&llm, &backend, &approver, &cfg, &prompt).await?;
             match outcome.final_answer {
                 Some(answer) => println!("{answer}"),
                 None => println!(

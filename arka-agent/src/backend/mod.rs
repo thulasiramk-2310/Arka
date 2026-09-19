@@ -2,10 +2,13 @@
 //! zbus or arka-pulse directly, so tests run against `MockBackend` (fixed,
 //! realistic state) with no daemon, and on-device uses `DbusBackend`.
 //!
-//! Phase 2 defines the READ surface. Phase 3 extends this trait with the write
-//! methods (enforce_all / set_privacy_setting / restart_service).
+//! Read methods observe only. Write methods change the system and are only ever
+//! reached through the agent loop's approval gate (rule 3). Dry-run is handled
+//! one level up (in `tools::run_write`) and must never call these write methods.
 
 pub mod dbus;
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::Serialize;
 
@@ -24,28 +27,41 @@ pub struct PrivacyStatus {
 /// A read-only health summary derived from arka-pulse.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct PulseReport {
-    /// worst current severity: OK / INFO / WARN / CRIT
     pub worst: String,
-    /// "domain: summary (evidence)" lines
     pub findings: Vec<String>,
     pub cpu_util: Option<f64>,
     pub mem_pct: f64,
     pub temp_max: Option<f64>,
 }
 
-/// Everything the agent's tools are allowed to ask the system to do. Read-only
-/// in Phase 2. `#[allow(async_fn_in_trait)]`: static dispatch only (tools/agent
-/// are generic over `B: SystemBackend`).
+/// Everything the agent's tools are allowed to ask the system to do.
+///
+/// `#[allow(async_fn_in_trait)]`: static dispatch only (tools/agent are generic
+/// over `B: SystemBackend`).
 #[allow(async_fn_in_trait)]
 pub trait SystemBackend {
+    // ── read ──
     async fn privacy_status(&self) -> anyhow::Result<PrivacyStatus>;
     async fn pulse_health(&self) -> anyhow::Result<PulseReport>;
+
+    // ── write (reached only after approval; never called in dry-run) ──
+    /// Re-apply every privacy enforcer — arkad `EnforceAll()`.
+    async fn enforce_all(&self) -> anyhow::Result<String>;
+    /// Change one privacy setting. arkad exposes no setter, so the real backend
+    /// returns a clear "not implemented in arkad" error (rule 2).
+    async fn set_privacy_setting(&self, setting: &str, enabled: bool) -> anyhow::Result<String>;
+    /// Restart an (already allow-list-checked) systemd unit.
+    async fn restart_service(&self, unit: &str) -> anyhow::Result<String>;
 }
 
-/// Deterministic in-memory backend for tests — a healthy DP1 machine.
+/// Deterministic in-memory backend for tests — a healthy DP1 machine. Counts
+/// write calls so a test can prove dry-run never reached the backend.
 pub struct MockBackend {
     pub status: PrivacyStatus,
     pub pulse: PulseReport,
+    pub enforce_calls: AtomicUsize,
+    pub setting_calls: AtomicUsize,
+    pub restart_calls: AtomicUsize,
 }
 
 impl MockBackend {
@@ -67,7 +83,15 @@ impl MockBackend {
                 mem_pct: 38.0,
                 temp_max: Some(51.0),
             },
+            enforce_calls: AtomicUsize::new(0),
+            setting_calls: AtomicUsize::new(0),
+            restart_calls: AtomicUsize::new(0),
         }
+    }
+    pub fn writes_total(&self) -> usize {
+        self.enforce_calls.load(Ordering::SeqCst)
+            + self.setting_calls.load(Ordering::SeqCst)
+            + self.restart_calls.load(Ordering::SeqCst)
     }
 }
 
@@ -77,5 +101,18 @@ impl SystemBackend for MockBackend {
     }
     async fn pulse_health(&self) -> anyhow::Result<PulseReport> {
         Ok(self.pulse.clone())
+    }
+    async fn enforce_all(&self) -> anyhow::Result<String> {
+        self.enforce_calls.fetch_add(1, Ordering::SeqCst);
+        Ok("re-applied all privacy enforcers".into())
+    }
+    async fn set_privacy_setting(&self, _setting: &str, _enabled: bool) -> anyhow::Result<String> {
+        // Mirror the real backend: arkad has no setter (rule 2).
+        self.setting_calls.fetch_add(1, Ordering::SeqCst);
+        anyhow::bail!("not implemented in arkad: no per-setting setter exists")
+    }
+    async fn restart_service(&self, unit: &str) -> anyhow::Result<String> {
+        self.restart_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(format!("restarted {unit}"))
     }
 }

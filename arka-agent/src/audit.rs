@@ -160,7 +160,10 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static N: AtomicU64 = AtomicU64::new(0);
         let mut p = std::env::temp_dir();
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let i = N.fetch_add(1, Ordering::Relaxed);
         p.push(format!("arka-agent-audit-test-{nanos}-{i}.jsonl"));
         p.to_string_lossy().into_owned()
