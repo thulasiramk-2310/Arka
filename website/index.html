@@ -26,7 +26,8 @@
   .card.cyan:hover { border-color: #54D6C6 !important; }
   .doc:hover { border-color: #16C784 !important; }
   @keyframes arkaPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-  @keyframes arkaRay { 0% { transform: translateY(-100%); } 100% { transform: translateY(1100%); } }
+  @keyframes arkaIgnite { 0% { box-shadow: 0 0 0 1px rgba(22,199,132,0), 0 0 0 rgba(22,199,132,0); } 35% { box-shadow: 0 0 0 1px rgba(22,199,132,.55), 0 0 26px rgba(22,199,132,.28); } 100% { box-shadow: 0 0 0 1px rgba(22,199,132,.28), 0 0 0 rgba(22,199,132,0); } }
+  @keyframes arkaDot { 0% { box-shadow: 0 0 0 0 rgba(22,199,132,.55); } 70%, 100% { box-shadow: 0 0 0 6px rgba(22,199,132,0); } }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
 </style>
 </head>
@@ -98,10 +99,8 @@
 
     <div style="margin-top:34px;position:relative;aspect-ratio:16/9;background:#0E1119;border:1px solid #1C2230;border-radius:14px;overflow:hidden">
       <div style="position:absolute;inset:0;background-image:linear-gradient(#11151F 1px,transparent 1px),linear-gradient(90deg,#11151F 1px,transparent 1px);background-size:40px 40px;opacity:.7"></div>
-      <div id="filmRay" style="position:absolute;left:0;right:0;top:0;height:34%;background:linear-gradient(180deg,transparent,rgba(234,185,74,.06),transparent);opacity:0;pointer-events:none"></div>
-
       <div style="position:absolute;inset:0;display:grid;grid-template-columns:1.15fr .85fr;gap:0">
-        <div id="filmRows" style="padding:clamp(18px,3.2vw,40px);display:flex;flex-direction:column;justify-content:center;gap:clamp(6px,1.1vh,12px);min-width:0"></div>
+        <div id="filmRows" style="position:relative;padding:clamp(18px,3.2vw,40px);display:flex;flex-direction:column;justify-content:center;gap:clamp(6px,1.1vh,12px);min-width:0"></div>
         <div style="padding:clamp(18px,3.2vw,40px) clamp(18px,3.2vw,40px) clamp(18px,3.2vw,40px) 0;display:flex;flex-direction:column;justify-content:center;border-left:1px solid #1C2230;min-width:0">
           <p id="stageKicker" style="font-family:'JetBrains Mono',monospace;font-size:clamp(10px,.9vw,11.5px);letter-spacing:.18em;color:#8B93A3">STAGE 01 / 07</p>
           <p id="stageTitle" style="margin-top:12px;font-size:clamp(14px,1.5vw,20px);font-weight:600;line-height:1.3;color:#EEF1F6;text-wrap:pretty">The ArkaOS stack, one layer at a time.</p>
@@ -498,51 +497,84 @@ bootc-image-builder \
       bodyEl = document.getElementById("stageBody"),
       progress = document.getElementById("filmProgress"),
       overlay = document.getElementById("playOverlay"),
-      ray = document.getElementById("filmRay"),
       toggle = document.getElementById("filmToggle"),
       playBtn = document.getElementById("playBtn");
+
+  // the right-hand stage panel cross-fades between layers
+  var detail = kicker.parentNode;
+  detail.style.transition = "opacity .35s ease, transform .35s ease";
+
+  // a light beam that travels down the stack to the active layer
+  filmRows.style.position = "relative";
+  var scan = document.createElement("div");
+  scan.style.cssText = "position:absolute;left:8px;right:8px;height:2px;border-radius:2px;opacity:0;pointer-events:none;top:0;" +
+    "background:linear-gradient(90deg,transparent,#16C784 30%,#54D6C6 70%,transparent);box-shadow:0 0 16px rgba(22,199,132,.5);" +
+    "transition:top .55s cubic-bezier(.4,0,.2,1),opacity .4s ease";
+  filmRows.appendChild(scan);
 
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var step = 0, playing = false, started = false, timer = null;
 
   function paintRows() {
     rowEls.forEach(function (row, i) {
-      var on = !started || reduced ? true : i <= step;
+      var passed = !started || reduced ? true : i <= step; // beam has reached this layer
       var active = started && !reduced && i === step;
-      row.style.cssText = "display:flex;align-items:center;gap:12px;padding:9px 14px;border-radius:8px;min-width:0;transition:opacity .5s ease,transform .5s ease,background .5s ease,border-color .5s ease;" +
-        "background:" + (active ? "rgba(22,199,132,.07)" : "transparent") + ";border:1px solid " + (active ? "rgba(22,199,132,.35)" : "transparent") + ";" +
-        "opacity:" + (on ? 1 : 0.22) + ";transform:translateX(" + (active ? "6px" : "0") + ")";
-      row.querySelector(".dot").style.background = active ? "#16C784" : row.dataset.c;
-      row.querySelector(".dot").style.opacity = active ? "1" : ".55";
-      row.querySelector(".nm").style.color = active ? "#EEF1F6" : "#8B93A3";
+      row.style.cssText = "position:relative;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:9px;min-width:0;" +
+        "transition:opacity .5s ease,transform .45s cubic-bezier(.4,0,.2,1),background .5s ease;" +
+        "background:" + (active ? "rgba(22,199,132,.08)" : "transparent") + ";" +
+        "opacity:" + (passed ? 1 : 0.28) + ";transform:translateX(" + (active ? "8px" : "0") + ") scale(" + (active ? "1.015" : "1") + ");" +
+        (active ? "animation:arkaIgnite .6s ease;" : "");
+      var dot = row.querySelector(".dot");
+      dot.style.background = passed ? "#16C784" : row.dataset.c;
+      dot.style.opacity = active ? "1" : passed ? ".8" : ".4";
+      dot.style.animation = active ? "arkaDot 1.6s ease-out infinite" : "none";
+      row.querySelector(".nm").style.color = active ? "#EEF1F6" : passed ? "#C6CCD8" : "#8B93A3";
       row.querySelector(".nm").style.fontWeight = active ? "600" : "500";
       row.querySelector(".mt").style.color = active ? row.dataset.c : "#5C6473";
     });
+    if (started && !reduced) {
+      var r = rowEls[step];
+      scan.style.top = r.offsetTop + r.offsetHeight / 2 - 1 + "px";
+      scan.style.opacity = "1";
+    } else {
+      scan.style.opacity = "0";
+    }
   }
-  function paintStage() {
+  function setStageText() {
     var cur = FILM[step];
     kicker.textContent = started ? cur.kicker : FILM[0].kicker;
     title.textContent = started ? cur.title : "The ArkaOS stack, one layer at a time.";
     bodyEl.textContent = started ? cur.body : "Press play to walk from the hardware\nup to the desktop.";
     progress.style.width = started ? ((step + 1) / FILM.length) * 100 + "%" : "0%";
-    ray.style.opacity = playing && !reduced ? "1" : "0";
-    ray.style.animation = playing && !reduced ? "arkaRay 9s linear infinite" : "none";
     toggle.textContent = reduced ? "reduced motion · static" : playing ? "pause" : started ? "play" : "skip intro";
   }
-  function tick() { step = (step + 1) % FILM.length; paintRows(); paintStage(); }
-  function run() { clearInterval(timer); timer = setInterval(tick, 2200); }
-  function play() { started = true; playing = true; step = 0; overlay.style.display = "none"; run(); paintRows(); paintStage(); }
+  function paintStage(fade) {
+    if (fade && started && !reduced) {
+      detail.style.opacity = "0";
+      detail.style.transform = "translateY(8px)";
+      setTimeout(function () {
+        setStageText();
+        detail.style.opacity = "1";
+        detail.style.transform = "none";
+      }, 190);
+    } else {
+      setStageText();
+    }
+  }
+  function tick() { step = (step + 1) % FILM.length; paintRows(); paintStage(true); }
+  function run() { clearInterval(timer); timer = setInterval(tick, 2600); }
+  function play() { started = true; playing = true; step = 0; overlay.style.display = "none"; paintRows(); paintStage(false); run(); }
 
   playBtn.addEventListener("click", play);
   toggle.addEventListener("click", function () {
     if (reduced) return;
     if (!started) { play(); return; }
     if (playing) { clearInterval(timer); playing = false; } else { playing = true; run(); }
-    paintStage();
+    setStageText();
   });
 
   if (reduced) { started = true; step = FILM.length - 1; overlay.style.display = "none"; }
-  paintRows(); paintStage();
+  paintRows(); paintStage(false);
 })();
 </script>
 </body>
