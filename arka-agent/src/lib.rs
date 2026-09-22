@@ -15,3 +15,6 @@ pub mod tools;
 
 #[cfg(test)]
 mod write_tests;
+
+#[cfg(test)]
+mod eval;
