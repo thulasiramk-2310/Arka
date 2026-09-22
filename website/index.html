@@ -29,6 +29,49 @@
   @keyframes arkaIgnite { 0% { box-shadow: 0 0 0 1px rgba(22,199,132,0), 0 0 0 rgba(22,199,132,0); } 35% { box-shadow: 0 0 0 1px rgba(22,199,132,.55), 0 0 26px rgba(22,199,132,.28); } 100% { box-shadow: 0 0 0 1px rgba(22,199,132,.28), 0 0 0 rgba(22,199,132,0); } }
   @keyframes arkaDot { 0% { box-shadow: 0 0 0 0 rgba(22,199,132,.55); } 70%, 100% { box-shadow: 0 0 0 6px rgba(22,199,132,0); } }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
+
+  /* ── "what ArkaOS is" multi-scene walkthrough ── */
+  #filmStage .stage { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 42%, #0b1220, #06070C 62%); }
+  #filmStage .scn { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity .8s ease; padding: 5%; }
+  #filmStage .scn.on { opacity: 1; }
+  #filmStage .aw { width: min(92%, 780px); text-align: center; position: relative; }
+  #filmStage .alab { font-family: 'JetBrains Mono', monospace; font-size: clamp(9px,1.2vw,12px); letter-spacing: .3em; text-transform: uppercase; color: #8B93A3; }
+  #filmStage .rise { opacity: 0; transform: translateY(12px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+  #filmStage .scn.on .rise { opacity: 1; transform: none; }
+  #filmStage .scn.on .r2 { transition-delay: .3s; } #filmStage .scn.on .r3 { transition-delay: .6s; } #filmStage .scn.on .r4 { transition-delay: .9s; }
+  #filmStage .spark { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%,-50%) scale(.2); background: radial-gradient(circle, #fff, #F6ECCB 45%, rgba(246,236,203,0) 72%); box-shadow: 0 0 50px 16px rgba(246,236,203,.5), 0 0 140px 50px rgba(234,185,74,.22); }
+  #filmStage .scn.on .spark { animation: arkaSpark 3.4s ease forwards; }
+  @keyframes arkaSpark { 0% { transform: translate(-50%,-50%) scale(.15); opacity: 0; } 20% { opacity: 1; transform: translate(-50%,-50%) scale(1); } 100% { transform: translate(-50%,-50%) scale(3.6); opacity: .9; } }
+  #filmStage .ring { position: absolute; left: 50%; top: 50%; width: 34%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%,-50%) scale(.4); opacity: 0; border: 2px solid transparent; }
+  #filmStage .scn.on .ring { animation: arkaRing 3.4s ease forwards; }
+  @keyframes arkaRing { 40% { opacity: 0; } 70% { opacity: 1; border-color: rgba(246,236,203,.7); transform: translate(-50%,-50%) scale(1); } 100% { opacity: .85; border-color: rgba(22,199,132,.75); box-shadow: 0 0 40px rgba(22,199,132,.3) inset; transform: translate(-50%,-50%) scale(1.05); } }
+  #filmStage .alayers { display: flex; flex-direction: column; gap: 8px; width: min(72%,430px); margin: 16px auto 0; }
+  #filmStage .aly { border: 1px solid #1C2230; border-radius: 11px; padding: 10px 14px; text-align: left; display: flex; justify-content: space-between; gap: 10px; font-size: clamp(12px,1.5vw,15px); color: #EEF1F6; }
+  #filmStage .aly .m { font-family: 'JetBrains Mono', monospace; font-size: clamp(8px,1vw,11px); color: #8B93A3; }
+  #filmStage .aly.top { border-color: rgba(22,199,132,.5); background: linear-gradient(180deg, rgba(22,199,132,.12), transparent); color: #54D6C6; }
+  #filmStage .asys { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 16px; }
+  #filmStage .asys.two { grid-template-columns: 1fr 1fr; }
+  #filmStage .asys .c { border: 1px solid #1C2230; border-radius: 12px; padding: 12px; text-align: left; background: #0E1119; }
+  #filmStage .asys .k { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+  #filmStage .asys .k.g { color: #16C784; } #filmStage .asys .k.b { color: #54D6C6; } #filmStage .asys .k.a { color: #EAB94A; }
+  #filmStage .asys .h { font-weight: 700; font-size: clamp(13px,1.6vw,16px); margin-top: 3px; color: #EEF1F6; }
+  #filmStage .atel { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; font-size: clamp(10px,1.3vw,13px); }
+  #filmStage .atel span { border: 1px solid #1C2230; border-radius: 8px; padding: 5px 10px; background: #0E1119; color: #8B93A3; }
+  #filmStage .atel b { color: #16C784; }
+  #filmStage .apipe { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  #filmStage .apipe span { font-family: 'JetBrains Mono', monospace; font-size: clamp(8px,1vw,11px); letter-spacing: .1em; border: 1px solid #1C2230; border-radius: 7px; padding: 5px 8px; color: #8B93A3; opacity: .4; transition: all .4s; }
+  #filmStage .apipe span.on2 { opacity: 1; color: #16C784; border-color: rgba(22,199,132,.5); background: rgba(22,199,132,.08); }
+  #filmStage .aalert { margin: 12px auto 0; width: min(92%,400px); border: 1px solid rgba(234,185,74,.4); background: linear-gradient(180deg, rgba(234,185,74,.1), transparent); border-radius: 11px; padding: 10px 13px; text-align: left; display: flex; gap: 10px; opacity: 0; transform: translateY(6px); }
+  #filmStage .scn.on .aalert { opacity: 1; transform: none; transition: all .6s ease 2.2s; }
+  #filmStage .aalert .t { font-weight: 600; font-size: 13px; color: #EEF1F6; }
+  #filmStage .aalert .e { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #EAB94A; }
+  #filmStage .aalert .dot { width: 8px; height: 8px; border-radius: 50%; background: #EAB94A; margin-top: 4px; flex: 0 0 auto; }
+  #filmStage .abrand { font-weight: 900; letter-spacing: .1em; font-size: clamp(26px,5vw,58px); color: #16C784; text-shadow: 0 0 50px rgba(22,199,132,.35); }
+  #filmStage .atag { font-size: clamp(12px,1.6vw,17px); margin-top: 8px; color: #EEF1F6; }
+  #filmStage .apil { font-family: 'JetBrains Mono', monospace; font-size: clamp(9px,1.1vw,12px); letter-spacing: .22em; text-transform: uppercase; color: #8B93A3; margin-top: 8px; }
+  #filmStage .aprog { position: absolute; left: 0; top: 0; height: 2px; width: 0; background: linear-gradient(90deg,#16C784,#54D6C6); z-index: 4; }
+  #filmStage .poster { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; cursor: pointer; background: radial-gradient(circle at 50% 50%, rgba(6,7,12,.55), rgba(6,7,12,.9)); }
+  #filmStage.playing .poster { display: none; }
 </style>
 </head>
 <body>
@@ -94,37 +137,52 @@
   </section>
 
   <section id="film" style="max-width:1200px;margin:0 auto;padding:88px 24px">
-    <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">See how ArkaOS works.</h2>
-    <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">From Linux infrastructure to the desktop — what actually runs, top to bottom.</p>
+    <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">See what ArkaOS is.</h2>
+    <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">A short walkthrough — the idea, the Linux it stands on, and the three systems that make it ArkaOS.</p>
 
-    <div style="margin-top:34px;position:relative;aspect-ratio:16/9;background:#0E1119;border:1px solid #1C2230;border-radius:14px;overflow:hidden">
-      <div style="position:absolute;inset:0;background-image:linear-gradient(#11151F 1px,transparent 1px),linear-gradient(90deg,#11151F 1px,transparent 1px);background-size:40px 40px;opacity:.7"></div>
-      <div style="position:absolute;inset:0;display:grid;grid-template-columns:1.15fr .85fr;gap:0">
-        <div id="filmRows" style="position:relative;padding:clamp(18px,3.2vw,40px);display:flex;flex-direction:column;justify-content:center;gap:clamp(6px,1.1vh,12px);min-width:0"></div>
-        <div style="padding:clamp(18px,3.2vw,40px) clamp(18px,3.2vw,40px) clamp(18px,3.2vw,40px) 0;display:flex;flex-direction:column;justify-content:center;border-left:1px solid #1C2230;min-width:0">
-          <p id="stageKicker" style="font-family:'JetBrains Mono',monospace;font-size:clamp(10px,.9vw,11.5px);letter-spacing:.18em;color:#8B93A3">STAGE 01 / 07</p>
-          <p id="stageTitle" style="margin-top:12px;font-size:clamp(14px,1.5vw,20px);font-weight:600;line-height:1.3;color:#EEF1F6;text-wrap:pretty">The ArkaOS stack, one layer at a time.</p>
-          <p id="stageBody" style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:clamp(10.5px,1vw,13px);line-height:1.7;color:#8B93A3;white-space:pre-line">Press play to walk from the hardware
-up to the desktop.</p>
-        </div>
+    <div id="filmStage" class="player" style="margin-top:34px;position:relative;aspect-ratio:16/9;border:1px solid #1C2230;border-radius:14px;overflow:hidden;background:#06070C">
+      <div class="stage">
+        <div class="aprog" id="aprog"></div>
+
+        <div class="scn" data-s="spark"><span class="spark"></span><span class="ring"></span><div class="aw"><p class="alab" style="position:absolute;left:0;right:0;bottom:-32%">Arka · a ray of light</p></div></div>
+
+        <div class="scn" data-s="stack"><div class="aw"><p class="alab rise">One image, top to bottom</p><div class="alayers">
+          <div class="aly top rise r4"><span>ArkaOS</span><span class="m">privacy · reliability · desktop</span></div>
+          <div class="aly rise r3"><span>Fedora bootc</span><span class="m">immutable · composefs · atomic</span></div>
+          <div class="aly rise r2"><span>Linux</span><span class="m">the foundation</span></div>
+        </div></div></div>
+
+        <div class="scn" data-s="sys"><div class="aw"><p class="alab rise">Three systems, one OS</p><div class="asys">
+          <div class="c rise r2"><div class="k g">Privacy</div><div class="h">arkad</div></div>
+          <div class="c rise r3"><div class="k b">Reliability</div><div class="h">arka-pulse</div></div>
+          <div class="c rise r4"><div class="k a">Recovery</div><div class="h">rollback</div></div>
+        </div></div></div>
+
+        <div class="scn" data-s="priv"><div class="aw"><p class="alab rise">Privacy · enforced at boot</p><div class="asys two rise r2">
+          <div class="c"><div class="k g">Network identity</div><div class="h" style="font-size:14px">MAC randomized</div></div>
+          <div class="c"><div class="k g">Name resolution</div><div class="h" style="font-size:14px">DNS over TLS</div></div>
+          <div class="c"><div class="k g">Hostname</div><div class="h" style="font-size:14px">masked</div></div>
+          <div class="c"><div class="k g">Browser</div><div class="h" style="font-size:14px">bubblewrap sandbox</div></div>
+        </div></div></div>
+
+        <div class="scn" data-s="rel"><div class="aw"><p class="alab rise">Reliability · arka-pulse</p>
+          <div class="atel rise r2"><span>CPU <b>27%</b></span><span>MEM <b>38%</b></span><span>TEMP <b>51°C</b></span></div>
+          <div class="apipe" id="apipe"><span>MONITOR</span><span>DETECT</span><span>PREDICT</span><span>EXPLAIN</span><span>VERIFY</span></div>
+          <div class="aalert"><span class="dot"></span><div><div class="t">Potential instability detected</div><div class="e">estimated · recommends, does not act</div></div></div>
+        </div></div>
+
+        <div class="scn" data-s="end"><div class="aw"><div class="abrand rise">ARKAOS</div><div class="atag rise r2">Built on Linux. Designed for people.</div><div class="apil rise r3">Privacy · Reliability · Recovery</div></div></div>
+
+        <div class="actrl" style="position:absolute;bottom:12px;right:12px;z-index:5"><button type="button" id="areplay" style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:rgba(6,7,12,.75);border:1px solid #1C2230;color:#8B93A3;border-radius:999px;padding:6px 12px">replay</button></div>
       </div>
-
-      <div id="playOverlay" style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,rgba(6,7,12,.55),rgba(6,7,12,.88));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px">
-        <button type="button" id="playBtn" aria-label="Play the ArkaOS system walkthrough" style="width:74px;height:74px;border-radius:50%;border:1px solid #16C784;background:rgba(22,199,132,.1);color:#16C784;cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <div class="poster" id="poster" role="button" tabindex="0" aria-label="Play the ArkaOS walkthrough">
+        <div style="width:66px;height:66px;border-radius:50%;border:1px solid rgba(22,199,132,.5);display:flex;align-items:center;justify-content:center;background:rgba(22,199,132,.08)">
           <svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true"><path d="M3 2.2 19.5 12 3 21.8V2.2Z" fill="#16C784"/></svg>
-        </button>
-        <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">the ArkaOS stack · 7 stages</p>
-      </div>
-
-      <div style="position:absolute;left:0;right:0;bottom:0;height:2px;background:#1C2230">
-        <div id="filmProgress" style="height:100%;width:0%;background:linear-gradient(90deg,#16C784,#54D6C6);transition:width .6s ease"></div>
-      </div>
-
-      <div style="position:absolute;top:14px;right:16px;display:flex;gap:8px;align-items:center">
-        <button type="button" id="filmToggle" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3;background:rgba(6,7,12,.7);border:1px solid #1C2230;border-radius:5px;padding:6px 10px;cursor:pointer">skip intro</button>
+        </div>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">what ArkaOS is · 30-second walkthrough</p>
       </div>
     </div>
-    <p style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;line-height:1.6">Animated walkthrough of the ArkaOS stack. Static when reduced motion is enabled; every stage is also written out under <a href="#architecture">Architecture</a>.</p>
+    <p style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;line-height:1.6">A 30-second walkthrough of what ArkaOS is. Plays once; static when reduced motion is on. The layer-by-layer detail is under <a href="#architecture">Architecture</a>.</p>
   </section>
 
   <section id="features" style="max-width:1200px;margin:0 auto;padding:16px 24px 88px">
@@ -470,111 +528,56 @@ bootc-image-builder \
   }
   render();
 
-  // ── film walkthrough ──
-  var FILM = [
-    { name: "Hardware", meta: "x86_64 · UEFI", kicker: "STAGE 01 / 07", title: "It starts on a real machine.", body: "Real-hardware testing has begun.\nCompatibility is not yet guaranteed." },
-    { name: "Linux kernel", meta: "upstream", kicker: "STAGE 02 / 07", title: "An ordinary Linux kernel.", body: "No forked kernel. No custom drivers\nyou would have to trust." },
-    { name: "Fedora bootc + composefs", meta: "image foundation", kicker: "STAGE 03 / 07", title: "The OS ships as an image.", body: "composefs mounts the root read-only\nand verifies what it mounted." },
-    { name: "Immutable system", meta: "read-only root", kicker: "STAGE 04 / 07", title: "Updates are atomic.", body: "A new image is staged, then booted.\nThe previous image stays bootable — rollback\nis a reboot, not a repair session." },
-    { name: "arkad", meta: "privacy daemon", kicker: "STAGE 05 / 07", title: "Privacy is enforced on every boot.", body: "MAC address randomized\nDNS-over-TLS to Quad9\nhostname masked\nIPv6 privacy addresses" },
-    { name: "arka-pulse", meta: "reliability layer", kicker: "STAGE 06 / 07", title: "The system reports its own state.", body: "Local telemetry, detection and verification.\nPrediction and recovery actions are\nexperimental and constrained." },
-    { name: "ArkaOS desktop", meta: "KDE Plasma", kicker: "STAGE 07 / 07", title: "A desktop you already know.", body: "KDE Plasma, with Firefox running\ninside a bubblewrap sandbox." }
-  ];
-  var filmRows = document.getElementById("filmRows");
-  var rowEls = FILM.map(function (l, i) {
-    var row = document.createElement("div");
-    var c = i === 4 ? "#16C784" : i === 5 ? "#54D6C6" : i === 3 ? "#EAB94A" : "#8B93A3";
-    row.dataset.c = c;
-    row.innerHTML =
-      '<span class="dot" style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:' + c + '"></span>' +
-      '<span class="nm" style="font-size:clamp(11.5px,1.15vw,15px);font-weight:500;color:#8B93A3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + l.name + '</span>' +
-      '<span class="mt" style="font-family:' + MONO + ';font-size:clamp(9px,.78vw,11px);color:#5C6473;margin-left:auto;white-space:nowrap">' + l.meta + '</span>';
-    filmRows.appendChild(row);
-    return row;
-  });
-  var kicker = document.getElementById("stageKicker"),
-      title = document.getElementById("stageTitle"),
-      bodyEl = document.getElementById("stageBody"),
-      progress = document.getElementById("filmProgress"),
-      overlay = document.getElementById("playOverlay"),
-      toggle = document.getElementById("filmToggle"),
-      playBtn = document.getElementById("playBtn");
-
-  // the right-hand stage panel cross-fades between layers
-  var detail = kicker.parentNode;
-  detail.style.transition = "opacity .35s ease, transform .35s ease";
-
-  // a light beam that travels down the stack to the active layer
-  filmRows.style.position = "relative";
-  var scan = document.createElement("div");
-  scan.style.cssText = "position:absolute;left:8px;right:8px;height:2px;border-radius:2px;opacity:0;pointer-events:none;top:0;" +
-    "background:linear-gradient(90deg,transparent,#16C784 30%,#54D6C6 70%,transparent);box-shadow:0 0 16px rgba(22,199,132,.5);" +
-    "transition:top .55s cubic-bezier(.4,0,.2,1),opacity .4s ease";
-  filmRows.appendChild(scan);
-
+  // ── "what ArkaOS is" walkthrough (multi-scene) ──
+  var player = document.getElementById("filmStage"),
+      aprog = document.getElementById("aprog"),
+      poster = document.getElementById("poster"),
+      areplay = document.getElementById("areplay");
+  var scns = [].slice.call(player.querySelectorAll(".scn"));
+  var pipe = [].slice.call(document.querySelectorAll("#apipe span"));
+  // [sceneIndex, at-ms]
+  var cues = [[0, 0], [1, 4200], [2, 8600], [3, 13000], [4, 17600], [5, 23800]];
+  var TOTAL = 27800;
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var step = 0, playing = false, started = false, timer = null;
+  var timers = [], raf = 0, started = false;
 
-  function paintRows() {
-    rowEls.forEach(function (row, i) {
-      var passed = !started || reduced ? true : i <= step; // beam has reached this layer
-      var active = started && !reduced && i === step;
-      row.style.cssText = "position:relative;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:9px;min-width:0;" +
-        "transition:opacity .5s ease,transform .45s cubic-bezier(.4,0,.2,1),background .5s ease;" +
-        "background:" + (active ? "rgba(22,199,132,.08)" : "transparent") + ";" +
-        "opacity:" + (passed ? 1 : 0.28) + ";transform:translateX(" + (active ? "8px" : "0") + ") scale(" + (active ? "1.015" : "1") + ");" +
-        (active ? "animation:arkaIgnite .6s ease;" : "");
-      var dot = row.querySelector(".dot");
-      dot.style.background = passed ? "#16C784" : row.dataset.c;
-      dot.style.opacity = active ? "1" : passed ? ".8" : ".4";
-      dot.style.animation = active ? "arkaDot 1.6s ease-out infinite" : "none";
-      row.querySelector(".nm").style.color = active ? "#EEF1F6" : passed ? "#C6CCD8" : "#8B93A3";
-      row.querySelector(".nm").style.fontWeight = active ? "600" : "500";
-      row.querySelector(".mt").style.color = active ? row.dataset.c : "#5C6473";
+  function clr() { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); }
+  function show(i) { scns.forEach(function (s, k) { s.classList.toggle("on", k === i); }); }
+  function pipeRun() { pipe.forEach(function (p, k) { timers.push(setTimeout(function () { p.classList.add("on2"); }, 300 + k * 430)); }); }
+
+  function play() {
+    clr();
+    player.classList.add("playing");
+    if (reduced) { // static: hold the final logo frame, whole pipeline lit
+      show(5);
+      pipe.forEach(function (p) { p.classList.add("on2"); });
+      aprog.style.width = "100%";
+      return;
+    }
+    pipe.forEach(function (p) { p.classList.remove("on2"); });
+    var t0 = performance.now();
+    cues.forEach(function (c) {
+      timers.push(setTimeout(function () { show(c[0]); if (c[0] === 4) pipeRun(); }, c[1]));
     });
-    if (started && !reduced) {
-      var r = rowEls[step];
-      scan.style.top = r.offsetTop + r.offsetHeight / 2 - 1 + "px";
-      scan.style.opacity = "1";
-    } else {
-      scan.style.opacity = "0";
-    }
+    (function tickBar() {
+      var p = Math.min((performance.now() - t0) / TOTAL, 1);
+      aprog.style.width = p * 100 + "%";
+      if (p < 1) raf = requestAnimationFrame(tickBar);
+    })();
   }
-  function setStageText() {
-    var cur = FILM[step];
-    kicker.textContent = started ? cur.kicker : FILM[0].kicker;
-    title.textContent = started ? cur.title : "The ArkaOS stack, one layer at a time.";
-    bodyEl.textContent = started ? cur.body : "Press play to walk from the hardware\nup to the desktop.";
-    progress.style.width = started ? ((step + 1) / FILM.length) * 100 + "%" : "0%";
-    toggle.textContent = reduced ? "reduced motion · static" : playing ? "pause" : started ? "play" : "skip intro";
-  }
-  function paintStage(fade) {
-    if (fade && started && !reduced) {
-      detail.style.opacity = "0";
-      detail.style.transform = "translateY(8px)";
-      setTimeout(function () {
-        setStageText();
-        detail.style.opacity = "1";
-        detail.style.transform = "none";
-      }, 190);
-    } else {
-      setStageText();
-    }
-  }
-  function tick() { step = (step + 1) % FILM.length; paintRows(); paintStage(true); }
-  function run() { clearInterval(timer); timer = setInterval(tick, 2600); }
-  function play() { started = true; playing = true; step = 0; overlay.style.display = "none"; paintRows(); paintStage(false); run(); }
 
-  playBtn.addEventListener("click", play);
-  toggle.addEventListener("click", function () {
-    if (reduced) return;
-    if (!started) { play(); return; }
-    if (playing) { clearInterval(timer); playing = false; } else { playing = true; run(); }
-    setStageText();
-  });
+  function start() { if (started) return; started = true; play(); }
+  poster.addEventListener("click", start);
+  poster.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } });
+  areplay.addEventListener("click", function () { started = true; play(); });
 
-  if (reduced) { started = true; step = FILM.length - 1; overlay.style.display = "none"; }
-  paintRows(); paintStage(false);
+  // autoplay once when the film scrolls into view, from the visible poster
+  if ("IntersectionObserver" in window && !reduced) {
+    var io = new IntersectionObserver(function (en) {
+      en.forEach(function (x) { if (x.isIntersecting) { start(); io.disconnect(); } });
+    }, { threshold: 0.5 });
+    io.observe(player);
+  }
 })();
 </script>
 </body>
