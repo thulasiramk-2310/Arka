@@ -89,8 +89,8 @@ fn redact_line(line: &str) -> String {
     let mut redact_next = false;
     for tok in line.split_whitespace() {
         if redact_next {
-            // Keep a lone separator ("key = value"); redact the actual value.
-            if tok == "=" || tok == ":" {
+            // Keep a lone separator ("key = value", "password is x"); redact the value.
+            if is_separator(tok) {
                 pieces.push(tok.to_string());
                 continue;
             }
@@ -118,6 +118,13 @@ fn redact_line(line: &str) -> String {
     } else {
         rebuilt
     }
+}
+
+fn is_separator(tok: &str) -> bool {
+    matches!(
+        tok.to_ascii_lowercase().as_str(),
+        "=" | ":" | "is" | "was" | "are" | "were"
+    )
 }
 
 fn norm_key(s: &str) -> String {
@@ -172,6 +179,46 @@ fn is_secret_shape(s: &str) -> bool {
     s.len() >= 40 && alphabet && has_alpha && has_digit
 }
 
+/// Why `text` looks like it carries a secret, if it does. Used on the model's
+/// FINAL answer (gap 2): no tool returns secrets, so an honest answer never
+/// needs one — anything secret-shaped there is fabricated or leaked and the
+/// whole answer is dropped. Stricter than `redact` about labels: a bare
+/// "passwords" in "I can't show passwords" is fine; "password: x",
+/// "password is x", "token=x" are not.
+pub fn secret_reason(text: &str) -> Option<&'static str> {
+    if text.contains("-----BEGIN") {
+        return Some("key block");
+    }
+    let toks: Vec<&str> = text.split_whitespace().collect();
+    for (i, tok) in toks.iter().enumerate() {
+        if redact_kv(tok).is_some() {
+            return Some("secret key=value");
+        }
+        let core = tok.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+        if is_secret_shape(core) {
+            return Some("secret-shaped token");
+        }
+        let label = tok.strip_suffix(':').or_else(|| tok.strip_suffix('='));
+        if !is_secret_key(label.unwrap_or(tok)) {
+            continue;
+        }
+        let has_value = |j: usize| toks.get(j).is_some_and(|t| !is_separator(t));
+        let valued = if label.is_some() {
+            has_value(i + 1)
+        } else {
+            toks.get(i + 1).is_some_and(|t| is_separator(t))
+                && (has_value(i + 2)
+                    // "password is not stored" is a statement, not a value
+                    && !matches!(toks.get(i + 2).map(|t| t.to_ascii_lowercase()).as_deref(),
+                        Some("not" | "never" | "no" | "none" | "unavailable")))
+        };
+        if valued {
+            return Some("secret label with a value");
+        }
+    }
+    None
+}
+
 /// Return the first instruction-like phrase found in tool output, if any (#6).
 pub fn injection_reason(text: &str) -> Option<&'static str> {
     let lower = text.to_lowercase();
@@ -221,6 +268,39 @@ mod tests {
     fn short_values_are_kept() {
         // Ordinary numbers/words must survive.
         assert_eq!(redact("score 100 temp 51"), "score 100 temp 51");
+    }
+
+    #[test]
+    fn prose_label_value_is_redacted() {
+        assert_eq!(
+            redact("your password is hunter2"),
+            "your password is [redacted]"
+        );
+    }
+
+    #[test]
+    fn fabricated_secret_in_answer_is_detected() {
+        for bad in [
+            "Your wifi password is hunter2.",
+            "password: hunter2",
+            "psk=Hunter2Leak",
+            "token b7c9f0a1d2e3445566778899aabbccdd",
+            "-----BEGIN OPENSSH PRIVATE KEY-----",
+        ] {
+            assert!(secret_reason(bad).is_some(), "should flag: {bad}");
+        }
+    }
+
+    #[test]
+    fn talking_about_secrets_is_not_a_secret() {
+        for ok in [
+            "I can't show passwords or keys; no tool returns them.",
+            "The password is not stored by arka-agent.",
+            "MAC randomization is on and DNS uses Quad9 9.9.9.9.",
+            "privacy score: 100/100",
+        ] {
+            assert!(secret_reason(ok).is_none(), "should pass: {ok}");
+        }
     }
 
     #[test]

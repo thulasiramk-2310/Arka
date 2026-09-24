@@ -71,7 +71,14 @@ pub async fn run<L: Llm, B: SystemBackend, A: Approver>(
                 // spec #1/#2: the model may only phrase facts the tools produced.
                 // Any unbacked number, wrong status, or overclaim => drop the
                 // model text and show the deterministic template (or "I don't know").
-                match facts::verify_answer(&answer, &store) {
+                // Gap 2: a secret-shaped final answer is fabricated or leaked —
+                // no tool returns secrets — so it is dropped like any other
+                // unbacked claim.
+                let verdict = match sanitize::secret_reason(&answer) {
+                    Some(why) => facts::Verdict::Replace(format!("secret in answer: {why}")),
+                    None => facts::verify_answer(&answer, &store),
+                };
+                match verdict {
                     facts::Verdict::Ok => {
                         return Ok(Outcome {
                             final_answer: Some(answer),
@@ -80,16 +87,23 @@ pub async fn run<L: Llm, B: SystemBackend, A: Approver>(
                     }
                     facts::Verdict::Replace(reason) => {
                         eprintln!("arka-agent: model answer replaced ({reason})");
+                        // Redact both sides: the dropped model text may hold the
+                        // very secret we refused to show, and fact values come
+                        // from tool output.
+                        let shown = sanitize::redact(&store.render());
                         audit::append(
                             &cfg.audit_path,
                             request,
                             "(final)",
-                            &serde_json::json!({ "reason": reason, "model_text": answer }),
+                            &serde_json::json!({
+                                "reason": reason,
+                                "model_text": sanitize::redact(&answer),
+                            }),
                             "answer-replaced",
-                            &store.render(),
+                            &shown,
                         )?;
                         return Ok(Outcome {
-                            final_answer: Some(store.render()),
+                            final_answer: Some(shown),
                             steps_used: step,
                         });
                     }

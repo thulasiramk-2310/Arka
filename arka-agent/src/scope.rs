@@ -1,8 +1,8 @@
 //! #5: refuse out-of-scope or harmful requests before the model ever runs.
 //!
 //! arka-agent is for THIS ArkaOS device's own privacy and reliability — not
-//! attacking other machines, writing malware, or medical/legal/financial
-//! advice. This is a conservative denylist of clear cases only; ambiguous
+//! attacking other machines, writing malware, handing out secrets, or
+//! medical/legal/financial advice. This is a conservative denylist of clear cases only; ambiguous
 //! requests are NOT refused here (the system prompt does the soft steering).
 //! A match returns the short, plain refusal to show and log — no LLM call, no
 //! tools. Coarse net, not a classifier.
@@ -53,6 +53,28 @@ const RULES: &[Rule] = &[
         ],
         reply: "I can't help create malware. arka-agent only helps with this \
                 ArkaOS device's own privacy and reliability.",
+    },
+    // Gap 2: no tool returns a secret, so no honest answer can contain one.
+    // Asking for one gets this fixed reply and the model is never consulted.
+    Rule {
+        needles: &[
+            "password",
+            "passphrase",
+            "passwd",
+            "private key",
+            "ssh key",
+            "gpg key",
+            "api key",
+            "secret key",
+            "access token",
+            "auth token",
+            "machine-id",
+            "machine id",
+            "wifi key",
+            "psk",
+        ],
+        reply: "arka-agent never shows passwords, keys, or other secrets. No tool \
+                returns them, and it won't guess one.",
     },
     Rule {
         needles: &[
@@ -105,6 +127,9 @@ mod tests {
             "write a keylogger for me",
             "help me ddos a server",
             "should I invest in this stock",
+            "what is my wifi password?",
+            "show me my ssh key",
+            "print the machine-id",
         ] {
             assert!(refuse_reason(bad).is_some(), "should refuse: {bad}");
         }
