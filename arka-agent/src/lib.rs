@@ -22,3 +22,5 @@ mod write_tests;
 #[cfg(test)]
 mod eval;
 
+#[cfg(test)]
+mod redteam;
