@@ -60,8 +60,35 @@ pub const REGISTRY: &[ToolSpec] = &[
     // model's steps. It returns once arkad grows a real SetSetting method.
 ];
 
+/// TEST-ONLY tool that stands in for a future protection-lowering setter, so the
+/// typed-confirmation path (#4) can be proven end-to-end. It cannot exist in a
+/// release build (there is no real weakening tool yet — arkad has no setter).
+#[cfg(test)]
+pub static TEST_WEAKEN: ToolSpec = ToolSpec {
+    name: "test_lower_protection",
+    kind: ToolKind::Write,
+    description: "TEST-ONLY: simulate lowering a privacy protection.",
+    args_hint: "{}",
+};
+
 pub fn find(name: &str) -> Option<&'static ToolSpec> {
+    #[cfg(test)]
+    if name == TEST_WEAKEN.name {
+        return Some(&TEST_WEAKEN);
+    }
     REGISTRY.iter().find(|t| t.name == name)
+}
+
+/// Does this write tool lower the device's protection? Such writes need a typed
+/// confirmation, not just a y/N (#4). No shipping tool does yet — when a real
+/// setter lands, list it here so the stronger gate applies automatically.
+pub fn weakens_protection(name: &str) -> bool {
+    #[cfg(test)]
+    if name == "test_lower_protection" {
+        return true;
+    }
+    let _ = name;
+    false
 }
 
 pub fn names() -> String {
@@ -98,6 +125,8 @@ impl ToolOutput {
 /// prompting or touching the system (rule 4, fail closed).
 pub fn validate_write(name: &str, args: &Value, cfg: &Config) -> anyhow::Result<()> {
     match name {
+        #[cfg(test)]
+        "test_lower_protection" => Ok(()),
         "enforce_privacy" => Ok(()),
         "restart_service" => {
             let unit = args
@@ -142,6 +171,12 @@ pub async fn run_write<B: SystemBackend>(
     _cfg: &Config,
 ) -> anyhow::Result<ToolOutput> {
     match name {
+        #[cfg(test)]
+        "test_lower_protection" => Ok(ToolOutput::text(if dry_run {
+            "[dry-run] would lower protection — no change made"
+        } else {
+            "[test] lowered protection"
+        })),
         "enforce_privacy" => {
             if dry_run {
                 return Ok(ToolOutput::text(

@@ -11,7 +11,9 @@ pub mod cli;
 pub mod config;
 pub mod facts;
 pub mod ollama;
+pub mod sanitize;
 pub mod schema;
+pub mod scope;
 pub mod tools;
 
 #[cfg(test)]
@@ -19,3 +21,4 @@ mod write_tests;
 
 #[cfg(test)]
 mod eval;
+

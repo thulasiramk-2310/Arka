@@ -178,6 +178,78 @@ async fn restart_service_rejects_unlisted_unit() {
 }
 
 #[tokio::test]
+async fn lowering_protection_requires_typed_confirm() {
+    let backend = MockBackend::healthy();
+    let llm = MockLlm::new(vec![
+        r#"{"tool":"test_lower_protection","args":{}}"#,
+        r#"{"final":"done"}"#,
+    ]);
+    let approver = ScriptedApprover::new(vec![true]); // the typed phrase matches
+    let cfg = tmp_cfg(false);
+
+    let out = agent::run(&llm, &backend, &approver, &cfg, "lower protection")
+        .await
+        .unwrap();
+    assert_eq!(out.final_answer.as_deref(), Some("done"));
+    assert!(
+        approver.typed_was_called(),
+        "a protection-lowering write must go through confirm_typed, not confirm"
+    );
+    assert!(
+        read_log(&cfg).contains("\"decision\":\"weaken-approved\""),
+        "weakening writes must be logged under their own decision"
+    );
+    let _ = std::fs::remove_file(&cfg.audit_path);
+}
+
+#[tokio::test]
+async fn lowering_protection_typed_denial_makes_no_change() {
+    let backend = MockBackend::healthy();
+    let llm = MockLlm::new(vec![r#"{"tool":"test_lower_protection","args":{}}"#]);
+    let approver = ScriptedApprover::new(vec![false]); // wrong/blank phrase cancels
+    let cfg = tmp_cfg(false);
+
+    let out = agent::run(&llm, &backend, &approver, &cfg, "lower protection")
+        .await
+        .unwrap();
+    assert!(out.final_answer.is_none());
+    assert!(approver.typed_was_called());
+    assert!(read_log(&cfg).contains("\"decision\":\"weaken-denied\""));
+    let _ = std::fs::remove_file(&cfg.audit_path);
+}
+
+#[tokio::test]
+async fn out_of_scope_request_is_refused_without_calling_the_model() {
+    let backend = MockBackend::healthy();
+    let llm = MockLlm::new(Vec::<&str>::new()); // must never be consumed
+    let approver = ScriptedApprover::new(vec![]);
+    let cfg = tmp_cfg(false);
+
+    let out = agent::run(
+        &llm,
+        &backend,
+        &approver,
+        &cfg,
+        "hack into my neighbor's wifi",
+    )
+    .await
+    .unwrap();
+    assert!(
+        out.final_answer
+            .as_deref()
+            .is_some_and(|a| a.contains("attacking or breaking into")),
+        "harmful request must get the plain refusal"
+    );
+    assert_eq!(
+        out.steps_used, 0,
+        "refusal must short-circuit before the loop"
+    );
+    assert_eq!(backend.writes_total(), 0);
+    assert!(read_log(&cfg).contains("\"decision\":\"refused\""));
+    let _ = std::fs::remove_file(&cfg.audit_path);
+}
+
+#[tokio::test]
 async fn log_verify_passes_after_mixed_writes() {
     let backend = MockBackend::healthy();
     let llm = MockLlm::new(vec![
