@@ -120,45 +120,23 @@ async fn dry_run_never_calls_backend() {
 }
 
 #[tokio::test]
-async fn set_privacy_setting_reports_not_implemented_in_arkad() {
-    let backend = MockBackend::healthy();
-    let llm = MockLlm::new(vec![
-        r#"{"tool":"set_privacy_setting","args":{"setting":"mac","enabled":false}}"#,
-        r#"{"final":"arkad has no setter yet."}"#,
-    ]);
-    let approver = ScriptedApprover::new(vec![true]);
-    let cfg = tmp_cfg(false);
-
-    agent::run(
-        &llm,
-        &backend,
-        &approver,
-        &cfg,
-        "turn off MAC randomization",
-    )
-    .await
-    .unwrap();
-    // Backend was called (real, non-dry) and returned the honest error.
-    assert_eq!(backend.setting_calls.load(Ordering::SeqCst), 1);
-    assert!(read_log(&cfg).contains("not implemented in arkad"));
-    let _ = std::fs::remove_file(&cfg.audit_path);
-}
-
-#[tokio::test]
 async fn bad_write_args_rejected_before_approval() {
     let backend = MockBackend::healthy();
     let llm = MockLlm::new(vec![
-        r#"{"tool":"set_privacy_setting","args":{"setting":"wifi","enabled":true}}"#, // invalid setting
-        r#"{"final":"Can't do that."}"#,
+        r#"{"tool":"restart_service","args":{}}"#, // missing unit -> bad args
+        r#"{"final":"That request is missing a unit."}"#,
     ]);
     // If approval were ever reached this would say yes; it must NOT be reached.
     let approver = ScriptedApprover::new(vec![true]);
     let cfg = tmp_cfg(false);
 
-    let out = agent::run(&llm, &backend, &approver, &cfg, "set wifi setting")
+    let out = agent::run(&llm, &backend, &approver, &cfg, "restart a service")
         .await
         .unwrap();
-    assert_eq!(out.final_answer.as_deref(), Some("Can't do that."));
+    assert_eq!(
+        out.final_answer.as_deref(),
+        Some("That request is missing a unit.")
+    );
     assert_eq!(
         backend.writes_total(),
         0,

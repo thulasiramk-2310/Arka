@@ -1,11 +1,16 @@
 //! Tool registry. Adding a tool = one row in `REGISTRY` + a runner arm (+ arg
 //! validation for writes). Read tools run automatically; write tools are
 //! approval-gated by the agent loop before `run_write` is ever called (rule 3).
+//!
+//! Read tools return both a human string (`output`) and typed `Fact`s: the
+//! agent collects the facts and verifies the model's final answer against them
+//! (see `facts`), so the model can never state an unbacked number or status.
 
 use serde_json::Value;
 
 use crate::backend::SystemBackend;
 use crate::config::Config;
+use crate::facts::Fact;
 
 pub mod arkad;
 pub mod pulse;
@@ -27,13 +32,15 @@ pub const REGISTRY: &[ToolSpec] = &[
     ToolSpec {
         name: "system_status",
         kind: ToolKind::Read,
-        description: "Current privacy state from arkad: score + MAC/DNS/hostname/IPv6/sandbox/browser.",
+        description:
+            "Current privacy state from arkad: score + MAC/DNS/hostname/IPv6/sandbox/browser.",
         args_hint: "{}",
     },
     ToolSpec {
         name: "pulse_health",
         kind: ToolKind::Read,
-        description: "System health from arka-pulse: worst severity, findings, key telemetry (CPU/mem/temp).",
+        description:
+            "System health from arka-pulse: worst severity, findings, key telemetry (CPU/mem/temp).",
         args_hint: "{}",
     },
     ToolSpec {
@@ -43,17 +50,14 @@ pub const REGISTRY: &[ToolSpec] = &[
         args_hint: "{}",
     },
     ToolSpec {
-        name: "set_privacy_setting",
-        kind: ToolKind::Write,
-        description: "Change one privacy setting. arkad has no setter yet, so this reports 'not implemented in arkad'.",
-        args_hint: "{\"setting\":\"mac|dns|hostname|ipv6\",\"enabled\":true|false}",
-    },
-    ToolSpec {
         name: "restart_service",
         kind: ToolKind::Write,
         description: "Restart an allow-listed systemd unit.",
         args_hint: "{\"unit\":\"NetworkManager\"}",
     },
+    // NOTE: there is deliberately no `set_privacy_setting` tool. arkad has no
+    // per-setting setter, so a tool that always fails would only waste the
+    // model's steps. It returns once arkad grows a real SetSetting method.
 ];
 
 pub fn find(name: &str) -> Option<&'static ToolSpec> {
@@ -68,27 +72,33 @@ pub fn names() -> String {
         .join(", ")
 }
 
+/// A tool's result: `output` is human/data text (fenced as data by the agent),
+/// `facts` are the typed truths the answer verifier is allowed to rely on.
 pub struct ToolOutput {
     pub output: String,
+    pub facts: Vec<Fact>,
 }
 
-const SETTINGS: &[&str] = &["mac", "dns", "hostname", "ipv6"];
+impl ToolOutput {
+    pub fn text(s: impl Into<String>) -> Self {
+        ToolOutput {
+            output: s.into(),
+            facts: vec![],
+        }
+    }
+    pub fn with_facts(s: impl Into<String>, facts: Vec<Fact>) -> Self {
+        ToolOutput {
+            output: s.into(),
+            facts,
+        }
+    }
+}
 
 /// Validate write-tool args BEFORE approval, so bad args reject without ever
 /// prompting or touching the system (rule 4, fail closed).
 pub fn validate_write(name: &str, args: &Value, cfg: &Config) -> anyhow::Result<()> {
     match name {
         "enforce_privacy" => Ok(()),
-        "set_privacy_setting" => {
-            let setting = args.get("setting").and_then(|v| v.as_str());
-            let enabled = args.get("enabled").and_then(|v| v.as_bool());
-            match (setting, enabled) {
-                (Some(s), Some(_)) if SETTINGS.contains(&s) => Ok(()),
-                _ => anyhow::bail!(
-                    "bad args: expected {{\"setting\": one of {SETTINGS:?}, \"enabled\": bool}}"
-                ),
-            }
-        }
         "restart_service" => {
             let unit = args
                 .get("unit")
@@ -134,39 +144,20 @@ pub async fn run_write<B: SystemBackend>(
     match name {
         "enforce_privacy" => {
             if dry_run {
-                return Ok(ToolOutput {
-                    output: "[dry-run] would call arkad EnforceAll() — no change made".into(),
-                });
+                return Ok(ToolOutput::text(
+                    "[dry-run] would call arkad EnforceAll() — no change made",
+                ));
             }
-            Ok(ToolOutput {
-                output: backend.enforce_all().await?,
-            })
-        }
-        "set_privacy_setting" => {
-            let setting = args.get("setting").and_then(|v| v.as_str()).unwrap_or("");
-            let enabled = args
-                .get("enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if dry_run {
-                return Ok(ToolOutput {
-                    output: format!("[dry-run] would set {setting}={enabled} — no change made"),
-                });
-            }
-            Ok(ToolOutput {
-                output: backend.set_privacy_setting(setting, enabled).await?,
-            })
+            Ok(ToolOutput::text(backend.enforce_all().await?))
         }
         "restart_service" => {
             let unit = args.get("unit").and_then(|v| v.as_str()).unwrap_or("");
             if dry_run {
-                return Ok(ToolOutput {
-                    output: format!("[dry-run] would restart {unit} — no change made"),
-                });
+                return Ok(ToolOutput::text(format!(
+                    "[dry-run] would restart {unit} — no change made"
+                )));
             }
-            Ok(ToolOutput {
-                output: backend.restart_service(unit).await?,
-            })
+            Ok(ToolOutput::text(backend.restart_service(unit).await?))
         }
         other => anyhow::bail!("'{other}' is not a write tool"),
     }

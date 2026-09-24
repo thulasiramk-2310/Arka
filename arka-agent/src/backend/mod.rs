@@ -47,9 +47,6 @@ pub trait SystemBackend {
     // ── write (reached only after approval; never called in dry-run) ──
     /// Re-apply every privacy enforcer — arkad `EnforceAll()`.
     async fn enforce_all(&self) -> anyhow::Result<String>;
-    /// Change one privacy setting. arkad exposes no setter, so the real backend
-    /// returns a clear "not implemented in arkad" error (rule 2).
-    async fn set_privacy_setting(&self, setting: &str, enabled: bool) -> anyhow::Result<String>;
     /// Restart an (already allow-list-checked) systemd unit.
     async fn restart_service(&self, unit: &str) -> anyhow::Result<String>;
 }
@@ -60,7 +57,6 @@ pub struct MockBackend {
     pub status: PrivacyStatus,
     pub pulse: PulseReport,
     pub enforce_calls: AtomicUsize,
-    pub setting_calls: AtomicUsize,
     pub restart_calls: AtomicUsize,
 }
 
@@ -84,14 +80,11 @@ impl MockBackend {
                 temp_max: Some(51.0),
             },
             enforce_calls: AtomicUsize::new(0),
-            setting_calls: AtomicUsize::new(0),
             restart_calls: AtomicUsize::new(0),
         }
     }
     pub fn writes_total(&self) -> usize {
-        self.enforce_calls.load(Ordering::SeqCst)
-            + self.setting_calls.load(Ordering::SeqCst)
-            + self.restart_calls.load(Ordering::SeqCst)
+        self.enforce_calls.load(Ordering::SeqCst) + self.restart_calls.load(Ordering::SeqCst)
     }
 }
 
@@ -105,11 +98,6 @@ impl SystemBackend for MockBackend {
     async fn enforce_all(&self) -> anyhow::Result<String> {
         self.enforce_calls.fetch_add(1, Ordering::SeqCst);
         Ok("re-applied all privacy enforcers".into())
-    }
-    async fn set_privacy_setting(&self, _setting: &str, _enabled: bool) -> anyhow::Result<String> {
-        // Mirror the real backend: arkad has no setter (rule 2).
-        self.setting_calls.fetch_add(1, Ordering::SeqCst);
-        anyhow::bail!("not implemented in arkad: no per-setting setter exists")
     }
     async fn restart_service(&self, unit: &str) -> anyhow::Result<String> {
         self.restart_calls.fetch_add(1, Ordering::SeqCst);

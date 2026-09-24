@@ -1,8 +1,8 @@
-//! arka-pulse-backed tool. READ-ONLY. Goes through `SystemBackend`, which uses
-//! the in-process `arka_pulse` library on-device. Never touches
-//! `arka_pulse::recover` — recovery stays dry-run/disabled (rule 8).
+//! arka-pulse-backed read tool. READ-ONLY. Returns a human template string AND
+//! typed facts (spec #1). Never touches `arka_pulse::recover` (rule 8).
 
 use crate::backend::SystemBackend;
+use crate::facts::Fact;
 
 use super::ToolOutput;
 
@@ -29,5 +29,15 @@ pub async fn pulse_health<B: SystemBackend>(backend: &B) -> anyhow::Result<ToolO
          findings:  {}",
         r.worst, cpu, r.mem_pct, temp, findings,
     );
-    Ok(ToolOutput { output })
+
+    let mut facts = vec![Fact::new("health", r.worst.clone())];
+    if let Some(c) = r.cpu_util {
+        facts.push(Fact::new("cpu", format!("{c:.0}%")).num(c as i64));
+    }
+    facts.push(Fact::new("mem", format!("{:.0}%", r.mem_pct)).num(r.mem_pct as i64));
+    if let Some(t) = r.temp_max {
+        facts.push(Fact::new("temp", format!("{t:.0}\u{00b0}C")).num(t as i64));
+    }
+
+    Ok(ToolOutput::with_facts(output, facts))
 }

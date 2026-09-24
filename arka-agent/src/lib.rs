@@ -9,6 +9,7 @@ pub mod audit;
 pub mod backend;
 pub mod cli;
 pub mod config;
+pub mod facts;
 pub mod ollama;
 pub mod schema;
 pub mod tools;

@@ -80,14 +80,6 @@ impl SystemBackend for DbusBackend {
         Ok("arkad re-applied all privacy enforcers (EnforceAll)".into())
     }
 
-    async fn set_privacy_setting(&self, _setting: &str, _enabled: bool) -> anyhow::Result<String> {
-        anyhow::bail!(
-            "not implemented in arkad: no per-setting setter exists. \
-             arkad enforces secure defaults from config and re-applies them every 60s. \
-             TODO(arkad): add a SetSetting(key, enabled) method + config persistence."
-        )
-    }
-
     async fn restart_service(&self, unit: &str) -> anyhow::Result<String> {
         // The unit is already allow-list-checked by the tool layer. Fixed argv,
         // never a shell string.

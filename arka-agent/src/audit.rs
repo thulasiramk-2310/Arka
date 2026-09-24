@@ -1,5 +1,13 @@
-//! Tamper-evident audit log (rule 7). One JSONL line per tool call, each line
+//! Edit-detecting audit log (rule 7). One JSONL line per tool call, each line
 //! carrying the SHA-256 of the previous line so the chain can be verified.
+//!
+//! What this catches: partial or accidental edits — a changed field or a spliced
+//! line breaks the chain and `verify` reports it. What it does NOT stop: a root
+//! user rewriting the whole chain from scratch, recomputing every hash. Resisting
+//! that needs the chain head anchored off-box.
+//! TODO: anchor the latest hash elsewhere (TPM NV index, a remote log, or print
+//! it) so a full rewrite is detectable. Until then this "detects edits", it is
+//! not "tamper-proof".
 //!
 //! A line's `hash` = SHA-256( prev_hash + canonical_payload ), where the
 //! payload is every field except `hash`, serialised in a fixed order.
