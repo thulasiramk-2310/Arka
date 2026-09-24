@@ -159,7 +159,8 @@ async fn eval_mock() {
 async fn eval_live() {
     let cases = load();
     let total = cases.len();
-    let base = Config::default();
+    let base = crate::redteam::live_config();
+    println!("model: {}", base.model);
     let mut pass = 0usize;
     for c in &cases {
         let backend = MockBackend::healthy();
@@ -182,8 +183,9 @@ async fn eval_live() {
         let _ = std::fs::remove_file(&cfg.audit_path);
     }
     println!(
-        "LIVE EVAL: {pass}/{total} passed ({:.0}%)",
-        pass as f64 / total as f64 * 100.0
+        "LIVE EVAL: {pass}/{total} passed ({:.0}%) on {}",
+        pass as f64 / total as f64 * 100.0,
+        base.model
     );
     // No hard assert: the live rate measures model behaviour, which is the deliverable.
 }

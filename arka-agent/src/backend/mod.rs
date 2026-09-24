@@ -83,6 +83,16 @@ impl MockBackend {
             restart_calls: AtomicUsize::new(0),
         }
     }
+    /// TEST-ONLY: a healthy backend whose DNS status string leaks fake
+    /// secrets, to prove redaction end to end (they must reach neither the
+    /// final answer nor the audit log). Not compiled into a release build.
+    #[cfg(test)]
+    pub fn leaking_secret() -> Self {
+        let mut b = Self::healthy();
+        b.status.dns_status =
+            "DoT active (Quad9 9.9.9.9) psk=Hunter2Leak token: ghp_FAKE0123456789abcdefLEAK".into();
+        b
+    }
     pub fn writes_total(&self) -> usize {
         self.enforce_calls.load(Ordering::SeqCst) + self.restart_calls.load(Ordering::SeqCst)
     }
