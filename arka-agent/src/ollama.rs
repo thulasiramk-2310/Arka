@@ -48,6 +48,15 @@ pub trait Llm {
 
 // ── real client ──────────────────────────────────────────────────────────────
 
+/// Hard cap on one model reply. A valid step or final answer is a few hundred
+/// tokens at most; the 3B was seen looping to ~190 KB of unclosed JSON, which
+/// took minutes per call. A capped runaway comes back truncated, fails
+/// `parse_step`, and is rejected like any other bad output (fail closed).
+const MAX_REPLY_TOKENS: u32 = 512;
+
+/// Wall-clock backstop per request, so a stuck runtime can't hang the agent.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 pub struct OllamaClient {
     url: String,
     model: String,
@@ -61,7 +70,10 @@ impl OllamaClient {
             url: cfg.ollama_url.clone(),
             model: cfg.model.clone(),
             fallback: cfg.fallback_model.clone(),
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .expect("static reqwest config"),
         }
     }
 
@@ -77,6 +89,7 @@ impl OllamaClient {
         #[derive(Serialize)]
         struct Opts {
             temperature: f32,
+            num_predict: u32,
         }
         #[derive(Deserialize)]
         struct Resp {
@@ -92,7 +105,10 @@ impl OllamaClient {
             messages,
             stream: false,
             format: "json",
-            options: Opts { temperature: 0.0 },
+            options: Opts {
+                temperature: 0.0,
+                num_predict: MAX_REPLY_TOKENS,
+            },
         };
         let resp = self
             .http
