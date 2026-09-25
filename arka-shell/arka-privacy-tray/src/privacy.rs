@@ -6,7 +6,7 @@
 //! Keeping this pure makes the trust-critical behaviour unit-testable without a
 //! running Plasma session.
 //!
-//! Honesty rules baked in (see CLAUDE.md "Standing rules"):
+//! Honesty rules baked in (the project's standing honesty rules):
 //!   * We report enforcement STATE and NOTABLE EVENTS — never per-connection or
 //!     per-domain traffic (that would be a surveillance layer; phase 2 only).
 //!   * The positive default is silence: "Privacy intact — 0 drifts today".

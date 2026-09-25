@@ -9,9 +9,15 @@ at `/var/home/<you>` via virtiofs.
 - Arch/any host with podman + qemu + swtpm
 - `podman machine init --rootful --memory 6144 --disk-size 40 podman-machine-default`
   (40 GB minimum — the KDE image alone is ~10 GB in storage)
-- Fedora's OVMF firmware (Fedora 42 GRUB crashes Arch's edk2 — see
-  "Solved issues" in CLAUDE.md for the extraction one-liner producing
-  `OVMF_CODE_4M_f42.qcow2` + `OVMF_VARS_4M_f42.qcow2`)
+- Fedora's OVMF firmware (Fedora 42 GRUB crashes Arch's edk2). Extract it once:
+  ```
+  for f in CODE VARS; do
+    podman machine ssh podman-machine-default \
+      "podman run --rm docker.io/fedora:42 bash -c \
+      'dnf install -y edk2-ovmf -q &>/dev/null; base64 /usr/share/edk2/ovmf/OVMF_${f}_4M.qcow2'" \
+      | base64 -d > OVMF_${f}_4M_f42.qcow2
+  done
+  ```
 
 ## 1. Build the OS image
 
@@ -52,7 +58,13 @@ qemu-system-x86_64 -enable-kvm -m 6144 -cpu host -smp 2 -machine q35 \
 
 - Serial console: `telnet localhost 4445`
 - QEMU monitor (screendump, sendkey): `telnet localhost 4444`
-- TPM (optional, for PCR work): see CLAUDE.md §3c for the swtpm invocation.
+- TPM (optional, for PCR work):
+  ```
+  swtpm_setup --tpm2 --tpmstate /tmp/arkaos-tpm --createek --decryption --create-ek-cert
+  swtpm socket --tpmstate dir=/tmp/arkaos-tpm --ctrl type=unixio,path=/tmp/arkaos-tpm.sock --tpm2 --daemon
+  # then add to the QEMU command:
+  #   -chardev socket,id=chrtpm,path=/tmp/arkaos-tpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0
+  ```
 
 ## Hard-won rules — break these and lose hours
 
