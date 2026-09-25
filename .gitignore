@@ -1,4 +1,3 @@
-CLAUDE.md
 output/
 OVMF_CODE_4M_f42.qcow2
 OVMF_VARS_4M_f42.qcow2
@@ -20,7 +19,6 @@ sway-foot*
 arkad/target/
 arka-shell/target/
 legacy/target/
-.claude/
 
 # secrets — never commit
 tokens
