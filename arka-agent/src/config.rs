@@ -9,10 +9,10 @@ use std::path::PathBuf;
 pub struct Config {
     /// Ollama base URL. Localhost only by policy (rule 2).
     pub ollama_url: String,
-    /// Primary local model.
+    /// The local model. There is deliberately no fallback: qwen2.5:3b failed
+    /// 3/20 live eval cases by looping on its JSON output (2026-09-25), so a
+    /// machine that can't run this model gets "unavailable", not a weaker one.
     pub model: String,
-    /// Fallback local model if the primary is unavailable.
-    pub fallback_model: String,
     /// Where the JSONL audit log lives.
     pub audit_path: String,
     /// If true, write tools never actually change the system (still audited).
@@ -28,7 +28,6 @@ impl Default for Config {
         Config {
             ollama_url: "http://127.0.0.1:11434".into(),
             model: "qwen2.5:7b-instruct".into(),
-            fallback_model: "qwen2.5:3b".into(),
             audit_path: default_audit_path(),
             dry_run: false,
             max_steps: 5,

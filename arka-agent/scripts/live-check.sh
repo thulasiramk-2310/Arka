@@ -14,11 +14,10 @@ OLLAMA="${OLLAMA_URL:-http://127.0.0.1:11434}"
 # 1. Ollama up
 if curl -fsS "$OLLAMA/api/tags" >/dev/null 2>&1; then ok "Ollama reachable at $OLLAMA"; else no "Ollama not reachable at $OLLAMA"; fi
 
-# 2. qwen models pulled
+# 2. the supported model is pulled (there is no fallback model)
 tags="$(curl -fsS "$OLLAMA/api/tags" 2>/dev/null || echo '')"
 if printf '%s' "$tags" | grep -q 'qwen2.5:7b-instruct'; then ok "model qwen2.5:7b-instruct present"
-elif printf '%s' "$tags" | grep -q 'qwen2.5:3b'; then ok "fallback model qwen2.5:3b present (primary missing)"
-else no "no qwen2.5 model pulled (ollama pull qwen2.5:7b-instruct)"; fi
+else no "qwen2.5:7b-instruct not pulled (ollama pull qwen2.5:7b-instruct)"; fi
 
 # 3. arkad on the system bus
 if command -v busctl >/dev/null 2>&1 && busctl --system list 2>/dev/null | grep -q 'org.arka.arkad'; then

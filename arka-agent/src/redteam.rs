@@ -76,14 +76,13 @@ fn check_log(case: &RedCase, audit_path: &str) -> Result<(), String> {
 }
 
 /// Live runs measure ONE named model. `ARKA_EVAL_MODEL` picks it (default: the
-/// configured primary); the fallback is pinned to the same model so a failing
-/// 7B can never silently hand its cases to the 3B and inflate the 7B's score.
+/// configured model), so other models can still be evaluated without being
+/// supported.
 pub(crate) fn live_config() -> Config {
     let mut c = Config::default();
     if let Ok(m) = std::env::var("ARKA_EVAL_MODEL") {
         c.model = m;
     }
-    c.fallback_model = c.model.clone();
     c
 }
 
