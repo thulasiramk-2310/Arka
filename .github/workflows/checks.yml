@@ -9,6 +9,7 @@ on:
       - "arka-shell/**"
       - "arkaos-oobe-apply"
       - "arkaos-firstboot"
+      - "arka-plasma-firstrun"
       - "arkaos-settings"
       - "Containerfile"
       - "scripts/test-oobe-apply.py"
@@ -23,6 +24,7 @@ on:
       - "arka-shell/**"
       - "arkaos-oobe-apply"
       - "arkaos-firstboot"
+      - "arka-plasma-firstrun"
       - "arkaos-settings"
       - "Containerfile"
       - "scripts/test-oobe-apply.py"
@@ -39,6 +41,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Check shell helpers
+        run: shellcheck arkaos-oobe-apply arka-plasma-firstrun arkaos-firefox arkaos-firstboot
       - name: Check first-run shell syntax
         run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot && bash -n arkaos-settings
       - name: Test setup with isolated accounts and paths
@@ -70,8 +74,8 @@ jobs:
         run: rustup default stable
       - name: Install desktop build dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
-      - name: Check all desktop apps
-        run: cargo check --locked --manifest-path arka-shell/Cargo.toml --workspace
+      - name: Test every desktop crate including first-run setup
+        run: cargo test --locked --manifest-path arka-shell/Cargo.toml --workspace
       - name: Test desktop backends without a display or host services
         run: |
           rustc --edition=2021 --test arka-shell/arka-perms/src/permissions.rs -o /tmp/perms-tests

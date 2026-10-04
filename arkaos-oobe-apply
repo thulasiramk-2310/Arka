@@ -1,4 +1,6 @@
 #!/bin/bash
+# Shell snippets passed to runuser expand their positional arguments in the child.
+# shellcheck disable=SC2016
 # arkaos-oobe-apply — privileged tail of the graphical first-run wizard.
 #
 # Runs as root via a tight NOPASSWD sudo rule (see Containerfile), invoked by

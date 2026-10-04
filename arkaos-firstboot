@@ -63,7 +63,7 @@ pad() {
     printf '%s%*s' "$1" "$p" ""
 }
 
-row() { printf "${BL}|${E}$(pad "$1" $LW)${BL}|${E}$(pad "$2" $RW)${BL}|${E}\n"; }
+row() { printf '%s|%s%s%s|%s%s%s|%s\n' "$BL" "$E" "$(pad "$1" "$LW")" "$BL" "$E" "$(pad "$2" "$RW")" "$BL" "$E"; }
 
 border() {
     local eq_l eq_r
@@ -115,10 +115,10 @@ draw_narrow() {
     local w=$(( COLS - 2 ))
     local eq; eq=$(printf '%*s' $w '' | tr ' ' '=')
     printf "${BL}+%s+${E}\n" "$eq"
-    printf "${BL}|${E}$(pad "  ${C}${B}ARKAOS${E}  ${D}--  %s${E}" $w)${BL}|${E}\n" "$title"
+    printf '%s|%s%s%s|%s\n' "$BL" "$E" "$(pad "  ${C}${B}ARKAOS${E}  ${D}--  ${title}${E}" "$w")" "$BL" "$E"
     printf "${BL}+%s+${E}\n" "$eq"
     for line in "$@"; do
-        printf "${BL}|${E}$(pad "$line" $w)${BL}|${E}\n"
+        printf '%s|%s%s%s|%s\n' "$BL" "$E" "$(pad "$line" "$w")" "$BL" "$E"
     done
     printf "${BL}+%s+${E}\n" "$eq"
 }
@@ -304,6 +304,6 @@ else
         "   Super+B      browser" \
         "   Super+S      settings" ""
 fi
-printf "\n   ${Y}Rebooting into your desktop in 5 seconds...${E}\n\n"
+printf '\n   %sRebooting into your desktop in 5 seconds...%s\n\n' "$Y" "$E"
 sleep 5
 systemctl reboot
