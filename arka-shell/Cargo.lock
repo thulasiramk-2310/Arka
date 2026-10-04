@@ -119,6 +119,8 @@ dependencies = [
  "glib",
  "gtk4",
  "libadwaita",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
