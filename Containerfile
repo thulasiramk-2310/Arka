@@ -143,11 +143,12 @@ RUN chmod 755 /usr/libexec/arkaos-oobe-apply && \
     printf 'arkasetup ALL=(root) NOPASSWD: /usr/libexec/arkaos-oobe-apply, /usr/libexec/arkaos-firstboot\n' \
       > /etc/sudoers.d/95-arkaos-oobe && \
     mkdir -p /etc/systemd/system/getty@tty1.service.d && \
-    printf '[Unit]\nConditionPathExists=!/var/lib/arkaos-firstboot-done\n[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin arkasetup --noclear %%I $TERM\n' \
+    printf '[Unit]\nConditionPathExists=!/var/lib/arkaos-firstboot-done\n[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin arkasetup --skip-login --noissue --nohostname --nohints --noclear %%I $TERM\n' \
       > /etc/systemd/system/getty@tty1.service.d/arkasetup-autologin.conf && \
-    printf 'if [ "$(tty)" = /dev/tty1 ] && [ ! -e /var/lib/arkaos-firstboot-done ]; then\n  export GSK_RENDERER=cairo GDK_BACKEND=wayland\n  cage -- /usr/bin/arka-oobe || sudo -n /usr/libexec/arkaos-firstboot\nfi\n' \
+    printf 'if [ "$(tty)" = /dev/tty1 ] && [ ! -e /var/lib/arkaos-firstboot-done ]; then\n  printf "\\033[2J\\033[H\\033[?25l"\n  export GSK_RENDERER=cairo GDK_BACKEND=wayland\n  cage -- /usr/bin/arka-oobe >"$HOME/arka-oobe.log" 2>&1 || { printf "\\033[?25h"; sudo -n /usr/libexec/arkaos-firstboot; }\nfi\n' \
       > /home/arkasetup/.bash_profile && \
-    chown arkasetup:arkasetup /home/arkasetup/.bash_profile
+    touch /home/arkasetup/.hushlogin && \
+    chown arkasetup:arkasetup /home/arkasetup/.bash_profile /home/arkasetup/.hushlogin
 
 # ArkaOS default wallpaper: aurora light + the boot splash's glowing triangles,
 # no text, rendered at 4K so HiDPI panels stay sharp. Users can change it.
@@ -320,6 +321,13 @@ RUN plymouth-set-default-theme arkaos && \
     dracut --force --no-hostonly /usr/lib/modules/$KVER/initramfs.img $KVER && \
     mkdir -p /usr/lib/bootc/kargs.d && \
     printf 'kargs = ["rhgb", "quiet", "plymouth.ignore-serial-consoles"]\n' > /usr/lib/bootc/kargs.d/10-arkaos-splash.toml
+
+# Keep the boot screen clean from power-on to setup: hide the GRUB menu (it
+# still waits 1s; hold Esc to show it; bootupd's menu_show_once still forces
+# it when set) and keep kernel/udev chatter off the screen.
+RUN printf 'set timeout_style=hidden\nset timeout=1\n' \
+      > /usr/lib/bootupd/grub2-static/configs.d/12_arka_menu_hidden.cfg && \
+    printf 'kargs = ["loglevel=3", "rd.udev.log_level=3"]\n' > /usr/lib/bootc/kargs.d/11-arkaos-quiet.toml
 
 # Build the UKI only after the final initramfs and OS identity are ready.
 # Build UKI from the final installed kernel+initramfs — no embedded cmdline
