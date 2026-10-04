@@ -223,16 +223,16 @@ mod tests {
             .build()
             .await
             .unwrap();
-        let proxy = zbus::Proxy::new(
-            &client,
-            "org.arka.arkad",
-            "/org/arka/arkad",
-            "org.arka.arkad",
-        )
-        .await
-        .unwrap();
+        let proxy = zbus::proxy::Builder::<zbus::Proxy<'_>>::new(&client)
+            .destination("org.arka.arkad").unwrap()
+            .path("/org/arka/arkad").unwrap()
+            .interface("org.arka.arkad").unwrap()
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build().await.unwrap();
         // Read-only properties remain accessible without prompting.
         assert_eq!(proxy.get_property::<u8>("PrivacyScore").await.unwrap(), 0);
+        assert_eq!(proxy.get_property::<u64>("LastCheck").await.unwrap(), 0);
+        assert!(proxy.set_property("LastCheck", &123u64).await.is_err());
         assert!(replies.lock().unwrap().calls.is_empty());
         assert!(proxy.call::<_, _, ()>("EnforceAll", &()).await.is_err());
         assert_eq!(mutations.load(Ordering::SeqCst), 0);
@@ -253,6 +253,7 @@ mod tests {
             .await
             .unwrap();
         assert!(result.is_some());
+        assert!(proxy.get_property::<u64>("LastCheck").await.unwrap() > 0);
         assert_eq!(mutations.load(Ordering::SeqCst), 1);
         assert_eq!(replies.lock().unwrap().calls[1].2, 1);
         replies.lock().unwrap().delay = Duration::from_millis(100);

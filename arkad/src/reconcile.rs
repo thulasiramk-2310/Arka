@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::{enforcers::AsyncEnforcer, score, state::SharedState};
 
@@ -38,6 +38,7 @@ pub async fn reconcile(enforcers: &[Box<dyn AsyncEnforcer>], state: &SharedState
     }
     let mut s = state.write().await;
     s.privacy_score = score::compute(&s);
+    s.last_check = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
     failed
 }
 
@@ -68,5 +69,43 @@ mod tests {
         }
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
         assert!(!s.read().await.hostname_privacy);
+        assert!(s.read().await.last_check > 0);
+    }
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::*;
+    use std::sync::Arc;
+    use crate::{error::ArkadError, state::ArkadState};
+
+    struct BlockedControl(Arc<tokio::sync::Notify>);
+    #[async_trait::async_trait]
+    impl AsyncEnforcer for BlockedControl {
+        fn name(&self) -> &'static str { "hostname" }
+        async fn enforce(&self) -> Result<(), ArkadError> { Ok(()) }
+        async fn update_state(&self, state: &SharedState) {
+            self.0.notify_one();
+            std::future::pending::<()>().await;
+            state.write().await.hostname_privacy = true;
+        }
+    }
+
+    #[tokio::test]
+    async fn unfinished_or_cancelled_reconcile_does_not_refresh_timestamp() {
+        let state = Arc::new(tokio::sync::RwLock::new(ArkadState::default()));
+        assert_eq!(state.read().await.last_check, 0);
+        reconcile(&[], &state, false).await;
+        let completed = state.read().await.last_check;
+        assert!(completed > 0);
+        let started = Arc::new(tokio::sync::Notify::new());
+        let enforcers: Vec<Box<dyn AsyncEnforcer>> = vec![Box::new(BlockedControl(started.clone()))];
+        let copy = state.clone();
+        let task = tokio::spawn(async move { reconcile(&enforcers, &copy, false).await });
+        started.notified().await;
+        assert_eq!(state.read().await.last_check, completed);
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(state.read().await.last_check, completed);
     }
 }

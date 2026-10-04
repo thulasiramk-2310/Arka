@@ -13,14 +13,15 @@
 
 mod privacy;
 
-use privacy::{browser_active, dns_active, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
+use privacy::{browser_active, check_is_fresh, dns_active, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
 
 use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Tray, TrayMethods};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const LOG_PATH: &str = "/var/log/arkaos/privacy.jsonl";
-const POLL_SECS: u64 = 4;
+// arkad normally reconciles every 60 seconds; expire after three polls.
+const POLL_SECS: u64 = 30;
 const EVENT_CAP: usize = 60;
 const RECENT_SHOWN: usize = 4;
 const NOTIFY_MIN_GAP_SECS: u64 = 600; // ≥10 min between notifications — anti-fatigue
@@ -50,7 +51,7 @@ struct ArkaTray {
 impl ArkaTray {
     fn header(&self) -> String {
         if !self.arkad_up {
-            return "Privacy daemon not reachable".to_string();
+            return "Status unknown — no fresh privacy check".to_string();
         }
         self.level.header(self.drifts_today)
     }
@@ -67,7 +68,7 @@ impl Tray for ArkaTray {
 
     fn icon_name(&self) -> String {
         if !self.arkad_up {
-            return "security-low".into();
+            return "dialog-question-symbolic".into();
         }
         self.level.icon_name().into()
     }
@@ -144,6 +145,8 @@ fn info_row(label: String, icon_name: String) -> MenuItem<ArkaTray> {
     gen_blocking = false
 )]
 trait Arkad {
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn last_check(&self) -> zbus::Result<u64>;
     #[zbus(property)]
     fn mac_randomization(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -159,6 +162,8 @@ trait Arkad {
 }
 
 async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
+    let last_check = p.last_check().await.ok()?;
+    if !check_is_fresh(Some(last_check), now(), POLL_SECS) { return None; }
     // If the first read fails, arkad isn't up — report None so the tray can say so.
     let mac = p.mac_randomization().await.ok()?;
     let dns = p.dns_status().await.unwrap_or_else(|_| "Unknown".into());
@@ -166,6 +171,9 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
     let ipv6 = p.ipv6_privacy().await.unwrap_or(false);
     let browser = p.browser_sandbox().await.unwrap_or_else(|_| "Unknown".into());
     let sandbox = p.sandbox_status().await.unwrap_or_else(|_| "Unknown".into());
+    // A slow read or an intervening reconcile must not bless an old snapshot.
+    if p.last_check().await.ok()? != last_check
+        || !check_is_fresh(Some(last_check), now(), POLL_SECS) { return None; }
     let dns_ok = dns_active(&dns);
     let browser_ok = browser_active(&browser, &sandbox);
     Some(Enforcement {
@@ -284,5 +292,17 @@ async fn main() {
             .await;
 
         tokio::time::sleep(std::time::Duration::from_secs(POLL_SECS)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unknown_status_hides_positive_rows_and_uses_neutral_icon() {
+        let tray = ArkaTray::default();
+        assert_eq!(tray.icon_name(), "dialog-question-symbolic");
+        assert!(tray.header().starts_with("Status unknown"));
+        assert_eq!(tray.menu().len(), 3);
     }
 }

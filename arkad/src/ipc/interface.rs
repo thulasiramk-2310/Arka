@@ -16,6 +16,11 @@ pub struct ArkadIface {
 impl ArkadIface {
     // — Properties —
 
+    #[zbus(property(emits_changed_signal = "false"))]
+    async fn last_check(&self) -> u64 {
+        self.state.read().await.last_check
+    }
+
     #[zbus(property)]
     async fn privacy_score(&self) -> u8 {
         self.state.read().await.privacy_score

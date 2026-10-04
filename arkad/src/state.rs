@@ -33,6 +33,8 @@ impl ArkadState {
 
 #[derive(Debug, Clone)]
 pub struct ArkadState {
+    /// Unix seconds of the last completed reconcile; zero until one completes.
+    pub last_check: u64,
     pub privacy_score: u8,
     pub mac_randomization: bool,
     pub dns_status: DnsStatus,
@@ -47,6 +49,7 @@ pub struct ArkadState {
 impl Default for ArkadState {
     fn default() -> Self {
         Self {
+            last_check: 0,
             privacy_score: 0,
             mac_randomization: false,
             dns_status: DnsStatus::Unknown("Initializing".into()),

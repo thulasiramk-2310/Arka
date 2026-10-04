@@ -9,7 +9,7 @@
 //! Honesty rules baked in (the project's standing honesty rules):
 //!   * We report enforcement STATE and NOTABLE EVENTS — never per-connection or
 //!     per-domain traffic (that would be a surveillance layer; phase 2 only).
-//!   * The positive default is silence: "Privacy intact — 0 drifts today".
+//!   * The positive default is silence: "Configured — 0 drifts today".
 //!   * Only a real, new drift (warn) or a protection currently DOWN (critical)
 //!     may notify. Routine/info events never do. Notifications are rate-limited
 //!     and coalesced so warning-fatigue can't set in.
@@ -89,11 +89,19 @@ impl Level {
     }
     pub fn header(self, drifts_today: usize) -> String {
         match self {
-            Level::Ok => format!("Privacy intact — {drifts_today} drift{} today", plural(drifts_today)),
-            Level::Warn => format!("Privacy self-healed — {drifts_today} drift{} today", plural(drifts_today)),
+            Level::Ok => format!("Configured — {drifts_today} drift{} today", plural(drifts_today)),
+            Level::Warn => format!("Configured after recent drift — {drifts_today} drift{} today", plural(drifts_today)),
             Level::Critical => "Attention — a protection is not active".to_string(),
         }
     }
+}
+
+/// Fail closed on missing/zero, future (clock rollback), or expired timestamps.
+/// Freshness describes the check, not whether any control succeeded.
+pub fn check_is_fresh(last_check: Option<u64>, now: u64, poll_secs: u64) -> bool {
+    last_check.filter(|&last| last != 0)
+        .and_then(|last| now.checked_sub(last))
+        .is_some_and(|age| age < poll_secs.saturating_mul(3))
 }
 
 fn plural(n: usize) -> &'static str { if n == 1 { "" } else { "s" } }
@@ -219,11 +227,11 @@ impl Notifier {
             return None;
         }
         let n = fresh.len();
-        let summary = "Privacy drift auto-corrected".to_string();
+        let summary = "Privacy configuration drift detected".to_string();
         let body = if n == 1 {
             fresh[0].msg.clone()
         } else {
-            format!("{n} privacy drifts detected and re-enforced.")
+            format!("{n} privacy configuration drifts detected.")
         };
         self.last_fire = Some(now);
         Some(Notification { summary, body, critical: false })
@@ -241,6 +249,18 @@ impl Notifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn freshness_requires_a_completed_recent_check() {
+        for last in [None, Some(0), Some(101), Some(10)] {
+            assert!(!check_is_fresh(last, 100, 30), "{last:?}");
+        }
+        assert!(check_is_fresh(Some(11), 100, 30));
+        assert!(check_is_fresh(Some(100), 100, 30));
+        assert!(!check_is_fresh(Some(100), 100, 0));
+        assert!(!check_is_fresh(Some(88), 100, 4));
+        assert!(check_is_fresh(Some(89), 100, 4));
+    }
 
     #[test]
     fn failed_daemon_values_raise_attention() {
@@ -295,8 +315,8 @@ mod tests {
     fn icons_and_headers() {
         assert_eq!(Level::Ok.icon_name(), "security-high");
         assert_eq!(Level::Critical.icon_name(), "security-low");
-        assert_eq!(Level::Ok.header(0), "Privacy intact — 0 drifts today");
-        assert_eq!(Level::Ok.header(1), "Privacy intact — 1 drift today");
+        assert_eq!(Level::Ok.header(0), "Configured — 0 drifts today");
+        assert_eq!(Level::Ok.header(1), "Configured — 1 drift today");
     }
 
     #[test]
