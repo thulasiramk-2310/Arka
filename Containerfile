@@ -77,7 +77,6 @@ COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
 COPY arkad/arkad.toml /etc/arkad/arkad.toml
 COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
 COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
-COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
 RUN mkdir -p /etc/arkad && \
     systemctl enable arkad.service
 
@@ -355,6 +354,10 @@ RUN systemctl mask plasma-setup.service
 # setup screen types its "hello world" in.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y jetbrains-mono-fonts
 
+# arkad's polkit action (admin auth for EnforceAll). Placed late: a new file
+# early in this stage would invalidate the cached package layers below it.
+COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
+
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Copied here, a code change only reruns this block
 # instead of the themes, wallpaper, splash and initramfs above. Units and
@@ -382,4 +385,3 @@ RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray
 
 RUN bootc container lint
-
