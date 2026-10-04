@@ -17,12 +17,30 @@
 set -euo pipefail
 
 BROWSER=/usr/bin/firefox-unwrapped
-DOWNLOADS="${HOME:-/home/ram}/Downloads"
-mkdir -p "${DOWNLOADS}"
+HOME="${HOME:?A home directory is required}"
+[[ "$HOME" = /* && "$HOME" != / ]] || { echo 'Invalid home directory' >&2; exit 1; }
+DOWNLOADS="$HOME/Downloads"
+# A symlink such as Downloads -> .. would expose the entire real home.
+[[ ! -L "$DOWNLOADS" ]] || { echo 'Downloads must be a real directory, not a symlink' >&2; exit 1; }
+mkdir -p -- "$DOWNLOADS"
+[[ "$(realpath -e -- "$DOWNLOADS")" = "$(realpath -e -- "$HOME")/Downloads" ]] || {
+    echo 'Downloads resolves outside its expected directory' >&2; exit 1;
+}
+WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+[[ "$WAYLAND_DISPLAY" =~ ^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$ ]] || {
+    echo 'Unsupported Wayland socket name' >&2; exit 1;
+}
 
 # Single source of truth for sandbox args.
 # Both browser launch and --shell mode use this array identically.
 BWRAP_ARGS=(
+    # Do not hand API keys, agent sockets, loader overrides or other launcher
+    # environment data to a compromised browser. Preserve only UI essentials.
+    --clearenv
+    --setenv PATH /usr/bin:/bin
+    --setenv HOME "$HOME"
+    --setenv LANG "${LANG:-C.UTF-8}"
+    --setenv LC_ALL "${LC_ALL:-${LANG:-C.UTF-8}}"
     # System directories — read-only
     --ro-bind /usr /usr
     --ro-bind /lib /lib
@@ -56,8 +74,8 @@ BWRAP_ARGS=(
     # Audio: thread the PipeWire socket and the PulseAudio-compat socket dir
     # through so the browser can actually play sound. libpulse/libpipewire find
     # these automatically under XDG_RUNTIME_DIR. This is a deliberate capability
-    # grant — a browser needs audio — and does not weaken the /home or
-    # credential isolation (no D-Bus session bus, no home, are exposed by it).
+    # grant. Direct audio-server access can include microphone recording;
+    # this is not a playback-only permission or a portal-mediated grant.
     --bind-try /run/user/"${UID}"/pipewire-0 \
                /run/user/"${UID}"/pipewire-0
     --bind-try /run/user/"${UID}"/pulse \
@@ -68,11 +86,15 @@ BWRAP_ARGS=(
     # Home isolation: tmpfs hides all of /home, then re-expose Downloads only
     --tmpfs /home
     --tmpfs /root
+    --dir "$HOME"
     --bind  "${DOWNLOADS}" "${DOWNLOADS}"
+    --chdir "$HOME"
     # Namespace isolation
     --unshare-pid
     --unshare-ipc
     --unshare-uts
+    --hostname arka-browser
+    --cap-drop ALL
     --new-session
     --die-with-parent
 )

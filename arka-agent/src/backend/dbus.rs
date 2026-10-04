@@ -74,7 +74,7 @@ impl SystemBackend for DbusBackend {
         let proxy = self.proxy().await?;
         // The one real arkad method (Phase 0).
         proxy
-            .call_method("EnforceAll", &())
+            .call_with_flags::<_, _, ()>("EnforceAll", zbus::proxy::MethodFlags::AllowInteractiveAuth.into(), &())
             .await
             .map_err(|e| anyhow::anyhow!("arkad EnforceAll: {e}"))?;
         Ok("arkad re-applied all privacy enforcers (EnforceAll)".into())

@@ -90,6 +90,35 @@ transactional first-run flow remains future work.
 
 ## Remaining release gates
 
+### Security review follow-up, 2026-10-04
+
+- Manual privileged enforcement now authorizes the real D-Bus sender through
+  polkit. Read-only properties and automatic maintenance retain their behavior.
+  Denial, missing authorization service and timeout do not invoke an enforcer.
+- Firefox clears the inherited environment, drops capabilities, rejects
+  Downloads symlinks and limits the Wayland socket name. Direct audio access
+  still includes recording capability; it is not a microphone privacy barrier.
+- KWin scripts use private temporary directories and validate window UUIDs
+  before interpolation, including values obtained through journal parsing.
+- The daemon and desktop lockfiles move `event-listener` to 5.4.2 for
+  [RUSTSEC-2026-0221](https://rustsec.org/advisories/RUSTSEC-2026-0221.html).
+- 8 daemon tests, 5 shared-state/window tests and 6 browser-wrapper tests pass.
+  The private-bus test uses fake authorization and enforcement services. A real
+  bubblewrap shell smoke test hid a synthetic environment secret and a private
+  home sentinel while exposing its temporary Downloads directory.
+- All 13 desktop workspace members and the assistant pass locked offline
+  compile checks. Two existing dashboard GTK deprecation warnings remain.
+- The concurrent setup draft also received an unprivileged preference-write fix
+  and updated isolated fixtures; its 16 tests pass in the shared working tree.
+  This setup integration is separate from the independent security commit.
+
+These checks did not boot or alter the active VM. Test administrator prompts,
+denied/cancelled repair, Firefox media/downloads and compositor actions in the
+next guest image. A complete dependency advisory scan was not run. The updated
+[threat model](THREAT-MODEL.md) records the boundaries and primary references.
+
+### Image and hardware gates
+
 1. Build the Fedora 44 candidate in an isolated builder and verify all package,
    service and kernel/UKI assumptions; pin reviewed image digests for a release.
 2. Boot a disposable image and exercise first-run success/failure, networking,

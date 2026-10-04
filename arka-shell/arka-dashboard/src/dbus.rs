@@ -26,6 +26,7 @@ trait Arkad {
     #[zbus(property)]
     fn browser_sandbox(&self) -> zbus::Result<String>;
 
+    #[zbus(allow_interactive_auth)]
     fn enforce_all(&self) -> zbus::Result<()>;
 }
 

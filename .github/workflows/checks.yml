@@ -12,6 +12,8 @@ on:
       - "arkaos-settings"
       - "Containerfile"
       - "scripts/test-oobe-apply.py"
+      - "arkaos-firefox"
+      - "scripts/test-firefox-wrapper.py"
       - ".github/workflows/checks.yml"
   pull_request:
     paths:
@@ -24,6 +26,8 @@ on:
       - "arkaos-settings"
       - "Containerfile"
       - "scripts/test-oobe-apply.py"
+      - "arkaos-firefox"
+      - "scripts/test-firefox-wrapper.py"
       - ".github/workflows/checks.yml"
   workflow_dispatch:
 
@@ -39,6 +43,8 @@ jobs:
         run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot && bash -n arkaos-settings
       - name: Test setup with isolated accounts and paths
         run: python3 scripts/test-oobe-apply.py
+      - name: Test browser sandbox launch boundary
+        run: bash -n arkaos-firefox && python3 scripts/test-firefox-wrapper.py
 
   rust:
     runs-on: ubuntu-24.04
@@ -47,6 +53,7 @@ jobs:
       - name: Select stable Rust
         run: rustup default stable
       - name: Test privacy enforcement
+        # Authorization tests use their own session bus, never the host system bus.
         run: cargo test --locked --manifest-path arkad/Cargo.toml
       - name: Test reliability core
         run: cargo test --locked --manifest-path arka-pulse/Cargo.toml --features dbus

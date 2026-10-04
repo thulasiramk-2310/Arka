@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _conn = zbus::connection::Builder::system()?
         .name("org.arka.arkad")?
         .serve_at("/org/arka/arkad", ArkadIface {
+            authorization_lock: tokio::sync::Mutex::new(()),
             state:     shared.clone(),
             enforcers: enforcers.clone(),
             enforcement_lock: enforcement_lock.clone(),

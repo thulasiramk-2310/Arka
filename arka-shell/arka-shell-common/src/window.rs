@@ -18,7 +18,63 @@
 //! be verified live during the DP2 build cycle — it is not claimed working on
 //! a booted system yet.
 
+use std::io::{Read, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+struct PrivateScript {
+    path: PathBuf,
+    dir: PathBuf,
+}
+
+impl PrivateScript {
+    fn create_in(root: &Path, js: &str) -> std::io::Result<Self> {
+        let mut nonce = [0u8; 16];
+        std::fs::File::open("/dev/urandom")?.read_exact(&mut nonce)?;
+        let suffix: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
+        let dir = root.join(format!("arka-kwin-{suffix}"));
+        // Atomic directory creation never accepts a pre-existing attacker path.
+        std::fs::DirBuilder::new().mode(0o700).create(&dir)?;
+        let script = Self {
+            path: dir.join("script.js"),
+            dir,
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&script.path)?;
+        file.write_all(js.as_bytes())?;
+        Ok(script)
+    }
+}
+
+impl Drop for PrivateScript {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir(&self.dir);
+    }
+}
+
+// KWin internalId is a QUuid. Journal text and window titles are untrusted;
+// never interpolate an arbitrary value from them into compositor JavaScript.
+fn valid_window_id(id: &str) -> bool {
+    let id = if id.starts_with('{') {
+        let Some(id) = id.strip_prefix('{').and_then(|s| s.strip_suffix('}')) else {
+            return false;
+        };
+        id
+    } else {
+        id
+    };
+    let parts: Vec<_> = id.split('-').collect();
+    parts.len() == 5
+        && parts
+            .iter()
+            .zip([8, 4, 4, 4, 12])
+            .all(|(part, len)| part.len() == len && part.bytes().all(|b| b.is_ascii_hexdigit()))
+}
 
 /// A window on the user's desktop, described in compositor-neutral terms.
 #[derive(Clone, Debug, Default)]
@@ -68,19 +124,19 @@ impl KWinWindowService {
     /// Write `js` to a temp file, load+run it via KWin's Scripting D-Bus API,
     /// then unload. Best-effort: any failure is swallowed (returns `false`).
     fn run_script(js: &str) -> bool {
-        let path = std::env::temp_dir().join(format!("arka-kwin-{}.js", std::process::id()));
-        if std::fs::write(&path, js).is_err() {
+        let Ok(prepared) = PrivateScript::create_in(&std::env::temp_dir(), js) else {
             return false;
-        }
+        };
         let out = Command::new("dbus-send")
             .args([
                 "--session",
                 "--print-reply",
+                "--reply-timeout=3000",
                 "--dest=org.kde.KWin",
                 "/Scripting",
                 "org.kde.kwin.Scripting.loadScript",
             ])
-            .arg(format!("string:{}", path.display()))
+            .arg(format!("string:{}", prepared.path.display()))
             .output();
 
         let ok = match out {
@@ -89,30 +145,33 @@ impl KWinWindowService {
                 let reply = String::from_utf8_lossy(&o.stdout);
                 if let Some(id) = reply.split_whitespace().last() {
                     let script = format!("/Scripting/Script{id}");
-                    let _ = Command::new("dbus-send")
+                    let run = Command::new("dbus-send")
                         .args([
                             "--session",
+                            "--print-reply",
+                            "--reply-timeout=3000",
                             "--dest=org.kde.KWin",
                             &script,
                             "org.kde.kwin.Script.run",
                         ])
-                        .status();
+                        .output();
                     let _ = Command::new("dbus-send")
                         .args([
                             "--session",
+                            "--print-reply",
+                            "--reply-timeout=3000",
                             "--dest=org.kde.KWin",
                             &script,
                             "org.kde.kwin.Script.stop",
                         ])
-                        .status();
-                    true
+                        .output();
+                    run.is_ok_and(|out| out.status.success())
                 } else {
                     false
                 }
             }
             _ => false,
         };
-        let _ = std::fs::remove_file(&path);
         ok
     }
 }
@@ -154,7 +213,7 @@ impl WindowService for KWinWindowService {
                 let id = f.next().unwrap_or("").to_string();
                 let app_id = f.next().unwrap_or("").to_string();
                 let title = f.next().unwrap_or("").to_string();
-                if id.is_empty() {
+                if !valid_window_id(&id) {
                     continue;
                 }
                 if windows.iter().any(|w: &Window| w.id == id) {
@@ -168,6 +227,9 @@ impl WindowService for KWinWindowService {
     }
 
     fn focus(&self, id: &str) {
+        if !valid_window_id(id) {
+            return;
+        }
         let js = format!(
             r#"
             var wins = (typeof workspace.windowList === "function")
@@ -181,6 +243,9 @@ impl WindowService for KWinWindowService {
     }
 
     fn close(&self, id: &str) {
+        if !valid_window_id(id) {
+            return;
+        }
         let js = format!(
             r#"
             var wins = (typeof workspace.windowList === "function")
@@ -191,5 +256,51 @@ impl WindowService for KWinWindowService {
         "#
         );
         Self::run_script(&js);
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn rejects_journal_script_injection_and_accepts_kwin_uuids() {
+        for id in [
+            "00112233-4455-6677-8899-aabbccddeeff",
+            "{00112233-4455-6677-8899-AABBCCDDEEFF}",
+        ] {
+            assert!(valid_window_id(id));
+        }
+        for id in [
+            "",
+            "1",
+            "\"); print(\"injected\"); //",
+            "{00112233-4455-6677-8899-aabbccddeeff",
+            "00112233-4455-6677-8899-aabbccddeeff\n",
+            "00112233-4455-6677-8899-aabbccddeezz",
+        ] {
+            assert!(!valid_window_id(id), "{id:?}");
+        }
+    }
+
+    #[test]
+    fn scripts_are_private_unique_and_cleaned_up() {
+        let first = PrivateScript::create_in(&std::env::temp_dir(), "first").unwrap();
+        let second = PrivateScript::create_in(&std::env::temp_dir(), "second").unwrap();
+        assert_ne!(first.path, second.path);
+        assert_eq!(
+            std::fs::metadata(&first.dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(&first.path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(std::fs::read_to_string(&first.path).unwrap(), "first");
+        let dir = first.dir.clone();
+        drop(first);
+        assert!(!dir.exists());
+        assert!(second.path.exists());
     }
 }

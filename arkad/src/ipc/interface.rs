@@ -6,6 +6,7 @@ use crate::state::SharedState;
 use crate::reconcile;
 
 pub struct ArkadIface {
+    pub authorization_lock: tokio::sync::Mutex<()>,
     pub enforcement_lock: Arc<tokio::sync::Mutex<()>>,
     pub state:     SharedState,
     pub enforcers: Arc<Vec<Box<dyn AsyncEnforcer>>>,
@@ -52,7 +53,17 @@ impl ArkadIface {
 
     // — Methods —
 
-    async fn enforce_all(&self) -> zbus::fdo::Result<()> {
+    async fn enforce_all(
+        &self,
+        #[zbus(connection)] conn: &zbus::Connection,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        // Bound pending authentication prompts without holding the periodic
+        // enforcement mutex while somebody is entering their password.
+        let auth_guard = self.authorization_lock.try_lock()
+            .map_err(|_| zbus::fdo::Error::Failed("Another authorization request is pending".into()))?;
+        super::authorization::check(conn, &header).await?;
+        drop(auth_guard);
         let _guard = self.enforcement_lock.try_lock()
             .map_err(|_| zbus::fdo::Error::Failed("Enforcement is already running; try again shortly".into()))?;
         let failed = reconcile::reconcile(&self.enforcers, &self.state, true).await;

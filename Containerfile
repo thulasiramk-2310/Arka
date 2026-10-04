@@ -77,6 +77,7 @@ COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
 COPY arkad/arkad.toml /etc/arkad/arkad.toml
 COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
 COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
+COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
 RUN mkdir -p /etc/arkad && \
     systemctl enable arkad.service
 
