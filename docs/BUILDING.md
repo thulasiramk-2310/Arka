@@ -1,6 +1,11 @@
 # Building ArkaOS
 
-From source tree to bootable qcow2 in three commands. Everything runs inside
+The recipe now targets Fedora 44 as an unvalidated candidate. Complete the
+[release and hardware gates](RELEASE-VALIDATION.md) before distributing an image.
+All commands below operate on disposable guest images; never attach host disks,
+Windows partitions, host EFI storage or host firmware variables.
+
+Everything runs inside
 the rootful podman machine (`podman-machine-default`), which mounts your home
 at `/var/home/<you>` via virtiofs.
 
@@ -9,13 +14,13 @@ at `/var/home/<you>` via virtiofs.
 - Arch/any host with podman + qemu + swtpm
 - `podman machine init --rootful --memory 6144 --disk-size 40 podman-machine-default`
   (40 GB minimum — the KDE image alone is ~10 GB in storage)
-- Fedora's OVMF firmware (Fedora 42 GRUB crashes Arch's edk2). Extract it once:
+- Matching Fedora OVMF firmware in disposable files. Extract it once:
   ```
   for f in CODE VARS; do
     podman machine ssh podman-machine-default \
-      "podman run --rm docker.io/fedora:42 bash -c \
+      "podman run --rm docker.io/fedora:44 bash -c \
       'dnf install -y edk2-ovmf -q &>/dev/null; base64 /usr/share/edk2/ovmf/OVMF_${f}_4M.qcow2'" \
-      | base64 -d > OVMF_${f}_4M_f42.qcow2
+      | base64 -d > OVMF_${f}_4M_f44.qcow2
   done
   ```
 
@@ -47,13 +52,13 @@ Output: `output/qcow2/disk.qcow2`.
 ## 3. Boot it
 
 ```sh
-cp OVMF_VARS_4M_f42.qcow2 OVMF_VARS_4M_f42_boot.qcow2
+cp OVMF_VARS_4M_f44.qcow2 OVMF_VARS_4M_f44_boot.qcow2
 qemu-system-x86_64 -enable-kvm -m 6144 -cpu host -smp 2 -machine q35 \
-  -drive if=pflash,format=qcow2,readonly=on,file=OVMF_CODE_4M_f42.qcow2 \
-  -drive if=pflash,format=qcow2,file=OVMF_VARS_4M_f42_boot.qcow2 \
+  -drive if=pflash,format=qcow2,readonly=on,file=OVMF_CODE_4M_f44.qcow2 \
+  -drive if=pflash,format=qcow2,file=OVMF_VARS_4M_f44_boot.qcow2 \
   -drive file=output/qcow2/disk.qcow2,format=qcow2,if=virtio \
   -device virtio-vga -display gtk -usb -device usb-tablet \
-  -serial telnet::4445,server,nowait -monitor telnet::4444,server,nowait
+  -serial telnet:127.0.0.1:4445,server,nowait -monitor telnet:127.0.0.1:4444,server,nowait
 ```
 
 - Serial console: `telnet localhost 4445`

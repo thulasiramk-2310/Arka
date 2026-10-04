@@ -71,7 +71,7 @@ async fn approved_enforce_calls_backend_once() {
         .unwrap();
     assert_eq!(
         out.final_answer.as_deref(),
-        Some("Re-applied all privacy enforcers.")
+        Some("action: re-applied all privacy enforcers")
     );
     assert_eq!(
         backend.enforce_calls.load(Ordering::SeqCst),
@@ -135,7 +135,7 @@ async fn bad_write_args_rejected_before_approval() {
         .unwrap();
     assert_eq!(
         out.final_answer.as_deref(),
-        Some("That request is missing a unit.")
+        Some("action: Rejected: bad args: expected {\"unit\": string}")
     );
     assert_eq!(
         backend.writes_total(),
@@ -190,7 +190,7 @@ async fn lowering_protection_requires_typed_confirm() {
     let out = agent::run(&llm, &backend, &approver, &cfg, "lower protection")
         .await
         .unwrap();
-    assert_eq!(out.final_answer.as_deref(), Some("done"));
+    assert_eq!(out.final_answer.as_deref(), Some("action: [test] lowered protection"));
     assert!(
         approver.typed_was_called(),
         "a protection-lowering write must go through confirm_typed, not confirm"
@@ -266,4 +266,16 @@ async fn log_verify_passes_after_mixed_writes() {
     let report = crate::audit::verify(&cfg.audit_path).unwrap();
     assert!(report.contains("chain intact"), "{report}");
     let _ = std::fs::remove_file(&cfg.audit_path);
+}
+
+#[tokio::test]
+async fn audit_failure_prevents_the_approved_write() {
+    let backend = MockBackend::healthy();
+    let llm = MockLlm::new(vec![r#"{"tool":"enforce_privacy","args":{}}"#]);
+    let approver = ScriptedApprover::new(vec![true]);
+    let cfg = tmp_cfg(false);
+    std::fs::create_dir(&cfg.audit_path).unwrap();
+    assert!(agent::run(&llm, &backend, &approver, &cfg, "re-enforce privacy").await.is_err());
+    assert_eq!(backend.writes_total(), 0);
+    std::fs::remove_dir(&cfg.audit_path).unwrap();
 }

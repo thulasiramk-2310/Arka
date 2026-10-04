@@ -1,18 +1,19 @@
 #!/bin/bash
-# ArkaOS Settings — run with: sudo arkaos-settings (or Super+S in Hyprland)
+# ArkaOS console login settings — run with: sudo arkaos-settings
+set -euo pipefail
 
 [[ $EUID -ne 0 ]] && exec sudo "$0" "$@"
 
 B='\033[1m'; C='\033[1;36m'; BL='\033[1;34m'; G='\033[1;32m'
 Y='\033[1;33m'; R='\033[1;31m'; D='\033[2m'; E='\033[0m'
 
-AUTOLOGIN_CONF=/etc/systemd/system/getty@tty1.service.d/autologin.conf
+AUTOLOGIN_CONF=/etc/sddm.conf.d/20-autologin.conf
 
-autologin_on() { [[ -f "$AUTOLOGIN_CONF" ]] && grep -q 'autologin' "$AUTOLOGIN_CONF"; }
+autologin_on() { [[ -f "$AUTOLOGIN_CONF" ]] && grep -Eq '^User=.+$' "$AUTOLOGIN_CONF"; }
 
 autologin_user() {
     if [[ -f "$AUTOLOGIN_CONF" ]]; then
-        grep -oP '(?<=--autologin )\S+' "$AUTOLOGIN_CONF"
+        sed -n 's/^User=//p' "$AUTOLOGIN_CONF"
     else
         echo "${SUDO_USER:-$USER}"
     fi
@@ -20,15 +21,16 @@ autologin_user() {
 
 enable_autologin() {
     local user; user=$(autologin_user)
+    [[ "$user" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || return 1
+    local uid; uid=$(id -u "$user") || return 1
+    [[ "$uid" -ge 1000 && "$user" != arkasetup ]] || return 1
     mkdir -p "$(dirname "$AUTOLOGIN_CONF")"
-    printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' \
+    printf '[Autologin]\nUser=%s\nSession=plasma.desktop\n' \
         "$user" > "$AUTOLOGIN_CONF"
-    systemctl daemon-reload 2>/dev/null
 }
 
 disable_autologin() {
     rm -f "$AUTOLOGIN_CONF"
-    systemctl daemon-reload 2>/dev/null
 }
 
 while true; do
@@ -42,7 +44,7 @@ while true; do
         al_hint="boot goes straight to desktop"
     else
         al_badge="${R}${B} OFF${E}"
-        al_hint="password required on each boot"
+        al_hint="ArkaOS automatic-login preference is off"
     fi
 
     printf "    ${B}[1]${E}  Autologin     $al_badge  ${D}$al_hint${E}\n\n"
@@ -50,15 +52,19 @@ while true; do
     printf "    ${D}┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄${E}\n"
     printf "    ${D}Q  quit${E}\n\n"
     printf "    ${C}▸${E} "
-    read -r choice
+    read -r choice || break
 
     case "${choice,,}" in
         1)
             if autologin_on; then
                 disable_autologin
-                printf "\n    ${G}✓${E}  Autologin disabled — password required from next boot.\n"
+                printf "\n    ${G}✓${E}  ArkaOS autologin preference removed. Check Plasma Login Screen settings for other overrides.\n"
             else
-                enable_autologin
+                if ! enable_autologin; then
+                    printf '\n    Could not enable autologin for a regular user.\n'
+                    read -r || true
+                    continue
+                fi
                 printf "\n    ${G}✓${E}  Autologin enabled for ${C}$(autologin_user)${E} — takes effect next boot.\n"
             fi
             printf "\n    Press Enter to continue..."

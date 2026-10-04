@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use zbus::interface;
-use tracing::error;
 
 use crate::enforcers::AsyncEnforcer;
 use crate::state::SharedState;
-use crate::score;
+use crate::reconcile;
 
 pub struct ArkadIface {
+    pub enforcement_lock: Arc<tokio::sync::Mutex<()>>,
     pub state:     SharedState,
     pub enforcers: Arc<Vec<Box<dyn AsyncEnforcer>>>,
 }
@@ -53,16 +53,13 @@ impl ArkadIface {
     // — Methods —
 
     async fn enforce_all(&self) -> zbus::fdo::Result<()> {
-        for e in self.enforcers.iter() {
-            if let Err(err) = e.enforce().await {
-                error!(enforcer = e.name(), %err, "enforce_all: enforce failed");
-            }
+        let _guard = self.enforcement_lock.try_lock()
+            .map_err(|_| zbus::fdo::Error::Failed("Enforcement is already running; try again shortly".into()))?;
+        let failed = reconcile::reconcile(&self.enforcers, &self.state, true).await;
+        if failed.is_empty() {
+            Ok(())
+        } else {
+            Err(zbus::fdo::Error::Failed(format!("Protection not confirmed: {}", failed.join(", "))))
         }
-        for e in self.enforcers.iter() {
-            e.update_state(&self.state).await;
-        }
-        let mut s = self.state.write().await;
-        s.privacy_score = score::compute(&s);
-        Ok(())
     }
 }

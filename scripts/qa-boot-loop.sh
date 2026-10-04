@@ -10,8 +10,8 @@ set -u
 N=${1:-10}
 DISK=${2:-output/qcow2/disk.qcow2}
 TIMEOUT=120
-CODE=OVMF_CODE_4M_f42.qcow2
-VARS=OVMF_VARS_4M_f42.qcow2
+CODE=OVMF_CODE_4M_f44.qcow2
+VARS=OVMF_VARS_4M_f44.qcow2
 OUT=qa-results
 MON=4464   # dedicated monitor/serial ports so a dev VM can coexist
 SER=4465

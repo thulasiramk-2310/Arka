@@ -1,7 +1,6 @@
 use std::sync::mpsc::Sender;
 
 use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
-use futures::StreamExt;
 
 use crate::state::{DashboardState, ReliabilityState, StateUpdate};
 
@@ -40,6 +39,8 @@ trait Arkad {
 )]
 trait Pulse {
     #[zbus(property)]
+    fn sampled_at(&self) -> zbus::Result<u64>;
+    #[zbus(property)]
     fn health(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn summary(&self) -> zbus::Result<String>;
@@ -65,41 +66,21 @@ pub fn start_worker(tx: Sender<StateUpdate>) {
 }
 
 async fn worker_loop(tx: Sender<StateUpdate>) -> zbus::Result<()> {
-    let conn = zbus::Connection::system().await?;
-    let proxy = ArkadProxy::new(&conn).await?;
-    // Proxy creation is lazy and does not require the service to be running, so
-    // the dashboard still works if arka-pulse isn't up yet (reads just fail and
-    // reliability shows as unavailable).
-    let pulse = PulseProxy::new(&conn).await?;
-
-    fetch_full(&proxy, &pulse, &tx).await.ok();
-
-    let mut s_score   = proxy.receive_privacy_score_changed().await;
-    let mut s_dns     = proxy.receive_dns_status_changed().await;
-    let mut s_mac     = proxy.receive_mac_randomization_changed().await;
-    let mut s_host    = proxy.receive_hostname_privacy_changed().await;
-    let mut s_ipv6    = proxy.receive_ipv6_privacy_changed().await;
-    let mut s_sandbox = proxy.receive_sandbox_status_changed().await;
-    let mut s_browser = proxy.receive_browser_sandbox_changed().await;
-
-    // arka-pulse properties don't emit change signals (the daemon mutates its
-    // snapshot directly), so poll them on a timer. The daemon samples every
-    // ~10s; polling at 4s keeps the health view fresh without busy-reading.
-    let mut tick = tokio::time::interval(std::time::Duration::from_secs(4));
-
     loop {
-        tokio::select! {
-            v = s_score.next()   => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_dns.next()     => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_mac.next()     => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_host.next()    => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_ipv6.next()    => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_sandbox.next() => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            v = s_browser.next() => { if v.is_none() { break; } fetch_full(&proxy, &pulse, &tx).await.ok(); }
-            _ = tick.tick()      => { fetch_full(&proxy, &pulse, &tx).await.ok(); }
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let conn = zbus::Connection::system().await?;
+            let proxy = ArkadProxy::builder(&conn)
+                .cache_properties(zbus::proxy::CacheProperties::No).build().await?;
+            let pulse = PulseProxy::builder(&conn)
+                .cache_properties(zbus::proxy::CacheProperties::No).build().await?;
+            fetch_full(&proxy, &pulse, &tx).await
+        }).await;
+        if !matches!(result, Ok(Ok(()))) {
+            // Replace previous success immediately; reconnect on the next poll.
+            if tx.send(StateUpdate::Full(Box::default())).is_err() { return Ok(()); }
         }
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
     }
-    Ok(())
 }
 
 async fn fetch_full(
@@ -108,6 +89,7 @@ async fn fetch_full(
     tx: &Sender<StateUpdate>,
 ) -> zbus::Result<()> {
     let state = DashboardState {
+        available:         true,
         privacy_score:     proxy.privacy_score().await?,
         dns_status:        DnsStatus::from(proxy.dns_status().await?),
         mac_randomization: proxy.mac_randomization().await?,
@@ -119,13 +101,20 @@ async fn fetch_full(
         tracking_blocked:  true,
         // Best-effort: if arka-pulse is unreachable, reliability stays the
         // default "unavailable" rather than failing the whole privacy fetch.
-        reliability:       fetch_reliability(pulse).await.unwrap_or_default(),
+        reliability:       tokio::time::timeout(std::time::Duration::from_secs(1), fetch_reliability(pulse))
+            .await.ok().and_then(Result::ok).unwrap_or_default(),
     };
-    tx.send(StateUpdate::Full(Box::new(state))).ok();
+    tx.send(StateUpdate::Full(Box::new(state)))
+        .map_err(|_| zbus::Error::Failure("Dashboard closed".into()))?;
     Ok(())
 }
 
 async fn fetch_reliability(pulse: &PulseProxy<'_>) -> zbus::Result<ReliabilityState> {
+    let sampled_at = pulse.sampled_at().await?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    if sampled_at == 0 || sampled_at > now || now - sampled_at > 30 {
+        return Err(zbus::Error::Failure("System health snapshot is stale".into()));
+    }
     // Highest-probability prediction, if any — presented to the user as merely
     // *possible* instability, never a certain failure.
     let prediction = pulse

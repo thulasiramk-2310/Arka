@@ -46,37 +46,70 @@ is preserved and cannot have its password reset by retrying setup. Recovery of
 that partial setup requires an explicit administrator operation. A resumable,
 transactional first-run flow remains future work.
 
-## Release gates, in priority order
+## Second source hardening pass
 
-1. **Effective privacy controls.** Check child exit statuses and deadlines;
-   verify effective resolver routing and active network connection settings;
-   retry failed controls independently of aggregate score. Report recovery only
-   after observing success. Test blocked DNS, conflicting connection settings,
-   missing hardware and repeated enforcement failures in the guest.
-2. **Fresh, consistent status.** Emit D-Bus property changes or bypass proxy
-   caching for polling. Include timestamps and availability in snapshots.
-   Test daemon disconnects, restarts and stale telemetry. Unknown status must
-   never keep the last successful green display indefinitely.
-3. **Least-privilege app controls.** Correct Flatpak permission labels, parsing,
-   effective overrides and error handling. Use a protected channel for WiFi
-   secrets. Move hardware calls off the GTK thread and give them deadlines.
-   Finish the SDDM and Plasma migration for autologin and wallpaper settings.
-4. **Grounded local assistance.** Enforce loopback-only model transport;
-   bind generated claims to typed facts and their domains; record write intent
-   before execution; redact audit inputs centrally and serialize concurrent
-   audit writers. Test redirected endpoints, fabricated claims and write failures.
-5. **Reproducible image and recovery.** Pin reviewed image/toolchain inputs,
-   build with committed lockfiles, and retain artifact provenance. Run clean
-   first-boot, update, rollback and user-data-preservation tests on disposable
-   images. Source tests alone do not prove these paths work.
-6. **Disk and boot protection.** Design disk encryption and image verification
-   against documented hardware support and recovery requirements. Stage this
-   work in a guest or dedicated test machine. Do not repartition, format, mount
-   Windows filesystems, install a host bootloader or change host firmware.
-7. **Desktop release quality.** Exercise every shipped app with and without
-   hardware, check accessibility and keyboard flows, and measure idle memory,
-   boot time and cold-start time. Keep the Plasma foundation while proving
-   first-party app behavior.
+- arkad checks every control on each bounded retry interval. It serializes manual
+  and periodic enforcement, propagates failed operations, bounds subprocesses
+  and verification, and only records recovery after verification succeeds.
+- DNS requires the resolved stub path and strict TLS on every reported DNS
+  scope, including split-DNS links. This checks system-resolver policy; it does
+  not prove reachability, query success, application-specific DNS or DNS uptime.
+  Conflicting VPN settings stay unconfirmed without overwriting the VPN.
+- MAC status compares active physical-interface addresses with their permanent
+  addresses through NetworkManager. A changed locally administered address and
+  the configured default are required. Existing connections are not disconnected
+  automatically. This does not make a device untrackable.
+- IPv6 checks per-interface kernel values, including defaults; failed commands
+  no longer produce success logs. Browser checks require the expected wrapper
+  target; executing and testing the browser boundary remains an image gate.
+- Dashboard and tray polling bypass D-Bus caches, use deadlines and reconnect.
+  Missing data replaces old successful indicators. Reliability snapshots have
+  timestamps and become unavailable on sampling failure or after 30 seconds.
+- Flatpak controls use real capability names and valid allow/deny options, parse
+  complete entries from effective permissions, and reread after changes. They
+  explicitly show direct grants: portals, broader filesystem paths, conditional
+  permissions and custom installations are not a complete access audit.
+  Audio-server access includes recording; DRI means graphics, not camera access.
+- WiFi scanning and connection, permission operations and wallpaper changes run
+  outside the GTK thread with deadlines. WiFi credentials use stdin rather than
+  argv, and escaped SSIDs retain their actual names.
+- Settings use Plasma's SDDM/screen-lock modules and wallpaper helper. The
+  console utility updates ArkaOS's SDDM drop-in, validates the regular account
+  and reports failures. Other SDDM configuration can override that preference.
+- Model traffic is restricted to loopback HTTP, with localhost pinned, proxies
+  disabled and redirects disabled. Answers use canonical tool facts, including
+  actual write results. Piped input cannot approve writes. Audit records redact
+  inputs, use private file permissions and serialize writers; approved intent
+  is synced before a write runs. The local hash chain is not tamper-proof.
+- Image builds use Rust lockfiles, preserve distribution password policy and
+  generate the UKI after the final initramfs. Fedora 44 is the candidate build
+  baseline. See [the migration and hardware gates](RELEASE-VALIDATION.md).
+- New-user defaults turn off optional heavy window effects and file indexing.
+  The image includes Fedora's zram defaults. Core desktop and privacy services
+  do not require an AI model, GPU inference or a network connection to a model.
+
+## Remaining release gates
+
+1. Build the Fedora 44 candidate in an isolated builder and verify all package,
+   service and kernel/UKI assumptions; pin reviewed image digests for a release.
+2. Boot a disposable image and exercise first-run success/failure, networking,
+   DNS packet capture, VPN/captive portals, MAC reconnects, disabled/missing
+   interfaces, browser file/socket isolation, and service restarts.
+3. Confirm installed `/usr` is read-only and verify atomic updates, failed
+   updates, rollback and user-data preservation. The build recipe alone does
+   not certify immutability or cryptographic boot verification.
+4. Test fresh and upgraded Flatpak permissions, rejected overrides, portal
+   prompts and audio/video hardware. Test Plasma KCM names, authorization,
+   wallpaper handling, accessibility and every shipped app on the candidate.
+5. Measure startup, idle RAM, memory pressure, thermals and graphics behavior
+   across the hardware matrix. Bluetooth, sound and package-management actions
+   still need a full responsiveness/deadline review.
+6. Validate the changed local-model path against a running model and live
+   daemon. Ensure audit records remain private and verify recovery after a
+   crash between approved intent and completion.
+7. Design and test disk encryption, signed updates and verified boot on
+   disposable images or dedicated test hardware. Never operate on the host
+   Windows partitions, EFI system partition, bootloader or firmware.
 
 ## Local source checks
 
@@ -84,7 +117,8 @@ transactional first-run flow remains future work.
 python3 scripts/test-oobe-apply.py
 bash -n arkaos-oobe-apply
 bash -n arkaos-firstboot
-cargo test --locked --manifest-path arka-pulse/Cargo.toml
+cargo test --locked --manifest-path arkad/Cargo.toml
+cargo test --locked --manifest-path arka-pulse/Cargo.toml --features dbus
 cargo test --locked --manifest-path arka-agent/Cargo.toml
 cargo test --locked --manifest-path arka-shell/Cargo.toml -p arka-shell-common -p arka-privacy-tray
 ```

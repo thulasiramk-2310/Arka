@@ -11,7 +11,7 @@ pub fn compute(s: &ArkadState) -> u8 {
     if s.hostname_privacy                                       { n += 10; }
     if s.ipv6_privacy                                           { n += 10; }
     if s.sandbox_status == SandboxStatus::Active                { n += 15; }
-    if matches!(s.browser_sandbox,
+    if s.sandbox_status.is_active() && matches!(s.browser_sandbox,
         BrowserSandbox::Persistent
         | BrowserSandbox::Ephemeral
         | BrowserSandbox::PrivateWorkspace)                     { n += 10; }

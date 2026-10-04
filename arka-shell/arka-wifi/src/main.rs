@@ -92,9 +92,25 @@ fn build_ui(app: &adw::Application) {
 }
 
 fn do_scan(list: &gtk4::ListBox, networks: &Rc<RefCell<Vec<net::Network>>>) {
-    let fresh = net::scan();
-    *networks.borrow_mut() = fresh.clone();
-    rebuild_rows(list, &fresh);
+    if !list.is_sensitive() { return; }
+    list.set_sensitive(false);
+    let list = list.clone();
+    let networks = networks.clone();
+    glib::spawn_future_local(async move {
+        match gtk4::gio::spawn_blocking(net::scan).await {
+            Ok(Ok(fresh)) => {
+                *networks.borrow_mut() = fresh.clone();
+                rebuild_rows(&list, &fresh);
+            }
+            _ => {
+                networks.borrow_mut().clear();
+                while let Some(child) = list.first_child() { list.remove(&child); }
+                let label = gtk4::Label::new(Some("WiFi scan unavailable. Check your adapter and retry."));
+                list.append(&label);
+            }
+        }
+        list.set_sensitive(true);
+    });
 }
 
 fn rebuild_rows(list: &gtk4::ListBox, networks: &[net::Network]) {
@@ -201,9 +217,17 @@ fn show_password_dialog(parent: &adw::ApplicationWindow, ssid: &str) {
 }
 
 fn do_connect(parent: &adw::ApplicationWindow, ssid: &str, pw: Option<&str>) {
-    if let Err(e) = net::connect(ssid, pw) {
+    parent.set_sensitive(false);
+    let parent = parent.clone();
+    let ssid = ssid.to_owned();
+    let password = pw.map(str::to_owned);
+    glib::spawn_future_local(async move {
+    let result = gtk4::gio::spawn_blocking(move || net::connect(&ssid, password.as_deref()))
+        .await.unwrap_or_else(|_| Err("Network worker failed".into()));
+    parent.set_sensitive(true);
+    if let Err(e) = result {
         let msg = gtk4::Window::builder()
-            .title("Connection Failed").transient_for(parent)
+            .title("Connection Failed").transient_for(&parent)
             .modal(true).default_width(320).resizable(false).build();
         let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
         vbox.set_margin_start(24); vbox.set_margin_end(24);
@@ -219,4 +243,5 @@ fn do_connect(parent: &adw::ApplicationWindow, ssid: &str, pw: Option<&str>) {
     } else {
         parent.close();
     }
+    });
 }

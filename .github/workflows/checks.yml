@@ -3,20 +3,26 @@ name: Source checks
 on:
   push:
     paths:
+      - "arkad/**"
       - "arka-agent/**"
       - "arka-pulse/**"
       - "arka-shell/**"
       - "arkaos-oobe-apply"
       - "arkaos-firstboot"
+      - "arkaos-settings"
+      - "Containerfile"
       - "scripts/test-oobe-apply.py"
       - ".github/workflows/checks.yml"
   pull_request:
     paths:
+      - "arkad/**"
       - "arka-agent/**"
       - "arka-pulse/**"
       - "arka-shell/**"
       - "arkaos-oobe-apply"
       - "arkaos-firstboot"
+      - "arkaos-settings"
+      - "Containerfile"
       - "scripts/test-oobe-apply.py"
       - ".github/workflows/checks.yml"
   workflow_dispatch:
@@ -30,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check first-run shell syntax
-        run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot
+        run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot && bash -n arkaos-settings
       - name: Test setup with isolated accounts and paths
         run: python3 scripts/test-oobe-apply.py
 
@@ -40,8 +46,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select stable Rust
         run: rustup default stable
+      - name: Test privacy enforcement
+        run: cargo test --locked --manifest-path arkad/Cargo.toml
       - name: Test reliability core
-        run: cargo test --locked --manifest-path arka-pulse/Cargo.toml
+        run: cargo test --locked --manifest-path arka-pulse/Cargo.toml --features dbus
       - name: Test agent and daemon status contract
         run: cargo test --locked --manifest-path arka-agent/Cargo.toml
       - name: Test shared privacy states and tray
@@ -55,5 +63,11 @@ jobs:
         run: rustup default stable
       - name: Install desktop build dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
-      - name: Check the dashboard
-        run: cargo check --locked --manifest-path arka-shell/Cargo.toml -p arka-dashboard
+      - name: Check all desktop apps
+        run: cargo check --locked --manifest-path arka-shell/Cargo.toml --workspace
+      - name: Test permission and WiFi parsers without a display
+        run: |
+          rustc --edition=2021 --test arka-shell/arka-perms/src/permissions.rs -o /tmp/perms-tests
+          /tmp/perms-tests
+          rustc --edition=2021 --test arka-shell/arka-wifi/src/net.rs -o /tmp/wifi-tests
+          /tmp/wifi-tests

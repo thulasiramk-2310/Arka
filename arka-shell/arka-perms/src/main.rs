@@ -6,76 +6,8 @@ use std::process::Command;
 
 const APP_ID: &str = "org.arka.perms";
 
-// Flatpak permission categories we surface to the user
-#[derive(Clone)]
-struct Perm {
-    label:   &'static str,
-    desc:    &'static str,
-    icon:    &'static str,
-    // The flatpak override flag to add when ALLOWED (deny = --no-*)
-    flag:    &'static str,
-    // How to detect if currently allowed in `flatpak info --show-permissions`
-    detect:  &'static str,
-}
-
-const PERMS: &[Perm] = &[
-    Perm {
-        label: "Network Access",
-        desc:  "Connect to the internet",
-        icon:  "network-wireless-symbolic",
-        flag:  "--share=network",
-        detect: "network",
-    },
-    Perm {
-        label: "Microphone",
-        desc:  "Record audio from your microphone",
-        icon:  "audio-input-microphone-symbolic",
-        flag:  "--device=all",
-        detect: "all-devices",
-    },
-    Perm {
-        label: "Camera",
-        desc:  "Access your webcam",
-        icon:  "camera-web-symbolic",
-        flag:  "--device=dri",
-        detect: "dri",
-    },
-    Perm {
-        label: "Home Folder",
-        desc:  "Read and write your personal files",
-        icon:  "user-home-symbolic",
-        flag:  "--filesystem=home",
-        detect: "home",
-    },
-    Perm {
-        label: "Downloads Folder",
-        desc:  "Read and write ~/Downloads only",
-        icon:  "folder-download-symbolic",
-        flag:  "--filesystem=xdg-download",
-        detect: "xdg-download",
-    },
-    Perm {
-        label: "Wayland Display",
-        desc:  "Show windows on your screen",
-        icon:  "video-display-symbolic",
-        flag:  "--socket=wayland",
-        detect: "wayland",
-    },
-    Perm {
-        label: "Audio Playback",
-        desc:  "Play sound through your speakers",
-        icon:  "audio-volume-high-symbolic",
-        flag:  "--socket=pulseaudio",
-        detect: "pulseaudio",
-    },
-    Perm {
-        label: "USB Devices",
-        desc:  "Access USB drives and peripherals",
-        icon:  "drive-removable-media-symbolic",
-        flag:  "--device=usb",
-        detect: "usb",
-    },
-];
+mod permissions;
+use permissions::{is_granted, Perm, PERMS};
 
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
@@ -137,17 +69,26 @@ fn build_ui(app: &adw::Application) {
 }
 
 fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
-    let apps = list_flatpak_apps();
-
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
+    let target = content.clone();
+    let nav = nav.clone();
+    glib::spawn_future_local(async move {
+    let apps = match gtk4::gio::spawn_blocking(list_flatpak_apps).await {
+        Ok(Ok(apps)) => apps,
+        _ => {
+            target.append(&gtk4::Label::new(Some("Could not read installed apps. Check that Flatpak is available.")));
+            return;
+        }
+    };
+    let content = target;
     if apps.is_empty() {
         let empty = adw::StatusPage::new();
         empty.set_icon_name(Some("application-x-executable-symbolic"));
         empty.set_title("No Sandboxed Apps");
         empty.set_description(Some("Install apps via Capsule to manage their permissions here."));
         content.append(&empty);
-        return content.upcast();
+        return;
     }
 
     let group = adw::PreferencesGroup::new();
@@ -192,15 +133,25 @@ fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
     inner.append(&group);
     scroll.set_child(Some(&inner));
     content.append(&scroll);
+    });
     content.upcast()
 }
 
 fn build_perm_page(app_id: &str, app_name: &str) -> gtk4::Widget {
-    let current_perms = read_app_perms(app_id);
-    let overrides     = read_app_overrides(app_id);
-
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
+    let target = content.clone();
+    let app_id = app_id.to_owned();
+    let app_name = app_name.to_owned();
+    glib::spawn_future_local(async move {
+    let aid = app_id.clone();
+    let current_perms = match gtk4::gio::spawn_blocking(move || read_app_perms(&aid)).await {
+        Ok(Ok(perms)) => perms,
+        _ => {
+            target.append(&gtk4::Label::new(Some("Permissions unavailable. No settings were changed.")));
+            return;
+        }
+    };
+    let content = target;
     // App header card
     let header_group = adw::PreferencesGroup::new();
     header_group.set_margin_start(16);
@@ -209,8 +160,8 @@ fn build_perm_page(app_id: &str, app_name: &str) -> gtk4::Widget {
     header_group.set_margin_bottom(4);
 
     let header_row = adw::ActionRow::new();
-    header_row.set_title(app_name);
-    header_row.set_subtitle(app_id);
+    header_row.set_title(&app_name);
+    header_row.set_subtitle(&app_id);
     let app_icon = gtk4::Image::from_icon_name("application-x-executable-symbolic");
     app_icon.set_pixel_size(40);
     header_row.add_prefix(&app_icon);
@@ -223,16 +174,23 @@ fn build_perm_page(app_id: &str, app_name: &str) -> gtk4::Widget {
     reset_btn.set_halign(gtk4::Align::Center);
     reset_btn.set_margin_top(8);
     reset_btn.set_margin_bottom(4);
+    let notice = gtk4::Label::new(Some("Changes apply when the app is restarted. Portals and broader grants can provide additional access."));
+    notice.set_wrap(true);
+    notice.set_margin_start(16);
+    notice.set_margin_end(16);
+    let rows = std::rc::Rc::new(std::cell::RefCell::new(Vec::<(adw::SwitchRow, &'static Perm)>::new()));
+    let updating = std::rc::Rc::new(std::cell::Cell::new(false));
     let aid = app_id.to_string();
+    let all_rows = rows.clone();
+    let busy = updating.clone();
+    let note = notice.clone();
     reset_btn.connect_clicked(move |_| {
-        let _ = Command::new("flatpak")
-            .args(["override", "--user", "--reset", &aid])
-            .output();
+        change_permissions(aid.clone(), None, all_rows.clone(), busy.clone(), note.clone());
     });
 
     // Permissions group
     let perm_group = adw::PreferencesGroup::new();
-    perm_group.set_title("Permissions");
+    perm_group.set_title("Direct permission grants");
     perm_group.set_margin_start(16);
     perm_group.set_margin_end(16);
     perm_group.set_margin_top(8);
@@ -247,14 +205,16 @@ fn build_perm_page(app_id: &str, app_name: &str) -> gtk4::Widget {
         prefix_icon.set_pixel_size(20);
         row.add_prefix(&prefix_icon);
 
-        // Determine current state: overrides take priority over manifest perms
-        let is_on = is_perm_active(perm, &current_perms, &overrides);
-        row.set_active(is_on);
-
+        row.set_active(is_granted(perm, &current_perms));
+        rows.borrow_mut().push((row.clone(), perm));
         let aid = app_id.to_string();
-        let flag = perm.flag;
+        let all_rows = rows.clone();
+        let busy = updating.clone();
+        let note = notice.clone();
         row.connect_active_notify(move |r| {
-            apply_perm_override(&aid, flag, r.is_active());
+            if busy.get() { return; }
+            let flag = if r.is_active() { perm.allow } else { perm.deny };
+            change_permissions(aid.clone(), Some(flag), all_rows.clone(), busy.clone(), note.clone());
         });
 
         perm_group.add(&row);
@@ -269,74 +229,56 @@ fn build_perm_page(app_id: &str, app_name: &str) -> gtk4::Widget {
     inner.append(&header_group);
     inner.append(&perm_group);
     inner.append(&reset_btn);
+    inner.append(&notice);
     scroll.set_child(Some(&inner));
     content.append(&scroll);
+    });
     content.upcast()
 }
 
-// ── flatpak helpers ─────────────────────────────────────────────────────────
+type Rows = std::rc::Rc<std::cell::RefCell<Vec<(adw::SwitchRow, &'static Perm)>>>;
 
-fn list_flatpak_apps() -> Vec<(String, String)> {
-    let out = Command::new("flatpak")
-        .args(["list", "--app", "--columns=application,name"])
-        .output()
-        .ok();
-    let Some(out) = out else { return Vec::new() };
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| {
-            let mut parts = l.splitn(2, '\t');
-            let id   = parts.next()?.trim().to_string();
-            let name = parts.next().unwrap_or(&id).trim().to_string();
-            if id.is_empty() { return None; }
-            Some((id, name))
-        })
-        .collect()
+fn change_permissions(aid: String, flag: Option<&'static str>, rows: Rows,
+    busy: std::rc::Rc<std::cell::Cell<bool>>, note: gtk4::Label) {
+    if busy.replace(true) { return; }
+    for (row, _) in rows.borrow().iter() { row.set_sensitive(false); }
+    glib::spawn_future_local(async move {
+        let result = gtk4::gio::spawn_blocking(move || {
+            let applied = flatpak(&["override", "--user", flag.unwrap_or("--reset"), &aid]);
+            (applied, read_app_perms(&aid))
+        }).await;
+        match result {
+            Ok((applied, Ok(perms))) => {
+                for (row, perm) in rows.borrow().iter() {
+                    row.set_active(is_granted(perm, &perms));
+                    row.set_sensitive(true);
+                }
+                note.set_text(if applied.is_ok() { "Saved. Restart the app to apply changes." }
+                    else { "Change failed. The switches show the settings currently reported by Flatpak." });
+            }
+            _ => note.set_text("Could not verify permissions. Reopen this page to retry."),
+        }
+        busy.set(false);
+    });
 }
 
-fn read_app_perms(app_id: &str) -> String {
-    Command::new("flatpak")
-        .args(["info", "--show-permissions", app_id])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default()
+fn flatpak(args: &[&str]) -> Result<String, String> {
+    let out = Command::new("timeout")
+        .args(["--kill-after=2", "15", "flatpak"]).args(args)
+        .env("LC_ALL", "C").output().map_err(|e| e.to_string())?;
+    if !out.status.success() { return Err(format!("Flatpak failed: {}", out.status)); }
+    String::from_utf8(out.stdout).map_err(|e| e.to_string())
 }
 
-fn read_app_overrides(app_id: &str) -> String {
-    // flatpak override --user --show  (shows user-level overrides)
-    Command::new("flatpak")
-        .args(["override", "--user", "--show", app_id])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default()
+fn list_flatpak_apps() -> Result<Vec<(String, String)>, String> {
+    Ok(flatpak(&["list", "--app", "--columns=application,name"])?
+        .lines().filter_map(|line| {
+            let (id, name) = line.split_once('\t').unwrap_or((line, line));
+            (!id.is_empty()).then(|| (id.to_owned(), name.to_owned()))
+        }).collect())
 }
 
-fn is_perm_active(perm: &Perm, manifest: &str, overrides: &str) -> bool {
-    // If there's a user override that explicitly denies, that wins
-    let deny_flag = format!("no{}", perm.detect.replace('-', ""));
-    if overrides.contains(&deny_flag) { return false; }
-    // If there's a user override that explicitly allows, that wins
-    if overrides.contains(perm.detect) { return true; }
-    // Fall back to manifest permissions
-    manifest.contains(perm.detect)
-}
-
-fn apply_perm_override(app_id: &str, flag: &str, allow: bool) {
-    if allow {
-        let _ = Command::new("flatpak")
-            .args(["override", "--user", flag, app_id])
-            .output();
-    } else {
-        // Convert --share=network → --no-share=network etc.
-        let deny_flag = flag
-            .replace("--share=", "--no-share=")
-            .replace("--device=", "--no-device=")
-            .replace("--filesystem=", "--no-filesystem=")
-            .replace("--socket=", "--no-socket=");
-        let _ = Command::new("flatpak")
-            .args(["override", "--user", &deny_flag, app_id])
-            .output();
-    }
+fn read_app_perms(app_id: &str) -> Result<String, String> {
+    // Flatpak merges the manifest with system and user overrides here.
+    flatpak(&["info", "--show-permissions", app_id])
 }

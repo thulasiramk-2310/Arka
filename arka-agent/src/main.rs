@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Ask { prompt } => {
-            let llm = OllamaClient::new(&cfg);
+            let llm = OllamaClient::new(&cfg)?;
             let backend = DbusBackend::new();
             let approver = TerminalApprover;
             let outcome = agent::run(&llm, &backend, &approver, &cfg, &prompt).await?;

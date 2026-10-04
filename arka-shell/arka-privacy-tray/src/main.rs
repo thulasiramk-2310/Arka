@@ -238,11 +238,6 @@ async fn main() {
         }
     };
 
-    let sys = zbus::Connection::system().await.ok();
-    let arkad = match &sys {
-        Some(c) => ArkadProxy::new(c).await.ok(),
-        None => None,
-    };
     let ses = zbus::Connection::session().await.ok();
     let notifier_proxy = match &ses {
         Some(c) => NotificationsProxy::new(c).await.ok(),
@@ -254,10 +249,12 @@ async fn main() {
 
     loop {
         let t = now();
-        let enf = match &arkad {
-            Some(p) => read_enforcement(p).await,
-            None => None,
-        };
+        let enf = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let sys = zbus::Connection::system().await.ok()?;
+            let proxy = ArkadProxy::builder(&sys)
+                .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+            read_enforcement(&proxy).await
+        }).await.ok().flatten();
         let events = read_events();
         let drifts_today = drifts_since(&events, utc_midnight(t));
         let recent_drift = events.iter().any(|e| e.is_drift() && e.ts >= t.saturating_sub(RECENT_DRIFT_WINDOW));

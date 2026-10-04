@@ -715,6 +715,16 @@ fn apply_state(
     tele_sr:  &ScoreRow,
     track_sr: &ScoreRow,
 ) {
+    if !s.available {
+        score_num.set_text("—");
+        for badge in [dns_badge, mac_badge, host_badge, ipv6_badge, bsandbox_badge, bstatus_badge] {
+            set_badge(badge, "Unavailable", false, true);
+        }
+        for (row, total) in [(dns_sr, 25), (mac_sr, 20), (host_sr, 10), (ipv6_sr, 10), (brow_sr, 10), (sand_sr, 15), (tele_sr, 5), (track_sr, 5)] {
+            row.update(0, total);
+        }
+        return;
+    }
     score_num.set_markup(&score_markup(s.privacy_score));
 
     let dns_good = s.dns_status == DnsStatus::Encrypted;
@@ -733,7 +743,7 @@ fn apply_state(
         if s.ipv6_privacy { "Enabled" } else { "Disabled" },
         s.ipv6_privacy, false);
 
-    let bsandbox_good = matches!(
+    let bsandbox_good = s.sandbox_status.is_active() && matches!(
         s.browser_sandbox,
         BrowserSandbox::Persistent | BrowserSandbox::Ephemeral | BrowserSandbox::PrivateWorkspace
     );

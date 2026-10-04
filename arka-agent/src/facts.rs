@@ -60,7 +60,10 @@ impl FactStore {
         Self::default()
     }
     pub fn extend(&mut self, more: Vec<Fact>) {
-        self.facts.extend(more);
+        for fact in more {
+            self.facts.retain(|old| old.domain != fact.domain);
+            self.facts.push(fact);
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.facts.is_empty()
@@ -125,102 +128,15 @@ pub enum Verdict {
     Replace(String),
 }
 
-fn status_word(w: &str) -> Option<Status> {
-    match w {
-        "on" | "enabled" | "active" | "randomized" | "masked" | "enforcing" | "enforced"
-        | "protected" => Some(Status::On),
-        "off" | "disabled" | "inactive" | "unprotected" | "exposed" => Some(Status::Off),
-        _ => None,
-    }
-}
-
-/// Map a token to the fact domain it refers to.
-fn domain_of(word: &str) -> Option<&'static str> {
-    Some(match word {
-        "mac" => "mac",
-        "dns" | "dns-over-tls" | "dot" | "quad9" => "dns",
-        "hostname" => "hostname",
-        "ipv6" => "ipv6",
-        "browser" | "sandbox" | "bubblewrap" | "firefox" => "browser",
-        _ => return None,
-    })
-}
-
-/// Standalone integers only — a digit run whose neighbours are not alphanumeric.
-/// So "ipv6", "quad9", "sha256" contribute nothing; "51", "100", "9.9.9.9" do.
-fn standalone_integers(text: &str) -> Vec<i64> {
-    let b = text.as_bytes();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i].is_ascii_digit() {
-            let start = i;
-            while i < b.len() && b[i].is_ascii_digit() {
-                i += 1;
-            }
-            let before_ok = start == 0 || !b[start - 1].is_ascii_alphanumeric();
-            let after_ok = i == b.len() || !b[i].is_ascii_alphanumeric();
-            if before_ok && after_ok {
-                if let Ok(n) = text[start..i].parse::<i64>() {
-                    out.push(n);
-                }
-            }
-        } else {
-            i += 1;
-        }
-    }
-    out
-}
-
-/// Check a model final answer against the session facts. Fail closed.
+/// Free-form prose cannot be proven by keyword or cross-domain number matching.
+/// Only the canonical tool-fact rendering or a fixed no-evidence response is
+/// accepted. Other model prose is replaced by the caller with `store.render()`.
 pub fn verify_answer(text: &str, store: &FactStore) -> Verdict {
-    let lower = text.to_lowercase();
-
-    // #2: overclaims are never allowed, even if "true".
-    for p in OVERCLAIMS {
-        if lower.contains(p) {
-            return Verdict::Replace(format!("overclaim phrase: '{p}'"));
-        }
+    if text == store.render() || (store.is_empty() && text == "I don't have a tool that reports that.") {
+        Verdict::Ok
+    } else {
+        Verdict::Replace("answer is not a canonical rendering of tool facts".into())
     }
-
-    // Every standalone number must be authorised by some fact.
-    let allowed = store.all_numbers();
-    for n in standalone_integers(&lower) {
-        if !allowed.contains(&n) {
-            return Verdict::Replace(format!("unbacked number: {n}"));
-        }
-    }
-
-    // Status claims must match a fact for that domain.
-    let toks: Vec<&str> = lower
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
-        .filter(|s| !s.is_empty())
-        .collect();
-    for (i, t) in toks.iter().enumerate() {
-        if let Some(dom) = domain_of(t) {
-            let lo = i.saturating_sub(3);
-            let hi = (i + 4).min(toks.len());
-            for w in &toks[lo..hi] {
-                if let Some(claimed) = status_word(w) {
-                    match store.status_for(dom) {
-                        Some(actual) if actual != claimed => {
-                            return Verdict::Replace(format!(
-                                "status mismatch on {dom}: said {claimed:?}, fact is {actual:?}"
-                            ));
-                        }
-                        None => {
-                            return Verdict::Replace(format!(
-                                "status claim on {dom} with no supporting fact"
-                            ));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-
-    Verdict::Ok
 }
 
 #[cfg(test)]
@@ -241,17 +157,18 @@ mod tests {
     }
 
     #[test]
-    fn backed_answer_passes() {
+    fn canonical_answer_passes() {
         assert_eq!(
-            verify_answer("MAC randomization is on and the score is 100.", &store()),
+            verify_answer(&store().render(), &store()),
             Verdict::Ok
         );
     }
 
     #[test]
-    fn ipv6_and_quad9_are_not_treated_as_numbers() {
-        // 'ipv6' and 'quad9' must not trip the number check
-        assert_eq!(verify_answer("IPv6 via Quad9.", &store()), Verdict::Ok);
+    fn rejects_invented_prose_and_cross_domain_numbers() {
+        for text in ["Your disks are encrypted and firewall is configured.", "Privacy score is 51.", "IPv6 via Quad9."] {
+            assert!(matches!(verify_answer(text, &store()), Verdict::Replace(_)));
+        }
     }
 
     #[test]

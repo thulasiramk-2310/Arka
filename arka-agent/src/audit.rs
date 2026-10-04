@@ -17,6 +17,8 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use nix::fcntl::{Flock, FlockArg};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const GENESIS: &str = "genesis";
@@ -69,12 +71,9 @@ fn sha(pre: &str) -> String {
     hex::encode(h.finalize())
 }
 
-fn last_hash(path: &Path) -> anyhow::Result<String> {
-    if !path.exists() {
-        return Ok(GENESIS.into());
-    }
+fn last_hash(file: &fs::File) -> anyhow::Result<String> {
     let mut last = GENESIS.to_string();
-    for line in BufReader::new(fs::File::open(path)?).lines() {
+    for line in BufReader::new(file).lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
@@ -100,7 +99,19 @@ pub fn append(
             fs::create_dir_all(dir)?;
         }
     }
-    let prev = last_hash(path)?;
+    let file = OpenOptions::new().create(true).read(true).append(true).mode(0o600)
+        .custom_flags(nix::libc::O_NOFOLLOW).open(path)?;
+    let mut f = Flock::lock(file, FlockArg::LockExclusive)
+        .map_err(|(_, e)| anyhow::anyhow!("audit lock: {e}"))?;
+    f.set_permissions(fs::Permissions::from_mode(0o600))?;
+    let request = crate::sanitize::redact(request);
+    let result = crate::sanitize::redact(result);
+    let args = redact_args(args);
+    let request = request.as_str();
+    let result = result.as_str();
+    let args = &args;
+    let prev = last_hash(&f)?;
+
     let time_ms = now_ms();
     let hash = sha(&preimage(
         time_ms, request, tool, args, decision, result, &prev,
@@ -115,9 +126,23 @@ pub fn append(
         prev,
         hash,
     };
-    let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     writeln!(f, "{}", serde_json::to_string(&entry)?)?;
+    f.sync_data()?;
     Ok(())
+}
+
+fn redact_args(value: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => Value::String(crate::sanitize::redact(s)),
+        Value::Array(a) => Value::Array(a.iter().map(redact_args).collect()),
+        Value::Object(o) => Value::Object(o.iter().map(|(key, value)| {
+            let sensitive = ["password", "passphrase", "secret", "token", "api_key", "private_key"]
+                .iter().any(|part| key.to_lowercase().contains(part));
+            (key.clone(), if sensitive { Value::String("[REDACTED]".into()) } else { redact_args(value) })
+        }).collect()),
+        _ => value.clone(),
+    }
 }
 
 /// Verify the whole chain. Returns a human report on success; errors on the
@@ -175,6 +200,23 @@ mod tests {
         let i = N.fetch_add(1, Ordering::Relaxed);
         p.push(format!("arka-agent-audit-test-{nanos}-{i}.jsonl"));
         p.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn concurrent_writers_preserve_the_chain_and_redact_arguments() {
+        let p = tmp();
+        let threads: Vec<_> = (0..8).map(|_| {
+            let p = p.clone();
+            std::thread::spawn(move || {
+                append(&p, "check", "test", &serde_json::json!({"password": "dont-store-me", "nested": {"api_key": "also-secret"}}), "auto", "ok").unwrap();
+            })
+        }).collect();
+        for thread in threads { thread.join().unwrap(); }
+        assert!(verify(&p).unwrap().contains("8 entries"));
+        let contents = fs::read_to_string(&p).unwrap();
+        assert!(!contents.contains("dont-store-me") && !contents.contains("also-secret"));
+        assert_eq!(fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o600);
+        fs::remove_file(p).unwrap();
     }
 
     #[test]

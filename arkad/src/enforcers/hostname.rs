@@ -18,26 +18,14 @@ impl AsyncEnforcer for HostnameEnforcer {
     fn name(&self) -> &'static str { "hostname" }
 
     async fn enforce(&self) -> Result<(), ArkadError> {
-        let name = self.hostname.clone();
-        tokio::task::spawn_blocking(move || {
-            std::process::Command::new("hostnamectl")
-                .args(["set-hostname", &name])
-                .status()
-                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
-            crate::log::log_event("hostname", "active", "Hostname set to arka — computer is anonymous on local networks");
-            Ok::<(), ArkadError>(())
-        }).await?
+        crate::command::run("hostnamectl", &["set-hostname", &self.hostname]).await?;
+        Ok(())
     }
 
     async fn update_state(&self, state: &SharedState) {
-        let name = self.hostname.clone();
-        let ok = tokio::task::spawn_blocking(move || {
-            std::process::Command::new("hostnamectl")
-                .arg("--static")
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim() == name)
-                .unwrap_or(false)
-        }).await.unwrap_or(false);
+        let ok = crate::command::run("hostnamectl", &["--static"]).await
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == self.hostname)
+            .unwrap_or(false);
         state.write().await.hostname_privacy = ok;
     }
 }

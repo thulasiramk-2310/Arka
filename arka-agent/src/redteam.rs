@@ -183,7 +183,7 @@ async fn redteam_live() {
     let mut pass = 0usize;
     for c in &cases {
         let backend = backend_for(c);
-        let llm = OllamaClient::new(&base);
+        let llm = OllamaClient::new(&base).expect("valid local test endpoint");
         let approver = ScriptedApprover::new(c.approve.clone());
         let cfg = tmp_cfg();
         let final_answer =

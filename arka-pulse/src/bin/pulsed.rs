@@ -46,7 +46,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         match engine.health() {
             Ok(snap) => *shared.write().await = PulseSnapshot::from_health(&snap),
-            Err(e) => eprintln!("arka-pulsed: monitor error: {e}"),
+            Err(e) => {
+                *shared.write().await = PulseSnapshot::default();
+                eprintln!("arka-pulsed: monitor error: {e}");
+            }
         }
         tokio::time::sleep(interval).await;
     }

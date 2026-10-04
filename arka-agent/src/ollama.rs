@@ -64,15 +64,16 @@ pub struct OllamaClient {
 }
 
 impl OllamaClient {
-    pub fn new(cfg: &Config) -> Self {
-        OllamaClient {
-            url: cfg.ollama_url.clone(),
+    pub fn new(cfg: &Config) -> anyhow::Result<Self> {
+        Ok(OllamaClient {
+            url: local_url(&cfg.ollama_url)?,
             model: cfg.model.clone(),
             http: reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
                 .timeout(REQUEST_TIMEOUT)
-                .build()
-                .expect("static reqwest config"),
-        }
+                .build()?,
+        })
     }
 
     async fn call(&self, model: &str, messages: &[ChatMsg]) -> anyhow::Result<String> {
@@ -131,6 +132,37 @@ impl Llm for OllamaClient {
                 self.model
             )
         })
+    }
+}
+
+fn local_url(raw: &str) -> anyhow::Result<String> {
+    let mut url = reqwest::Url::parse(raw)?;
+    anyhow::ensure!(url.scheme() == "http", "The local model endpoint must use HTTP on loopback");
+    anyhow::ensure!(url.username().is_empty() && url.password().is_none()
+        && url.query().is_none() && url.fragment().is_none() && url.path() == "/",
+        "The local model endpoint must be a base URL without credentials, query or path");
+    let host = url.host_str().unwrap_or("");
+    if host == "localhost" {
+        // Pin localhost without consulting DNS or a configured proxy.
+        url.set_host(Some("127.0.0.1"))?;
+    } else {
+        let host = host.trim_matches(|c| c == '[' || c == ']');
+        let ip: std::net::IpAddr = host.parse().map_err(|_| anyhow::anyhow!("Model endpoint must be a loopback IP or localhost"))?;
+        anyhow::ensure!(ip.is_loopback(), "Remote model endpoints are disabled");
+    }
+    Ok(url.as_str().trim_end_matches('/').to_owned())
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::*;
+    #[test]
+    fn pins_localhost_and_accepts_loopback_only() {
+        assert_eq!(local_url("http://localhost:11434").unwrap(), "http://127.0.0.1:11434");
+        assert!(local_url("http://[::1]:11434").is_ok());
+        for url in ["http://192.168.1.2:11434", "http://example.com", "http://localhost.example.com", "http://user:pass@127.0.0.1", "http://127.0.0.1/remote", "http://127.0.0.1?url=remote", "file:///tmp/model"] {
+            assert!(local_url(url).is_err(), "{url}");
+        }
     }
 }
 

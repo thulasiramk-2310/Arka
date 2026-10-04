@@ -150,6 +150,7 @@ pub async fn run<L: Llm, B: SystemBackend, A: Approver>(
                         // rule 4: validate args BEFORE prompting or acting.
                         if let Err(e) = tools::validate_write(spec.name, &args, cfg) {
                             let msg = e.to_string();
+                            store.extend(vec![facts::Fact::new("action", format!("Rejected: {msg}"))]);
                             audit::append(
                                 &cfg.audit_path,
                                 request,
@@ -195,11 +196,15 @@ pub async fn run<L: Llm, B: SystemBackend, A: Approver>(
                             });
                         }
 
+                        // Record intent before any mutation. Audit failure stops execution.
+                        audit::append(&cfg.audit_path, request, spec.name, &args,
+                            "approved-intent", "Execution has not started")?;
                         let out = tools::run_write(backend, spec.name, &args, cfg.dry_run, cfg)
                             .await
                             .unwrap_or_else(|e| {
                                 tools::ToolOutput::text(format!("(tool error: {e})"))
                             });
+                        store.extend(vec![facts::Fact::new("action", sanitize::redact(&out.output))]);
                         // Log the attempt — approved or dry-run, both recorded.
                         // Weakening writes are logged under their own decision (#4).
                         let clean = sanitize::redact(&out.output);

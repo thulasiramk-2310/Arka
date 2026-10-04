@@ -140,26 +140,22 @@ fn page_general() -> gtk4::Widget {
     let group = adw::PreferencesGroup::new();
     group.set_title("Login");
 
-    let autologin = is_autologin_enabled();
-    let al_row = adw::SwitchRow::new();
-    al_row.set_title("Automatic Login");
-    al_row.set_subtitle("Boot straight to desktop without a password prompt");
-    al_row.set_active(autologin);
-    al_row.connect_active_notify(|r| {
-        set_autologin(r.is_active());
-    });
+    let al_row = adw::ActionRow::new();
+    al_row.set_title("Login Screen and Automatic Login");
+    al_row.set_subtitle("Configure SDDM in Plasma settings; administrator authentication may be required");
+    al_row.set_activatable(true);
+    al_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_sddm").spawn(); });
     group.add(&al_row);
-
     let lock_row = adw::ActionRow::new();
-    lock_row.set_title("Lock Screen");
-    lock_row.set_subtitle("Coming soon");
-    lock_row.set_sensitive(false);
+    lock_row.set_title("Screen Locking");
+    lock_row.set_activatable(true);
+    lock_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_screenlocker").spawn(); });
     group.add(&lock_row);
 
     let about_group = adw::PreferencesGroup::new();
     about_group.set_title("About");
 
-    let ver = std::fs::read_to_string("/etc/arkaos-release")
+    let ver = std::fs::read_to_string("/usr/lib/arkaos-release")
         .unwrap_or_else(|_| "0.1".into());
     let ver_row = adw::ActionRow::new();
     ver_row.set_title("ArkaOS Version");
@@ -249,12 +245,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
             if let Ok(file) = res {
                 if let Some(path) = file.path() {
                     let path_str = path.to_string_lossy().to_string();
-                    wp_row2.set_subtitle(&path_str);
-                    let conf = gtk4::glib::user_config_dir().join("arkaos");
-                    let _ = std::fs::create_dir_all(&conf);
-                    let _ = std::fs::write(conf.join("wallpaper"), &path_str);
-                    let _ = Command::new("pkill").arg("swaybg").status();
-                    let _ = Command::new("swaybg").args(["-i", &path_str, "-m", "fill"]).spawn();
+                    apply_wallpaper(path_str, wp_row2.clone());
                 }
             }
         });
@@ -264,11 +255,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     let wp_row_ref2 = wp_row.clone();
     reset_btn.connect_clicked(move |_| {
         let default = "/usr/share/arka/wallpapers/default.png";
-        wp_row_ref2.set_subtitle(default);
-        let conf = gtk4::glib::user_config_dir().join("arkaos");
-        let _ = std::fs::remove_file(conf.join("wallpaper"));
-        let _ = Command::new("pkill").arg("swaybg").status();
-        let _ = Command::new("swaybg").args(["-i", default, "-m", "fill"]).spawn();
+        apply_wallpaper(default.into(), wp_row_ref2.clone());
     });
 
     b.append(&group);
@@ -278,85 +265,21 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
 
 fn page_privacy() -> gtk4::Widget {
     let b = page_box();
-
-    // Toggle: Simple ↔ Advanced
-    let adv_btn = gtk4::ToggleButton::with_label("Advanced Details");
-    adv_btn.add_css_class("pill");
-    adv_btn.set_halign(gtk4::Align::End);
-    b.append(&adv_btn);
-
-    let stack = gtk4::Stack::new();
-    stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
-
-    // ── Simple view ──────────────────────────────────────────────────────────
-    let simple_group = adw::PreferencesGroup::new();
-    simple_group.set_title("Your Privacy Status");
-    simple_group.set_description(Some("Everything that protects you is running in the background."));
-
-    let simple_services = [
-        ("✓ Your searches are private",        "Queries can't be read by your ISP or network",    check_dot_active()),
-        ("✓ Your device can't be tracked",     "Network identity changes on every connection",     check_mac_random()),
-        ("✓ Firefox is isolated",              "The browser can't see your files or passwords",    check_bwrap()),
-        ("✓ System files are protected",       "Malware can't persist across reboots",            true),
-        ("✓ Hostname is anonymised",           "Your computer shows as 'arka' on all networks",   true),
-        ("✓ IPv6 addresses rotate",            "Long-term tracking via IPv6 is prevented",        check_ipv6_priv()),
-    ];
-
-    for (title, subtitle, active) in &simple_services {
+    let group = adw::PreferencesGroup::new();
+    group.set_title("Privacy");
+    group.set_description(Some("Review current protection checks and app permissions."));
+    for (title, subtitle, program) in [
+        ("Privacy Dashboard", "Live checks, unavailable controls and enforcement results", "arka-dashboard"),
+        ("App Permissions", "Review direct Flatpak grants", "arka-perms"),
+    ] {
         let row = adw::ActionRow::new();
         row.set_title(title);
         row.set_subtitle(subtitle);
-        let status = gtk4::Label::new(Some(if *active { "Active" } else { "Inactive" }));
-        status.add_css_class(if *active { "status-ok" } else { "status-warn" });
-        row.add_suffix(&status);
-        simple_group.add(&row);
+        row.set_activatable(true);
+        row.connect_activated(move |_| { let _ = Command::new(program).spawn(); });
+        group.add(&row);
     }
-
-    let simple_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    simple_box.append(&simple_group);
-
-    // ── Advanced view ────────────────────────────────────────────────────────
-    let adv_group = adw::PreferencesGroup::new();
-    adv_group.set_title("Privacy Services");
-
-    let adv_services = [
-        ("DNS-over-TLS",       "Quad9  ·  9.9.9.9  ·  /etc/systemd/resolved.conf.d/", check_dot_active()),
-        ("MAC Randomisation",  "NM  ·  wifi.cloned-mac-address=random",               check_mac_random()),
-        ("Private Hostname",   "hostnamectl  ·  arka",                                true),
-        ("IPv6 Temp Addrs",    "sysctl net.ipv6.conf.all.use_tempaddr=2",             check_ipv6_priv()),
-        ("Browser Sandbox",    "bubblewrap  ·  /usr/bin/firefox → firefox-sandbox",   check_bwrap()),
-        ("composefs rootfs",   "ostree object store  ·  read-only overlay",           true),
-    ];
-
-    for (title, subtitle, active) in &adv_services {
-        let row = adw::ActionRow::new();
-        row.set_title(title);
-        row.set_subtitle(subtitle);
-        let status = gtk4::Label::new(Some(if *active { "Active" } else { "Inactive" }));
-        status.add_css_class(if *active { "status-ok" } else { "status-warn" });
-        row.add_suffix(&status);
-        adv_group.add(&row);
-    }
-
-    let adv_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    adv_box.append(&adv_group);
-
-    stack.add_named(&simple_box, Some("simple"));
-    stack.add_named(&adv_box, Some("advanced"));
-    stack.set_visible_child_name("simple");
-
-    let stack2 = stack.clone();
-    adv_btn.connect_toggled(move |btn| {
-        if btn.is_active() {
-            stack2.set_visible_child_name("advanced");
-            btn.set_label("Simple View");
-        } else {
-            stack2.set_visible_child_name("simple");
-            btn.set_label("Advanced Details");
-        }
-    });
-
-    b.append(&stack);
+    b.append(&group);
     b.upcast()
 }
 
@@ -383,9 +306,9 @@ fn page_internet() -> gtk4::Widget {
     let dns_row = adw::ActionRow::new();
     dns_row.set_title("DNS-over-TLS");
     dns_row.set_subtitle("Quad9 (9.9.9.9) — privacy-first, malware-blocking");
-    let status = gtk4::Label::new(Some(if check_dot_active() { "Active" } else { "Inactive" }));
-    status.add_css_class(if check_dot_active() { "status-ok" } else { "status-warn" });
-    dns_row.add_suffix(&status);
+    dns_row.set_subtitle("View the current system-resolver check in Privacy Dashboard");
+    dns_row.set_activatable(true);
+    dns_row.connect_activated(|_| { let _ = Command::new("arka-dashboard").spawn(); });
     dns_group.add(&dns_row);
 
     b.append(&group);
@@ -400,7 +323,7 @@ fn page_updates() -> gtk4::Widget {
     group.set_title("System Updates");
     group.set_description(Some("ArkaOS uses bootc for atomic, rollback-safe updates."));
 
-    let ver = std::fs::read_to_string("/etc/arkaos-release")
+    let ver = std::fs::read_to_string("/usr/lib/arkaos-release")
         .unwrap_or_else(|_| "0.1".into());
     let cur_row = adw::ActionRow::new();
     cur_row.set_title("Current Version");
@@ -452,7 +375,7 @@ fn page_advanced() -> gtk4::Widget {
 
     let composefs_row = adw::ActionRow::new();
     composefs_row.set_title("Immutable Filesystem");
-    composefs_row.set_subtitle("composefs — read-only overlay via ostree");
+    composefs_row.set_subtitle("The bootc system image is read-only; user data and system configuration remain writable");
     let composefs_icon = gtk4::Image::from_icon_name("object-locked-symbolic");
     composefs_row.add_suffix(&composefs_icon);
     group.add(&composefs_row);
@@ -504,44 +427,19 @@ fn run_in_terminal(cmd: &str) {
     let _ = Command::new("konsole").args(["-e", "sh", "-c", cmd]).spawn();
 }
 
-fn is_autologin_enabled() -> bool {
-    std::path::Path::new("/etc/systemd/system/getty@tty1.service.d/autologin.conf").exists()
-}
-
-fn set_autologin(enable: bool) {
-    if enable {
-        // Read the current username from /etc/passwd for the first non-root user
-        let user = current_username();
-        let _ = std::fs::create_dir_all("/etc/systemd/system/getty@tty1.service.d");
-        let _ = std::fs::write(
-            "/etc/systemd/system/getty@tty1.service.d/autologin.conf",
-            format!("[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin {} --noclear %I linux\n", user),
-        );
-    } else {
-        let _ = std::fs::remove_file("/etc/systemd/system/getty@tty1.service.d/autologin.conf");
-    }
-    let _ = Command::new("systemctl").args(["daemon-reload"]).output();
-}
-
-fn current_username() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "ram".into())
-}
-
-fn check_dot_active() -> bool {
-    std::path::Path::new("/etc/systemd/resolved.conf.d/99-arkad-dot.conf").exists()
-}
-
-fn check_mac_random() -> bool {
-    std::path::Path::new("/etc/NetworkManager/conf.d/00-arkaos-mac-random.conf").exists()
-}
-
-fn check_ipv6_priv() -> bool {
-    std::fs::read_to_string("/proc/sys/net/ipv6/conf/all/use_tempaddr")
-        .ok().map(|s| s.trim() == "2").unwrap_or(false)
-}
-
-fn check_bwrap() -> bool {
-    // firefox symlink points to sandbox wrapper
-    std::fs::read_link("/usr/bin/firefox")
-        .ok().map(|p| p.to_string_lossy().contains("sandbox")).unwrap_or(false)
+fn apply_wallpaper(path: String, row: adw::ActionRow) {
+    glib::spawn_future_local(async move {
+        let selected = path.clone();
+        let result = gtk4::gio::spawn_blocking(move || {
+            Command::new("timeout").args(["15", "plasma-apply-wallpaperimage", &selected]).output()
+        }).await;
+        if matches!(result, Ok(Ok(ref out)) if out.status.success()) {
+            let conf = gtk4::glib::user_config_dir().join("arkaos");
+            let _ = std::fs::create_dir_all(&conf);
+            let _ = std::fs::write(conf.join("wallpaper"), &path);
+            row.set_subtitle(&path);
+        } else {
+            row.set_subtitle("Could not apply wallpaper. Try Plasma Desktop Settings.");
+        }
+    });
 }

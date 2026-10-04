@@ -63,7 +63,7 @@ async fn ask_dns_uses_read_tool_then_answers() {
     .unwrap();
     assert_eq!(
         out.final_answer.as_deref(),
-        Some("DNS-over-TLS is on (DoT active, Quad9).")
+        Some("score: 100/100 · mac: randomized (on) · dns: Encrypted · hostname: masked (on) · ipv6: privacy addresses (on) · browser: Ephemeral")
     );
     assert!(arka_agent::audit::verify(&cfg.audit_path)
         .unwrap()
@@ -124,7 +124,7 @@ async fn unknown_tool_is_rejected_and_audited() {
         .unwrap();
     assert_eq!(
         out.final_answer.as_deref(),
-        Some("I can only use the listed tools.")
+        Some("I don't know — no tool reported that in this session.")
     );
 
     let content = std::fs::read_to_string(&cfg.audit_path).unwrap();
@@ -148,7 +148,7 @@ async fn invalid_json_is_rejected_then_recovers() {
     let out = agent::run(&llm, &backend, &TerminalApprover, &cfg, "hello")
         .await
         .unwrap();
-    assert_eq!(out.final_answer.as_deref(), Some("Understood."));
+    assert_eq!(out.final_answer.as_deref(), Some("I don't know — no tool reported that in this session."));
     let _ = std::fs::remove_file(&cfg.audit_path);
 }
 

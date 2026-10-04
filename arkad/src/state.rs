@@ -4,6 +4,33 @@ use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
 
 pub type SharedState = Arc<RwLock<ArkadState>>;
 
+impl ArkadState {
+    pub fn control_healthy(&self, name: &str) -> bool {
+        match name {
+            "mac" => self.mac_randomization,
+            "dns" => self.dns_status.is_encrypted(),
+            "hostname" => self.hostname_privacy,
+            "ipv6" => self.ipv6_privacy,
+            "sandbox" => self.sandbox_status.is_active() && self.browser_sandbox.is_isolated(),
+            _ => false,
+        }
+    }
+
+    pub fn invalidate(&mut self, name: &str) {
+        match name {
+            "mac" => self.mac_randomization = false,
+            "dns" => self.dns_status = DnsStatus::Error,
+            "hostname" => self.hostname_privacy = false,
+            "ipv6" => self.ipv6_privacy = false,
+            "sandbox" => {
+                self.sandbox_status = SandboxStatus::Inactive;
+                self.browser_sandbox = BrowserSandbox::None;
+            }
+            _ => (),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArkadState {
     pub privacy_score: u8,

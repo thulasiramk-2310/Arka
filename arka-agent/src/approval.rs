@@ -11,7 +11,7 @@
 //! auto-answering `ScriptedApprover` used by tests is `#[cfg(test)]` only, so it
 //! does not exist in a release build — nothing can silently auto-approve.
 
-use std::io::{self, Write};
+use std::io::{self, Write, IsTerminal};
 
 pub trait Approver {
     /// Show `preview`, return true only on an explicit yes.
@@ -27,6 +27,7 @@ pub struct TerminalApprover;
 
 impl Approver for TerminalApprover {
     fn confirm(&self, preview: &str) -> io::Result<bool> {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() { return Ok(false); }
         println!("\n\x1b[1m● Proposed change — requires your approval\x1b[0m");
         println!("{preview}");
         print!("\nApply this change? [y/N]: ");
@@ -37,6 +38,7 @@ impl Approver for TerminalApprover {
     }
 
     fn confirm_typed(&self, preview: &str, phrase: &str) -> io::Result<bool> {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() { return Ok(false); }
         println!("\n\x1b[1;31m● This change LOWERS a privacy protection on this device.\x1b[0m");
         println!("{preview}");
         println!("\nIf you proceed, this system is less protected until you turn it back on.");

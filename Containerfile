@@ -1,28 +1,29 @@
+ARG FEDORA_VERSION=44
 # Stage 1: build arkad as a static musl binary
 FROM docker.io/rust:alpine AS builder
 RUN apk add --no-cache musl-dev
 COPY arkad/ /build/
 COPY arka-shell/arka-shell-common/ /arka-shell/arka-shell-common/
 WORKDIR /build
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN cargo build --locked --release --target x86_64-unknown-linux-musl
 
 # arka-pulsed: the reliability daemon, also a static musl binary (its D-Bus
 # surface uses the same zbus stack as arkad). Built after arkad so a change to
 # one does not invalidate the other's layer. --features dbus turns on the
 # optional daemon; the core stays zero-dep without it.
 COPY arka-pulse/ /arka-pulse/
-RUN cargo build --release --target x86_64-unknown-linux-musl \
+RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
       --features dbus --manifest-path /arka-pulse/Cargo.toml
 
 # Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
-FROM docker.io/fedora:42 AS shell-builder
+FROM docker.io/fedora:${FEDORA_VERSION} AS shell-builder
 RUN dnf install -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
 COPY arka-shell/ /build/
 WORKDIR /build
-RUN cargo build --release
+RUN cargo build --locked --release
 
 # Stage 3: bootc image
-FROM quay.io/fedora/fedora-bootc:42
+FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
 
 RUN mkdir -p /etc/NetworkManager/conf.d && \
     printf '[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n' \
@@ -37,17 +38,6 @@ RUN dnf install -y systemd-ukify systemd-boot-unsigned binutils
 
 # Switch kernel-install to UKI layout
 RUN printf 'layout=uki\nuki_generator=ukify\n' > /etc/kernel/install.conf
-
-# Pre-build UKI from installed kernel+initramfs — no embedded cmdline
-RUN set -e; \
-    KVER=$(ls /usr/lib/modules | head -1); \
-    ukify build \
-      --linux  /usr/lib/modules/${KVER}/vmlinuz \
-      --initrd /usr/lib/modules/${KVER}/initramfs.img \
-      --stub   /usr/lib/systemd/boot/efi/linuxx64.efi.stub \
-      --os-release /etc/os-release \
-      --output /usr/lib/modules/${KVER}/${KVER}.efi; \
-    echo "UKI built: $(ls -lh /usr/lib/modules/${KVER}/${KVER}.efi)"
 
 # Phase 4: bubblewrap-sandboxed Firefox
 RUN dnf install -y firefox bubblewrap
@@ -69,7 +59,7 @@ RUN dnf install -y --setopt=retries=25 --setopt=fastestmirror=True \
     @kde-desktop-environment sddm \
     pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
     libadwaita flatpak xdg-user-dirs brightnessctl \
-    bluez bluez-tools && \
+    bluez bluez-tools zram-generator-defaults && \
     dnf clean all
 
 # Enable SDDM (started once firstboot flips the default to graphical.target).
@@ -131,10 +121,7 @@ RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
     printf '[global]\nbackground-color=#0d0d1aff\ntext-color=#d0dff0ff\nborder-color=#1a3a5aff\nborder-radius=8\nborder-size=1\nfont=Liberation Sans 12\nwidth=320\nmargin=10\npadding=12\ndefault-timeout=4000\n' \
       > /etc/skel/.config/mako/config
 
-# Disable PAM password quality enforcement — firstboot wizard handles its own validation
-RUN mkdir -p /etc/security/pwquality.conf.d && \
-    printf 'minlen=1\ndcredit=0\nucredit=0\nlcredit=0\nocredit=0\nminclass=0\n' \
-      > /etc/security/pwquality.conf.d/00-arkaos.conf
+# Preserve the distribution's password-quality policy for installed accounts.
 
 # Timezone: Asia/Kolkata (UTC+5:30)
 RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
@@ -241,10 +228,13 @@ RUN printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=/usr/share/arka/
 RUN printf '[Containments][1]\nwallpaperplugin=org.kde.image\n\n[Containments][1][Wallpaper][org.kde.image][General]\nImage=file:///usr/share/arka/wallpapers/default.png\n' \
       > /etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc
 
-# KWin desktop effects for a more interactive feel: wobbly windows, magic-lamp
-# minimise, and scale on window open/close.
-RUN printf '[Plugins]\nwobblywindowsEnabled=true\nmagiclampEnabled=true\nkwin4_effect_scaleEnabled=true\n' \
+# Keep expensive optional effects off by default on modest graphics hardware.
+# Users can enable them through Plasma Desktop Effects.
+RUN printf '[Plugins]\nwobblywindowsEnabled=false\nmagiclampEnabled=false\nkwin4_effect_scaleEnabled=true\n' \
       > /etc/skel/.config/kwinrc
+
+# Filename/content indexing is opt-in; desktop search still launches apps.
+RUN printf '[Basic Settings]\nIndexing-Enabled=false\n' > /etc/skel/.config/baloofilerc
 
 # Brand the session name shown in SDDM.
 RUN if [ -f /usr/share/wayland-sessions/plasma.desktop ]; then \
@@ -351,6 +341,18 @@ RUN plymouth-set-default-theme arkaos && \
     dracut --force --no-hostonly /usr/lib/modules/$KVER/initramfs.img $KVER && \
     mkdir -p /usr/lib/bootc/kargs.d && \
     printf 'kargs = ["rhgb", "quiet", "plymouth.ignore-serial-consoles"]\n' > /usr/lib/bootc/kargs.d/10-arkaos-splash.toml
+
+# Build the UKI only after the final initramfs and OS identity are ready.
+# Build UKI from the final installed kernel+initramfs — no embedded cmdline
+RUN set -e; \
+    KVER=$(ls /usr/lib/modules | head -1); \
+    ukify build \
+      --linux  /usr/lib/modules/${KVER}/vmlinuz \
+      --initrd /usr/lib/modules/${KVER}/initramfs.img \
+      --stub   /usr/lib/systemd/boot/efi/linuxx64.efi.stub \
+      --os-release /etc/os-release \
+      --output /usr/lib/modules/${KVER}/${KVER}.efi; \
+    echo "UKI built: $(ls -lh /usr/lib/modules/${KVER}/${KVER}.efi)"
 
 RUN bootc container lint
 

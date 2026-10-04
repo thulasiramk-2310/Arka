@@ -17,25 +17,70 @@ impl AsyncEnforcer for MacEnforcer {
     fn name(&self) -> &'static str { "mac" }
 
     async fn enforce(&self) -> Result<(), ArkadError> {
-        tokio::task::spawn_blocking(|| {
-            std::fs::create_dir_all("/etc/NetworkManager/conf.d")
-                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
-            std::fs::write(NM_CONF, NM_CONF_CONTENT)
-                .map_err(|e| ArkadError::Enforce(e.to_string()))?;
-            let _ = std::process::Command::new("nmcli")
-                .args(["general", "reload"])
-                .status();
-            crate::log::log_event("mac", "active", "MAC address randomization enabled — device can't be tracked");
-            Ok::<(), ArkadError>(())
-        }).await?
+        let changed = std::fs::read_to_string(NM_CONF).map(|s| s != NM_CONF_CONTENT).unwrap_or(true);
+        if changed {
+            std::fs::create_dir_all("/etc/NetworkManager/conf.d")?;
+            std::fs::write(NM_CONF, NM_CONF_CONTENT)?;
+        }
+        crate::command::run("nmcli", &["general", "reload"]).await?;
+        // Defaults apply on the next connection. Do not disconnect a user's
+        // active network to rotate its address during an ordinary health check.
+        Ok(())
     }
 
     async fn update_state(&self, state: &SharedState) {
-        let ok = tokio::task::spawn_blocking(|| {
-            std::fs::read_to_string(NM_CONF)
-                .map(|c| c == NM_CONF_CONTENT)
-                .unwrap_or(false)
-        }).await.unwrap_or(false);
-        state.write().await.mac_randomization = ok;
+        let configured = std::fs::read_to_string(NM_CONF).map(|c| c == NM_CONF_CONTENT).unwrap_or(false);
+        let active = active_addresses_randomized().await.unwrap_or(false);
+        state.write().await.mac_randomization = configured && active;
+    }
+}
+
+async fn active_addresses_randomized() -> zbus::Result<bool> {
+    let conn = zbus::Connection::system().await?;
+    let manager = zbus::Proxy::new(&conn, "org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager").await?;
+    let devices: Vec<zbus::zvariant::OwnedObjectPath> = manager.call("GetDevices", &()).await?;
+    let mut seen = false;
+    for path in devices {
+        let device = zbus::Proxy::new(&conn, "org.freedesktop.NetworkManager", path.as_str(), "org.freedesktop.NetworkManager.Device").await?;
+        let kind: u32 = device.get_property("DeviceType").await?;
+        let subtype = match kind {
+            1 => "org.freedesktop.NetworkManager.Device.Wired",
+            2 => "org.freedesktop.NetworkManager.Device.Wireless",
+            _ => continue,
+        };
+        let status: u32 = device.get_property("State").await?;
+        if status != 100 { continue; } // NM_DEVICE_STATE_ACTIVATED
+        seen = true;
+        let hardware = zbus::Proxy::new(&conn, "org.freedesktop.NetworkManager", path.as_str(), subtype).await?;
+        let current: String = device.get_property("HwAddress").await?;
+        let permanent: String = hardware.get_property("PermHwAddress").await?;
+        if !private_address(&current, &permanent) { return Ok(false); }
+    }
+    Ok(seen)
+}
+
+fn private_address(current: &str, permanent: &str) -> bool {
+    fn parse(s: &str) -> Option<Vec<u8>> {
+        let bytes: Option<Vec<_>> = s.split(':').map(|v| {
+            if v.len() != 2 { None } else { u8::from_str_radix(v, 16).ok() }
+        }).collect();
+        bytes.filter(|v| v.len() == 6 && v.iter().any(|b| *b != 0))
+    }
+    match (parse(current), parse(permanent)) {
+        (Some(c), Some(p)) => c != p && c[0] & 3 == 2,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn requires_a_changed_locally_administered_unicast_address() {
+        assert!(private_address("02:11:22:33:44:55", "00:11:22:33:44:55"));
+        assert!(!private_address("02:11:22:33:44:55", "02:11:22:33:44:55"));
+        assert!(!private_address("01:11:22:33:44:55", "00:11:22:33:44:55"));
+        assert!(!private_address("02:11:22:33:44:55", ""));
+        assert!(!private_address("random", "permanent"));
     }
 }

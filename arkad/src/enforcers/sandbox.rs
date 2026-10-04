@@ -16,15 +16,13 @@ impl AsyncEnforcer for SandboxEnforcer {
     }
 
     async fn update_state(&self, state: &SharedState) {
-        let has_bwrap = tokio::process::Command::new("bwrap")
-            .arg("--version")
-            .output().await
+        let has_bwrap = crate::command::run("bwrap", &["--version"]).await
             .map(|o| o.status.success())
             .unwrap_or(false);
 
         let has_wrapper   = std::path::Path::new("/usr/bin/firefox-sandbox").exists();
-        let has_symlink   = std::fs::symlink_metadata("/usr/bin/firefox")
-            .map(|m| m.file_type().is_symlink())
+        let has_symlink   = std::fs::canonicalize("/usr/bin/firefox")
+            .map(|p| p == std::path::Path::new("/usr/bin/firefox-sandbox"))
             .unwrap_or(false);
         let has_unwrapped = std::path::Path::new("/usr/bin/firefox-unwrapped").exists();
 
@@ -36,7 +34,7 @@ impl AsyncEnforcer for SandboxEnforcer {
         } else {
             BrowserSandbox::None
         };
-        let status = if has_bwrap { SandboxStatus::Active } else { SandboxStatus::Inactive };
+        let status = if has_bwrap && has_wrapper && has_symlink && has_unwrapped { SandboxStatus::Active } else { SandboxStatus::Inactive };
 
         let mut s = state.write().await;
         s.sandbox_status = status;

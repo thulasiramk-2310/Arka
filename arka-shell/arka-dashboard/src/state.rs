@@ -32,6 +32,7 @@ impl Default for ReliabilityState {
 
 #[derive(Clone, Debug)]
 pub struct DashboardState {
+    pub available: bool,
     pub privacy_score: u8,
     pub dns_status: DnsStatus,
     pub mac_randomization: bool,
@@ -47,6 +48,7 @@ pub struct DashboardState {
 impl Default for DashboardState {
     fn default() -> Self {
         Self {
+            available: false,
             privacy_score: 0,
             dns_status: DnsStatus::Unknown("…".into()),
             mac_randomization: false,
@@ -54,8 +56,8 @@ impl Default for DashboardState {
             ipv6_privacy: false,
             sandbox_status: SandboxStatus::Unknown("…".into()),
             browser_sandbox: BrowserSandbox::Unknown("…".into()),
-            telemetry_blocked: true,
-            tracking_blocked: true,
+            telemetry_blocked: false,
+            tracking_blocked: false,
             reliability: ReliabilityState::default(),
         }
     }

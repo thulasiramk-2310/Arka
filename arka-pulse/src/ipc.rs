@@ -27,8 +27,9 @@ use crate::service::HealthSnapshot;
 /// UI to bind directly. Scalars use `-1.0` as the "unknown" sentinel (D-Bus has
 /// no natural null and NaN travels badly), matching the `Option::None` telemetry
 /// cases.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PulseSnapshot {
+    pub sampled_at: u64,
     /// DETECT verdict: `OK` / `WARN` / `CRIT`. Deterministic — presentable as fact.
     pub health: String,
     /// One human line: the explanation diagnosis, else the worst finding, else healthy.
@@ -43,6 +44,14 @@ pub struct PulseSnapshot {
     pub predictions: Vec<(String, f64, f64, String)>,
 }
 
+impl Default for PulseSnapshot {
+    fn default() -> Self {
+        Self { sampled_at: 0, health: "UNKNOWN".into(), summary: "System health unavailable".into(),
+            cpu_util: -1.0, mem_pct: -1.0, load1: -1.0, temp_max: -1.0,
+            findings: Vec::new(), predictions: Vec::new() }
+    }
+}
+
 impl PulseSnapshot {
     /// Project a live snapshot into the D-Bus shape.
     pub fn from_health(s: &HealthSnapshot) -> Self {
@@ -54,6 +63,7 @@ impl PulseSnapshot {
             .unwrap_or_else(|| "System healthy — no action needed".to_string());
 
         PulseSnapshot {
+            sampled_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
             health: s.worst.label().to_string(),
             summary,
             cpu_util: s.telemetry.cpu_util.unwrap_or(-1.0),
@@ -90,6 +100,9 @@ pub struct PulseIface {
 
 #[zbus::interface(name = "org.arka.pulse")]
 impl PulseIface {
+    #[zbus(property)]
+    async fn sampled_at(&self) -> u64 { self.state.read().await.sampled_at }
+
     #[zbus(property)]
     async fn health(&self) -> String {
         self.state.read().await.health.clone()
@@ -167,6 +180,16 @@ mod tests {
                 },
             },
         }
+    }
+
+    #[test]
+    fn absent_or_failed_sample_has_no_successful_measurements() {
+        let p = PulseSnapshot::default();
+        assert_eq!(p.health, "UNKNOWN");
+        assert_eq!(p.sampled_at, 0);
+        assert_eq!(p.cpu_util, -1.0);
+        assert_eq!(p.mem_pct, -1.0);
+        assert!(p.predictions.is_empty());
     }
 
     #[test]
