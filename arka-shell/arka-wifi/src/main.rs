@@ -22,7 +22,8 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -40,7 +41,7 @@ fn build_ui(app: &adw::Application) {
     );
 
     let hb = adw::HeaderBar::new();
-    hb.set_title_widget(Some(&adw::WindowTitle::new("WiFi", "Select a network")));
+    hb.set_show_title(false);
     let refresh_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
     hb.pack_end(&refresh_btn);
 
@@ -53,8 +54,12 @@ fn build_ui(app: &adw::Application) {
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .build();
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-    content.set_margin_start(16); content.set_margin_end(16);
-    content.set_margin_top(16);  content.set_margin_bottom(16);
+    content.set_margin_start(24); content.set_margin_end(24);
+    content.set_margin_top(12);  content.set_margin_bottom(24);
+    content.append(&arka_shell_common::theme::page_header(
+        "Wi-Fi",
+        "Choose a network. Each network sees a random hardware address when ArkaOS privacy settings are in place.",
+    ));
     content.append(&list);
     scroll.set_child(Some(&content));
 
@@ -89,6 +94,7 @@ fn build_ui(app: &adw::Application) {
     });
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
 
 fn do_scan(list: &gtk4::ListBox, networks: &Rc<RefCell<Vec<net::Network>>>) {

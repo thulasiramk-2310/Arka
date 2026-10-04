@@ -143,32 +143,33 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let provider = gtk4::CssProvider::new();
     provider.load_from_data("
     .sound-window {
-        background-color: rgba(8, 12, 26, 0.97);
-        border: 1px solid rgba(40, 80, 140, 0.5);
-        border-radius: 12px;
+        background-color: @bg_base;
+        border: 1px solid @border_ui;
+        border-radius: 14px;
     }
-    .vol-icon { color: #4fc3f7; }
-    .vol-pct  { color: #c0d4e8; font-size: 18px; font-weight: bold; min-width: 52px; }
-    .device-label { color: #4a7aa0; font-size: 11px; }
-    .section-title { color: #2e5070; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+    .vol-icon { color: @text_hi; }
+    .vol-pct  { color: @text_hi; font-size: 18px; font-weight: 600; min-width: 52px; }
+    .device-label { color: @text_lo; font-size: 12px; }
+    .section-title { color: @text_lo; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
     .mute-btn {
-        background: rgba(20,50,90,0.3);
-        border: 1px solid rgba(40,80,140,0.3);
-        border-radius: 6px;
-        color: #4a7aa0;
-        padding: 4px 10px;
-        font-size: 11px;
+        background: transparent;
+        border: 1px solid @border_ui;
+        border-radius: 999px;
+        color: @text_hi;
+        padding: 4px 12px;
+        font-size: 12px;
     }
-    .mute-btn:hover { background: rgba(30,70,120,0.5); color: #8ab0cc; }
-    .mute-btn.muted { color: #f87171; border-color: rgba(150,40,40,0.4); background: rgba(90,20,20,0.3); }
-    scale trough { background-color: rgba(20,50,90,0.6); border-radius: 4px; }
-    scale highlight { background-color: #4fc3f7; border-radius: 4px; }
-    scale slider { background-color: #c8d8f0; border-radius: 50%; min-width: 14px; min-height: 14px; }
+    .mute-btn:hover { background: alpha(@text_hi, 0.06); }
+    .mute-btn.muted { color: @danger; border-color: alpha(@danger, 0.5); }
+    scale trough { background-color: @bg_sunken; border-radius: 4px; min-height: 4px; }
+    scale highlight { background-color: @text_hi; border-radius: 4px; }
+    scale slider { background-color: @bg_base; border: 1px solid @border_emph; border-radius: 50%; min-width: 16px; min-height: 16px; }
     ");
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
@@ -197,7 +198,7 @@ fn build_ui(app: &adw::Application) {
     inner.set_margin_bottom(16);
 
     // ── Volume section ────────────────────────────────────────────────────────
-    let vol_title = gtk4::Label::new(Some("VOLUME"));
+    let vol_title = gtk4::Label::new(Some("Volume"));
     vol_title.add_css_class("section-title");
     vol_title.set_halign(gtk4::Align::Start);
 
@@ -243,7 +244,7 @@ fn build_ui(app: &adw::Application) {
     // ── Microphone section ────────────────────────────────────────────────────
     let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
 
-    let mic_title = gtk4::Label::new(Some("MICROPHONE"));
+    let mic_title = gtk4::Label::new(Some("Microphone"));
     mic_title.add_css_class("section-title");
     mic_title.set_halign(gtk4::Align::Start);
 
@@ -373,4 +374,5 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }

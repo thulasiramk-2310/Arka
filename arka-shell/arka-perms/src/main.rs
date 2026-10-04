@@ -16,7 +16,8 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -38,7 +39,7 @@ fn build_ui(app: &adw::Application) {
     );
 
     let hb = adw::HeaderBar::new();
-    hb.set_title_widget(Some(&adw::WindowTitle::new("App Permissions", "ArkaOS")));
+    hb.set_title_widget(Some(&adw::WindowTitle::new("App permissions", "")));
 
     // Main content stack: app list → permission detail
     let nav = adw::NavigationView::new();
@@ -66,10 +67,19 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
 
 fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    let header = arka_shell_common::theme::page_header(
+        "App permissions",
+        "See and change what apps installed with Capsule are allowed to use, such as folders, audio and devices.",
+    );
+    header.set_margin_start(24);
+    header.set_margin_end(24);
+    header.set_margin_top(12);
+    content.append(&header);
 
     let target = content.clone();
     let nav = nav.clone();
@@ -85,14 +95,14 @@ fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
     if apps.is_empty() {
         let empty = adw::StatusPage::new();
         empty.set_icon_name(Some("application-x-executable-symbolic"));
-        empty.set_title("No Sandboxed Apps");
-        empty.set_description(Some("Install apps via Capsule to manage their permissions here."));
+        empty.set_title("No apps from Capsule yet");
+        empty.set_description(Some("Apps you install with Capsule appear here, with what each one can access."));
         content.append(&empty);
         return;
     }
 
     let group = adw::PreferencesGroup::new();
-    group.set_title("Installed Apps");
+    group.set_title("Installed apps");
     group.set_description(Some("Tap an app to review and change what it can access."));
     group.set_margin_start(16);
     group.set_margin_end(16);

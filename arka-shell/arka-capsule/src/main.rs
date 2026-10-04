@@ -74,6 +74,11 @@ const CATALOG: &[CatalogApp] = &[
 ];
 
 const STYLE: &str = "
+/* Install / Installed: a small outlined pill, not a full-width fill */
+button.cap-get { border-radius: 999px; padding: 4px 16px; font-weight: 600; font-size: 12px;
+    background: transparent; color: @text_hi; box-shadow: inset 0 0 0 1px @border_emph; }
+button.cap-get:hover { background-color: alpha(@text_hi, 0.06); }
+button.cap-get:disabled { color: @text_lo; box-shadow: none; }
 /* Shared */
 .section-title {
     font-size: 11px; font-weight: 700; color: @text_muted;
@@ -95,10 +100,10 @@ const STYLE: &str = "
 
 /* Catalog cards */
 .app-card {
-    background-color: @bg_overlay;
-    border-radius: 10px;
+    background-color: transparent;
+    border-radius: 12px;
     border: 1px solid @border_ui;
-    padding: 12px;
+    padding: 14px;
 }
 .app-card image { color: @text_hi; }
 .app-name { font-size: 13px; font-weight: 700; color: @text_hi; }
@@ -159,8 +164,8 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
-    arka_shell_common::theme::install_adw();
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -224,6 +229,7 @@ fn build_ui(app: &adw::Application) {
     toolbar.set_content(Some(&stack));
     window.set_content(Some(&toolbar));
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
 
 // ── Tab 1: Apps ─────────────────────────────────────────────────────────────
@@ -233,6 +239,15 @@ fn build_apps_tab(
     favorites: &Rc<RefCell<Vec<String>>>,
 ) -> gtk4::Box {
     let page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    let header = arka_shell_common::theme::page_header(
+        "Capsule",
+        "Install apps from Flathub. Each runs in a Flatpak sandbox with the permissions its developers \
+         request; review or change them in App permissions.",
+    );
+    header.set_margin_start(16);
+    header.set_margin_end(16);
+    header.set_margin_top(12);
+    page.append(&header);
 
     // Search bar
     let search = gtk4::SearchEntry::new();
@@ -249,7 +264,7 @@ fn build_apps_tab(
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
     // Section: Smart Actions (shown only when searching)
-    let smart_title = gtk4::Label::new(Some("Quick Actions"));
+    let smart_title = gtk4::Label::new(Some("Quick actions"));
     smart_title.add_css_class("section-title");
     smart_title.set_halign(gtk4::Align::Start);
     smart_title.set_visible(false);
@@ -264,7 +279,7 @@ fn build_apps_tab(
     content.append(&smart_list);
 
     // Section: ArkaOS Apps
-    let sys_title = gtk4::Label::new(Some("ArkaOS Apps"));
+    let sys_title = gtk4::Label::new(Some("ArkaOS apps"));
     sys_title.add_css_class("section-title");
     sys_title.set_halign(gtk4::Align::Start);
     content.append(&sys_title);
@@ -302,7 +317,7 @@ fn build_apps_tab(
     content.append(&sep);
 
     // Section: Install Apps (catalog)
-    let cat_title = gtk4::Label::new(Some("Install Apps"));
+    let cat_title = gtk4::Label::new(Some("Install apps"));
     cat_title.add_css_class("section-title");
     cat_title.set_halign(gtk4::Align::Start);
     content.append(&cat_title);
@@ -454,12 +469,12 @@ fn make_catalog_card(
         hb.set_halign(gtk4::Align::Center);
         hb.append(&gtk4::Label::new(Some("Installed ✓")));
         b.set_child(Some(&hb));
-        b.add_css_class("installed-btn");
+        b.add_css_class("cap-get");
         b.set_sensitive(false);
         b
     } else {
         let b = gtk4::Button::with_label("Install");
-        b.add_css_class("suggested-action");
+        b.add_css_class("cap-get");
         let id = app.id;
         let installed_ids = installed_ids.clone();
         b.connect_clicked(move |button| {
@@ -473,8 +488,6 @@ fn make_catalog_card(
                         let mut ids = installed_ids.borrow_mut();
                         if !ids.iter().any(|value| value == id) { ids.push(id.to_owned()); }
                         button.set_label("Installed ✓");
-                        button.remove_css_class("suggested-action");
-                        button.add_css_class("installed-btn");
                     }
                     Err(error) => {
                         button.set_label("Retry install");
@@ -486,7 +499,7 @@ fn make_catalog_card(
         });
         b
     };
-    btn.set_halign(gtk4::Align::Fill);
+    btn.set_halign(gtk4::Align::End);
     card.append(&btn);
 
     child.set_child(Some(&card));

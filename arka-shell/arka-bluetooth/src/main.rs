@@ -117,7 +117,8 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let provider = gtk4::CssProvider::new();
     provider.load_from_data("
@@ -141,7 +142,7 @@ fn build_ui(app: &adw::Application) {
         .build();
 
     let hb = adw::HeaderBar::new();
-    hb.set_title_widget(Some(&adw::WindowTitle::new("Bluetooth", "ArkaOS")));
+    hb.set_show_title(false);
 
     // Power toggle in header
     let power_switch = gtk4::Switch::new();
@@ -161,10 +162,14 @@ fn build_ui(app: &adw::Application) {
         .build();
 
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-    content.set_margin_start(16);
-    content.set_margin_end(16);
-    content.set_margin_top(16);
-    content.set_margin_bottom(16);
+    content.set_margin_start(24);
+    content.set_margin_end(24);
+    content.set_margin_top(12);
+    content.set_margin_bottom(24);
+    content.append(&arka_shell_common::theme::page_header(
+        "Bluetooth",
+        "Pair headphones, keyboards and other devices. Use the switch at the top to turn Bluetooth off.",
+    ));
 
     // Paired devices group
     let paired_group = adw::PreferencesGroup::new();
@@ -249,6 +254,7 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
 
 fn populate_paired(group: &adw::PreferencesGroup) {
