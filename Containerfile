@@ -182,44 +182,13 @@ RUN chmod 755 /usr/bin/arka-oobe /usr/libexec/arkaos-oobe-apply && \
       > /home/arkasetup/.bash_profile && \
     chown arkasetup:arkasetup /home/arkasetup/.bash_profile
 
-# ArkaOS signature wallpaper — deep black + blue glow + triangle grid + identity mark
+# ArkaOS default wallpaper: aurora light + the boot splash's glowing triangles,
+# no text, rendered at 4K so HiDPI panels stay sharp. Users can change it.
+COPY wallpapers/make-default.sh /tmp/make-default.sh
 RUN dnf install -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
-    magick -size 1920x1080 xc:"#07080e" \
-      \( -size 1920x1080 radial-gradient:"#0d3060-#07080e" -sigmoidal-contrast 4,50% \) \
-      -compose Screen -composite \
-      \( -size 1920x1080 radial-gradient:"#051828-#07080e" \
-         -distort SRT "960,680 1 0 960,680" \) \
-      -compose Multiply -composite \
-      \( -size 40x40 xc:none \
-         -fill "rgba(30,90,160,0.18)" -draw "point 0,0" \
-         -fill "rgba(30,90,160,0.10)" -draw "point 20,0" \
-         -fill "rgba(30,90,160,0.10)" -draw "point 0,20" \
-         -fill "rgba(30,90,160,0.06)" -draw "point 20,20" \
-         -write mpr:grid +delete \
-         -size 1920x1080 tile:mpr:grid \) \
-      -compose Over -composite \
-      \( -size 1920x1080 xc:none \
-         -fill "rgba(0,160,255,0.04)" \
-         -draw "polygon 960,300 860,480 1060,480" \
-         -fill "rgba(0,160,255,0.025)" \
-         -draw "polygon 960,220 810,490 1110,490" \
-         -fill "rgba(0,160,255,0.015)" \
-         -draw "polygon 960,140 760,500 1160,500" \) \
-      -compose Over -composite \
-      -font /usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf \
-      -fill "rgba(22,199,132,0.90)" \
-      -gravity Center -pointsize 92 -draw "text 0,-52 'ARKAOS'" \
-      -fill "rgba(22,199,132,0.35)" \
-      -gravity Center -pointsize 92 -draw "text 2,-50 'ARKAOS'" \
-      -fill "rgba(200,220,245,0.75)" \
-      -font /usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf \
-      -pointsize 18 -kerning 5 \
-      -gravity Center -draw "text 0,56 'YOUR COMPUTER IS YOURS'" \
-      -fill "rgba(30,90,160,0.40)" \
-      -gravity Center -pointsize 18 -kerning 5 \
-      -draw "text 0,86 'privacy  ·  security  ·  freedom'" \
-      /usr/share/arka/wallpapers/default.png && \
+    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default.png 3840 2160 && \
+    rm /tmp/make-default.sh && \
     dnf remove -y -q ImageMagick
 
 # arka-tools .desktop files for launcher search
