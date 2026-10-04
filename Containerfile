@@ -332,18 +332,8 @@ RUN dnf install -y -q ImageMagick xcursorgen sox && \
       > /usr/share/sounds/Arka/index.theme && \
     # -- plymouth splash images ------------------------------------------------
     cd /usr/share/plymouth/themes/arkaos && \
-    magick -size 260x230 xc:none -fill none -stroke "#16c784" -strokewidth 5 \
-      -draw "polygon 130,35 205,175 55,175" tri1.png && \
-    magick -size 260x230 xc:none -fill none -stroke "#16c784" -strokewidth 3 \
-      -draw "polygon 130,12 228,196 32,196" tri2.png && \
-    magick -size 260x230 xc:none -fill none -stroke "#16c784" -strokewidth 8 \
-      -draw "polygon 130,12 228,196 32,196" -blur 0x6 tri3.png && \
-    magick -size 400x70 xc:none \
-      -font /usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf \
-      -fill "#16c784" -pointsize 44 -kerning 14 -gravity center \
-      -draw "text 0,0 'ARKA'" wordmark.png && \
-    magick -size 8x3 xc:"#16c784" bar.png && \
-    magick -size 8x3 xc:"#1e2630" barback.png && \
+    sh make-assets.sh && \
+    rm make-assets.sh && \
     rm -rf /tmp/cur && \
     dnf remove -y -q ImageMagick xcursorgen sox && dnf clean all
 
