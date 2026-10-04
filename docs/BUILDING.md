@@ -2,8 +2,10 @@
 
 The recipe now targets Fedora 44 as an unvalidated candidate. Complete the
 [release and hardware gates](RELEASE-VALIDATION.md) before distributing an image.
-All commands below operate on disposable guest images; never attach host disks,
-Windows partitions, host EFI storage or host firmware variables.
+Build and VM commands below operate on disposable guest images. Never attach
+Windows partitions, internal host disks, host EFI storage or host firmware
+variables. The separate USB procedure is for an explicitly selected disposable
+external test stick only.
 
 Everything runs inside
 the rootful podman machine (`podman-machine-default`), which mounts your home
@@ -97,3 +99,27 @@ qemu-system-x86_64 -enable-kvm -m 6144 -cpu host -smp 2 -machine q35 \
 - Theme/branding-only change: seconds of rebuild + BIB (~8 min).
 - Host-side `cargo check` works for non-layer-shell crates (dashboard, etc.);
   crates using gtk4-layer-shell need the container (host lacks the dev lib).
+
+## Writing a raw image to a disposable USB stick
+
+Use a raw image, not a qcow2 file. Identify the external test stick by its model,
+serial number and capacity before replacing `/dev/sdX` below. The target is the
+whole USB device, not a partition. These commands erase that selected stick;
+never select the internal Linux/Windows disk. Unmount the stick's partitions
+before writing. This procedure is documentation, not a first-boot action.
+
+```sh
+sudo dd if=arkaos-preview.raw of=/dev/sdX bs=4M status=progress conv=fsync &&
+  sudo sgdisk -e /dev/sdX &&
+  sudo sgdisk -v /dev/sdX &&
+  sync
+```
+
+When the stick is larger than the image, the backup GPT remains at the image's
+old end. `sgdisk -e` relocates it to the device's end; `-v` checks the resulting
+partition metadata. It does not resize partitions or repair every kind of GPT
+corruption. Stop on errors. The Nokia field notes reported a firmware USB boot
+entry missing until this relocation was performed; this is separate from a
+kernel or desktop crash. See the [sgdisk manual](https://www.rodsbooks.com/gdisk/sgdisk.html).
+Do not run automatic GPT repair on first boot: that could target an internal
+Linux or Windows drive.

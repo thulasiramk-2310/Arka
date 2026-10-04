@@ -116,8 +116,10 @@
         <h3 style="margin-top:40px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Boot from USB <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#EAB94A;border:1px solid rgba(234,185,74,.4);border-radius:4px;padding:4px 8px">PREVIEW TESTING</span></h3>
         <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">For development testing only. Real-hardware testing has begun, but the set of validated machines is small. Wi-Fi firmware, discrete GPUs, suspend/resume and display scaling are all known to vary. Assume you may need a wired connection and a second machine to read logs.</p>
         <pre style="margin-top:16px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.8;color:#EEF1F6;overflow-x:auto">sudo dd if=arkaos-preview.raw of=/dev/sdX \
-  bs=4M status=progress oflag=direct</pre>
-        <p style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EAB94A;line-height:1.7">Check the device path before running dd. It will overwrite whatever it points at.</p>
+  bs=4M status=progress conv=fsync &amp;&amp;
+  sudo sgdisk -e /dev/sdX &amp;&amp;
+  sudo sgdisk -v /dev/sdX &amp;&amp; sync</pre>
+        <p style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EAB94A;line-height:1.7">Select only a disposable external test stick by model, serial and size; unmount its partitions first. Never select the internal Linux/Windows disk. dd erases the whole selected stick. sgdisk -e moves the backup GPT to its physical end when the image is smaller; stop if writing or verification fails.</p>
 
         <h3 style="margin-top:40px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Build from source <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#54D6C6;border:1px solid rgba(84,214,198,.4);border-radius:4px;padding:4px 8px">CONTRIBUTORS</span></h3>
         <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">The image is a container build. Building it yourself is the only way to read exactly what is in the system you are booting.</p>
