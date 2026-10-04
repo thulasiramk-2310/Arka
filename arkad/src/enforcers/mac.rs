@@ -30,12 +30,23 @@ impl AsyncEnforcer for MacEnforcer {
 
     async fn update_state(&self, state: &SharedState) {
         let configured = std::fs::read_to_string(NM_CONF).map(|c| c == NM_CONF_CONTENT).unwrap_or(false);
-        let active = active_addresses_randomized().await.unwrap_or(false);
+        // No activated Ethernet/Wi-Fi connection exposes no address, so the
+        // configuration alone decides. With connections up, every one must be
+        // using a private address. A D-Bus failure counts as unconfirmed.
+        let active = match active_addresses_randomized().await {
+            Ok(v) => v.unwrap_or(true),
+            Err(e) => {
+                tracing::warn!("mac: could not read NetworkManager devices: {e}");
+                false
+            }
+        };
         state.write().await.mac_randomization = configured && active;
     }
 }
 
-async fn active_addresses_randomized() -> zbus::Result<bool> {
+/// Some(true) if every activated Ethernet/Wi-Fi device uses a private address,
+/// Some(false) if one does not, None if none is activated.
+async fn active_addresses_randomized() -> zbus::Result<Option<bool>> {
     let conn = zbus::Connection::system().await?;
     let manager = zbus::Proxy::new(&conn, "org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager").await?;
     let devices: Vec<zbus::zvariant::OwnedObjectPath> = manager.call("GetDevices", &()).await?;
@@ -54,9 +65,13 @@ async fn active_addresses_randomized() -> zbus::Result<bool> {
         let hardware = zbus::Proxy::new(&conn, "org.freedesktop.NetworkManager", path.as_str(), subtype).await?;
         let current: String = device.get_property("HwAddress").await?;
         let permanent: String = hardware.get_property("PermHwAddress").await?;
-        if !private_address(&current, &permanent) { return Ok(false); }
+        if !private_address(&current, &permanent) {
+            let iface: String = device.get_property("Interface").await.unwrap_or_default();
+            tracing::info!(iface, current, permanent, "mac: active connection is not using a private address");
+            return Ok(Some(false));
+        }
     }
-    Ok(seen)
+    Ok(seen.then_some(true))
 }
 
 fn private_address(current: &str, permanent: &str) -> bool {
