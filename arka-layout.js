@@ -6,14 +6,23 @@
 // JS strings use single quotes so the whole script can be passed inside a
 // double-quoted shell argument.
 
-// --- Top bar (36px) ---------------------------------------------------------
+// --- Top bar (34px) ---------------------------------------------------------
+// launcher | spacer | clock (centred) | spacer | tray
 var top = new Panel;
 top.location = 'top';
-top.height = 36;
+top.height = 34;
 top.addWidget('org.kde.plasma.kickerdash');     // full-screen launcher button
-top.addWidget('org.kde.plasma.panelspacer');    // push the rest to the right
+top.addWidget('org.kde.plasma.panelspacer');
+var clock = top.addWidget('org.kde.plasma.digitalclock');
+// Readable date beside the time ("Sat 4 Oct 19:33"). Day/month names follow
+// the locale; 12/24-hour is left at the locale default (use24hFormat unset).
+clock.currentConfigGroup = ['Appearance'];
+clock.writeConfig('showDate', true);
+clock.writeConfig('dateDisplayFormat', 1);      // beside the time
+clock.writeConfig('dateFormat', 'custom');
+clock.writeConfig('customDateFormat', 'ddd d MMM');
+top.addWidget('org.kde.plasma.panelspacer');
 top.addWidget('org.kde.plasma.systemtray');
-top.addWidget('org.kde.plasma.digitalclock');
 var topId = top.id;
 
 // --- Floating dock (icons-only task manager) --------------------------------
