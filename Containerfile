@@ -336,6 +336,18 @@ RUN systemctl mask plasma-setup.service
 # setup screen types its "hello world" in.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y jetbrains-mono-fonts
 
+# Arka Light icons: the same Arka app icons, falling back to Breeze's
+# light-background set instead of breeze-dark, so tray and launcher glyphs stay
+# visible on the light look. arka-plasma-firstrun switches to it for Light.
+RUN cp -a /usr/share/icons/Arka /usr/share/icons/Arka-Light && \
+    sed -i -e 's/^Name=.*/Name=Arka Light/' -e 's/^Inherits=.*/Inherits=breeze/' \
+           -e 's/^Comment=.*/Comment=ArkaOS icon theme for the light look/' \
+           /usr/share/icons/Arka-Light/index.theme && \
+    gtk-update-icon-cache -q -f /usr/share/icons/Arka-Light 2>/dev/null || true
+
+# Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
+COPY arka-apply-look /usr/libexec/arka-apply-look
+
 # Light login screen: the same theme with look=light and the light wallpaper.
 # arkaos-oobe-apply selects it when the user picks Light in setup.
 RUN cp -a /usr/share/sddm/themes/arkaos /usr/share/sddm/themes/arkaos-light && \

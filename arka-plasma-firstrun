@@ -22,29 +22,23 @@ if [ -n "$VOUT" ]; then
 fi
 
 # Apply the look chosen in setup (written by arkaos-oobe-apply; dark when
-# absent): the matching ArkaOS colour scheme, Plasma style and wallpaper, with
-# the green #16C784 accent. Colours and style only, not a whole global theme,
-# so Arka icons/cursor/sounds stay. All of it stays changeable in Settings.
+# absent): colours, Plasma style, icons and wallpapers. The same script backs
+# ArkaOS Settings > Appearance, so both always agree.
 LOOK=$(cat "$HOME/.config/arka-look" 2>/dev/null)
 [ "$LOOK" = light ] || LOOK=dark
-WALL=/usr/share/arka/wallpapers/default-$LOOK.png
-if [ "$LOOK" = light ]; then
-    plasma-apply-colorscheme ArkaOSLight 2>/dev/null || true
-    plasma-apply-desktoptheme breeze-light 2>/dev/null || true
-    command -v kwriteconfig6 >/dev/null &&
-        kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
-else
-    plasma-apply-colorscheme ArkaOS 2>/dev/null || true
-fi
-[ -x "$(command -v kwriteconfig6)" ] && {
-    kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
-    kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
-}
-[ -f "$WALL" ] && plasma-apply-wallpaperimage "$WALL" 2>/dev/null || true
+/usr/libexec/arka-apply-look "$LOOK"
 
 # Reshape the desktop toward the ArkaOS layout (top bar + floating dock +
 # full-screen launcher) via Plasma's scripting API.
 LAYOUT=/usr/share/arka/arka-layout.js
+# arka-apply-look restarts plasmashell; wait (up to 20 s) until it is back on
+# the session bus before sending it the layout script.
+for _ in $(seq 1 40); do
+    dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.NameHasOwner string:org.kde.plasmashell 2>/dev/null | grep -q "boolean true" && break
+    sleep 0.5
+done
+sleep 1
 if [ -f "$LAYOUT" ]; then
     dbus-send --session --type=method_call --dest=org.kde.plasmashell \
         /PlasmaShell org.kde.PlasmaShell.evaluateScript \

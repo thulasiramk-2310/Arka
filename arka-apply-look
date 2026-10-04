@@ -1,0 +1,57 @@
+#!/bin/bash
+# arka-apply-look — switch the current user's desktop to the ArkaOS Light or
+# Dark look. Used by the first-login script (the look chosen in setup) and by
+# ArkaOS Settings > Appearance. Runs as the user inside their Plasma session;
+# changes only that user's settings, and every one stays changeable in
+# System Settings.
+#
+#   arka-apply-look light|dark
+#
+# Applies colours, Plasma style and icons only, not a whole global theme, so
+# Arka icons/cursor/sounds stay. A wallpaper the user picked themselves (Settings
+# records it in ~/.config/arkaos/wallpaper) is kept; otherwise the matching
+# ArkaOS wallpaper is used. The login screen is system-wide and needs an
+# administrator, so it is not changed here.
+set -u
+
+LOOK=${1:-}
+case "$LOOK" in light|dark) ;; *) echo "usage: arka-apply-look light|dark" >&2; exit 2 ;; esac
+
+mkdir -p "$HOME/.config"
+printf '%s\n' "$LOOK" > "$HOME/.config/arka-look"
+
+# Fedora ships the icon switcher in libexec; other distros in lib.
+CHANGEICONS=$(ls /usr/libexec/plasma-changeicons /usr/lib/plasma-changeicons 2>/dev/null | head -1)
+set_icons() {
+    { [ -n "$CHANGEICONS" ] && "$CHANGEICONS" "$1" >/dev/null 2>&1; } ||
+        kwriteconfig6 --file kdeglobals --group Icons --key Theme "$1"
+}
+
+WALL=/usr/share/arka/wallpapers/default-$LOOK.png
+CUSTOM=$(cat "$HOME/.config/arkaos/wallpaper" 2>/dev/null || true)
+case "$CUSTOM" in ""|/usr/share/arka/wallpapers/default*) DESK_WALL=$WALL ;; *) DESK_WALL=$CUSTOM ;; esac
+
+if [ "$LOOK" = light ]; then
+    plasma-apply-colorscheme ArkaOSLight >/dev/null 2>&1 || true
+    plasma-apply-desktoptheme breeze-light >/dev/null 2>&1 || true
+    set_icons Arka-Light
+    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
+else
+    plasma-apply-colorscheme ArkaOS >/dev/null 2>&1 || true
+    plasma-apply-desktoptheme breeze-dark >/dev/null 2>&1 || true
+    set_icons Arka
+    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
+fi
+
+# The ArkaOS accent stays green in both looks (changeable in System Settings).
+kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
+kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
+
+kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image \
+    --group General --key Image "file://$WALL"
+[ -f "$DESK_WALL" ] && plasma-apply-wallpaperimage "$DESK_WALL" >/dev/null 2>&1
+
+# The panel keeps the old Plasma style's icon colours until it restarts (seen
+# in the VM: tray icons stayed light-on-light). Restart it once; about 2 s.
+systemctl --user restart plasma-plasmashell.service >/dev/null 2>&1 || true
+exit 0
