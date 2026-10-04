@@ -20,6 +20,36 @@ criteria, not a claim that the current source has passed them all.
   explicit ID. The active VM, Windows filesystems and host boot settings were
   left untouched. No host privacy enforcer or installer was executed.
 
+### Desktop follow-up during independent image testing
+
+The sound and update changes below were made after the independent image build
+and boot test started. Those test results must be tied to their source revision;
+they do not automatically validate these later changes.
+
+- Nine additional isolated regression tests pass: six audio-state/command
+  tests and three update-command tests. They use fake command responses and a
+  shell function replacing sudo; they do not change host audio or deployments.
+- Both affected apps pass `cargo check --offline --locked` using a separate
+  build directory and one build job. No image or VM build was started here.
+- Audio queries and writes run in a serialized background worker with bounded
+  subprocesses. The panel rereads state after writes, reports failures and
+  represents missing devices as unknown. Slider requests are coalesced and
+  external state is refreshed while the panel is open. Controls cover only
+  the default devices, not every microphone or application recording stream.
+- The updater reads the image-owned version file, retains failed command
+  output, reports terminal-launch failures and removes unsupported signing
+  and data-preservation claims. Rollback explicitly describes its staged-update
+  and user-file consequences.
+
+On the next candidate image, test absent/stopped PipeWire, device hotplug,
+external mute changes, rapid slider input and microphone readback. Test update
+authentication failure, an unreachable registry and an unavailable rollback
+deployment. The terminal must preserve the error in each case. None of these
+guest integration tests is claimed by the source tests.
+
+Behavior references: [WirePlumber wpctl](https://pipewire.pages.freedesktop.org/wireplumber/man/wpctl.html),
+[bootc rollback](https://bootc.dev/bootc/man/bootc-rollback.8.html).
+
 ## Candidate baseline and migration
 
 The Containerfile now defaults both the GTK builder and bootc runtime to Fedora

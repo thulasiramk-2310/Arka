@@ -65,9 +65,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
       - name: Check all desktop apps
         run: cargo check --locked --manifest-path arka-shell/Cargo.toml --workspace
-      - name: Test permission and WiFi parsers without a display
+      - name: Test desktop backends without a display or host services
         run: |
           rustc --edition=2021 --test arka-shell/arka-perms/src/permissions.rs -o /tmp/perms-tests
           /tmp/perms-tests
           rustc --edition=2021 --test arka-shell/arka-wifi/src/net.rs -o /tmp/wifi-tests
           /tmp/wifi-tests
+          rustc --edition=2021 --test arka-shell/arka-sound/src/audio.rs -o /tmp/sound-tests
+          /tmp/sound-tests
+          rustc --edition=2021 --test arka-shell/arka-update/src/operation.rs -o /tmp/update-tests
+          /tmp/update-tests

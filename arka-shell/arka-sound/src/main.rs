@@ -1,109 +1,137 @@
+use adw::prelude::*;
 use gtk4::glib;
 use gtk4::prelude::*;
 use libadwaita as adw;
-use adw::prelude::*;
-use std::process::Command;
+use std::cell::Cell;
+use std::rc::Rc;
+
+mod audio;
+use audio::{Action, Volume};
 
 const APP_ID: &str = "org.arka.sound";
 
-// ── wpctl helpers ────────────────────────────────────────────────────────────
-
-fn get_volume() -> f64 {
-    let out = Command::new("wpctl")
-        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    // "Volume: 0.65 [MUTED]" or "Volume: 0.65"
-    out.split_whitespace().nth(1)
-        .and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(0.5)
-}
-
-fn is_muted() -> bool {
-    let out = Command::new("wpctl")
-        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    out.contains("[MUTED]")
-}
-
-fn is_mic_muted() -> bool {
-    let out = Command::new("wpctl")
-        .args(["get-volume", "@DEFAULT_SOURCE@"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    out.contains("[MUTED]")
-}
-
-fn set_volume(v: f64) {
-    let _ = Command::new("wpctl")
-        .args(["set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{:.2}", v)])
-        .spawn();
-}
-
-fn toggle_mute() {
-    let _ = Command::new("wpctl")
-        .args(["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-        .spawn();
-}
-
-fn toggle_mic_mute() {
-    let _ = Command::new("wpctl")
-        .args(["set-mute", "@DEFAULT_SOURCE@", "toggle"])
-        .spawn();
-}
-
 fn volume_icon(vol: f64, muted: bool) -> &'static str {
-    if muted || vol == 0.0 { "audio-volume-muted-symbolic" }
-    else if vol < 0.33     { "audio-volume-low-symbolic" }
-    else if vol < 0.66     { "audio-volume-medium-symbolic" }
-    else                   { "audio-volume-high-symbolic" }
+    if muted || vol == 0.0 {
+        "audio-volume-muted-symbolic"
+    } else if vol < 0.33 {
+        "audio-volume-low-symbolic"
+    } else if vol < 0.66 {
+        "audio-volume-medium-symbolic"
+    } else {
+        "audio-volume-high-symbolic"
+    }
 }
 
 fn pct(v: f64) -> String {
     format!("{}%", (v * 100.0).round() as u32)
 }
 
-// ── sink / source names ──────────────────────────────────────────────────────
-
-fn default_sink_name() -> String {
-    let out = Command::new("wpctl")
-        .args(["inspect", "@DEFAULT_AUDIO_SINK@"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    for line in out.lines() {
-        if line.contains("node.nick") || line.contains("node.description") {
-            if let Some(val) = line.split('"').nth(1) {
-                return val.to_string();
-            }
-        }
-    }
-    "Speakers".into()
+// Only one worker runs at a time. Slider changes are coalesced before dispatch.
+struct Controls {
+    window: glib::WeakRef<adw::ApplicationWindow>,
+    busy: Cell<bool>,
+    rendering: Cell<bool>,
+    pending_volume: Cell<Option<f64>>,
+    output: Cell<Option<Volume>>,
+    input: Cell<Option<Volume>>,
+    vol_icon: gtk4::Image,
+    vol_pct: gtk4::Label,
+    vol_scale: gtk4::Scale,
+    mute_btn: gtk4::Button,
+    sink_label: gtk4::Label,
+    mic_icon: gtk4::Image,
+    mic_label: gtk4::Label,
+    mic_btn: gtk4::Button,
+    status: gtk4::Label,
 }
 
-fn default_source_name() -> String {
-    let out = Command::new("wpctl")
-        .args(["inspect", "@DEFAULT_SOURCE@"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    for line in out.lines() {
-        if line.contains("node.nick") || line.contains("node.description") {
-            if let Some(val) = line.split('"').nth(1) {
-                return val.to_string();
-            }
+impl Controls {
+    fn refresh(self: &Rc<Self>, action: Action) {
+        if self.busy.replace(true) {
+            return;
         }
+        self.mute_btn.set_sensitive(false);
+        self.mic_btn.set_sensitive(false);
+        self.vol_scale.set_sensitive(false);
+        // Do not leave an old muted indicator visible while verification is pending.
+        self.vol_pct.set_label("Checking…");
+        self.vol_icon
+            .set_icon_name(Some("dialog-question-symbolic"));
+        self.mic_icon
+            .set_icon_name(Some("dialog-question-symbolic"));
+        self.mute_btn.set_label("Checking…");
+        self.mic_btn.set_label("Checking…");
+        self.mute_btn.remove_css_class("muted");
+        self.mic_btn.remove_css_class("muted");
+        let controls = self.clone();
+        glib::spawn_future_local(async move {
+            let result = gtk4::gio::spawn_blocking(move || audio::refresh(action)).await;
+            let c = controls;
+            c.rendering.set(true);
+            let snapshot = result.unwrap_or_else(|_| audio::Snapshot {
+                output: Err("Audio worker failed".into()),
+                input: Err("Audio worker failed".into()),
+                error: Some("Could not read audio state".into()),
+            });
+            c.output
+                .set(snapshot.output.as_ref().ok().map(|d| d.volume));
+            c.input.set(snapshot.input.as_ref().ok().map(|d| d.volume));
+            match snapshot.output {
+                Ok(device) => {
+                    let v = device.volume;
+                    c.vol_icon
+                        .set_icon_name(Some(volume_icon(v.level, v.muted)));
+                    c.vol_pct.set_label(&if v.muted {
+                        "Muted".into()
+                    } else {
+                        pct(v.level)
+                    });
+                    c.vol_scale.set_value(v.level.min(1.0));
+                    c.vol_scale.set_sensitive(true);
+                    c.mute_btn.set_sensitive(true);
+                    c.mute_btn
+                        .set_label(if v.muted { "Unmute" } else { "Mute" });
+                    if v.muted {
+                        c.mute_btn.add_css_class("muted");
+                    }
+                    c.sink_label.set_label(&format!("Output: {}", device.name));
+                }
+                Err(error) => {
+                    c.vol_pct.set_label("Unknown");
+                    c.mute_btn.set_label("Unavailable");
+                    c.sink_label.set_label(&error);
+                }
+            }
+            match snapshot.input {
+                Ok(device) => {
+                    let muted = device.volume.muted;
+                    c.mic_icon.set_icon_name(Some(if muted {
+                        "microphone-sensitivity-muted-symbolic"
+                    } else {
+                        "microphone-sensitivity-high-symbolic"
+                    }));
+                    c.mic_label.set_label(&device.name);
+                    c.mic_btn.set_sensitive(true);
+                    c.mic_btn.set_label(if muted { "Unmute" } else { "Mute" });
+                    if muted {
+                        c.mic_btn.add_css_class("muted");
+                    }
+                }
+                Err(error) => {
+                    c.mic_label.set_label(&format!("State unknown: {error}"));
+                    c.mic_btn.set_label("Unavailable");
+                }
+            }
+            if let Some(error) = snapshot.error {
+                c.status.set_label(&error);
+            } else if !matches!(action, Action::Refresh) {
+                c.status
+                    .set_label("Applies to the default audio devices only.");
+            }
+            c.rendering.set(false);
+            c.busy.set(false);
+        });
     }
-    "Microphone".into()
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -173,8 +201,8 @@ fn build_ui(app: &adw::Application) {
     vol_title.add_css_class("section-title");
     vol_title.set_halign(gtk4::Align::Start);
 
-    let vol = get_volume();
-    let muted = is_muted();
+    let vol = 0.0;
+    let muted = false;
 
     // Icon + percentage row
     let vol_top = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
@@ -188,7 +216,9 @@ fn build_ui(app: &adw::Application) {
 
     let mute_btn = gtk4::Button::with_label(if muted { "Unmute" } else { "Mute" });
     mute_btn.add_css_class("mute-btn");
-    if muted { mute_btn.add_css_class("muted"); }
+    if muted {
+        mute_btn.add_css_class("muted");
+    }
     mute_btn.set_hexpand(true);
     mute_btn.set_halign(gtk4::Align::End);
 
@@ -203,7 +233,7 @@ fn build_ui(app: &adw::Application) {
     vol_scale.set_draw_value(false);
 
     // Output device label
-    let sink_name = default_sink_name();
+    let sink_name = "Checking…";
     let sink_label = gtk4::Label::new(Some(&format!("Output: {}", sink_name)));
     sink_label.add_css_class("device-label");
     sink_label.set_halign(gtk4::Align::Start);
@@ -217,17 +247,18 @@ fn build_ui(app: &adw::Application) {
     mic_title.add_css_class("section-title");
     mic_title.set_halign(gtk4::Align::Start);
 
-    let mic_muted = is_mic_muted();
+    let mic_muted = false;
 
     let mic_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    let mic_icon = gtk4::Image::from_icon_name(
-        if mic_muted { "microphone-sensitivity-muted-symbolic" }
-        else { "microphone-sensitivity-high-symbolic" }
-    );
+    let mic_icon = gtk4::Image::from_icon_name(if mic_muted {
+        "microphone-sensitivity-muted-symbolic"
+    } else {
+        "microphone-sensitivity-high-symbolic"
+    });
     mic_icon.set_pixel_size(20);
     mic_icon.add_css_class("vol-icon");
 
-    let src_name = default_source_name();
+    let src_name = "Checking…";
     let mic_label = gtk4::Label::new(Some(&src_name));
     mic_label.add_css_class("device-label");
     mic_label.set_hexpand(true);
@@ -237,63 +268,82 @@ fn build_ui(app: &adw::Application) {
 
     let mic_btn = gtk4::Button::with_label(if mic_muted { "Unmute" } else { "Mute" });
     mic_btn.add_css_class("mute-btn");
-    if mic_muted { mic_btn.add_css_class("muted"); }
+    if mic_muted {
+        mic_btn.add_css_class("muted");
+    }
 
     mic_row.append(&mic_icon);
     mic_row.append(&mic_label);
     mic_row.append(&mic_btn);
 
-    // ── Wire signals ──────────────────────────────────────────────────────────
-
-    // Slider → volume
-    let vol_icon_ref = vol_icon.clone();
-    let vol_pct_ref = vol_pct.clone();
-    vol_scale.connect_value_changed(move |s| {
-        let v = s.value();
-        set_volume(v);
-        vol_icon_ref.set_icon_name(Some(volume_icon(v, false)));
-        vol_pct_ref.set_label(&pct(v));
+    let status = gtk4::Label::new(Some("Applies to the default audio devices only."));
+    status.set_wrap(true);
+    status.set_max_width_chars(34);
+    status.add_css_class("device-label");
+    let controls = Rc::new(Controls {
+        window: window.downgrade(),
+        busy: Cell::new(false),
+        rendering: Cell::new(false),
+        pending_volume: Cell::new(None),
+        output: Cell::new(None),
+        input: Cell::new(None),
+        vol_icon: vol_icon.clone(),
+        vol_pct: vol_pct.clone(),
+        vol_scale: vol_scale.clone(),
+        mute_btn: mute_btn.clone(),
+        sink_label: sink_label.clone(),
+        mic_icon: mic_icon.clone(),
+        mic_label: mic_label.clone(),
+        mic_btn: mic_btn.clone(),
+        status: status.clone(),
     });
-
-    // Mute button
-    let vol_icon_ref2 = vol_icon.clone();
-    let vol_pct_ref2 = vol_pct.clone();
-    let vol_scale_ref = vol_scale.clone();
-    let mute_btn_ref = mute_btn.clone();
-    mute_btn.connect_clicked(move |btn| {
-        toggle_mute();
-        let now_muted = is_muted();
-        let v = vol_scale_ref.value();
-        vol_icon_ref2.set_icon_name(Some(volume_icon(v, now_muted)));
-        if now_muted {
-            vol_pct_ref2.set_label("Muted");
-            btn.set_label("Unmute");
-            btn.add_css_class("muted");
-        } else {
-            vol_pct_ref2.set_label(&pct(v));
-            btn.set_label("Mute");
-            btn.remove_css_class("muted");
-        }
-        mute_btn_ref.set_label(if now_muted { "Unmute" } else { "Mute" });
-    });
-
-    // Mic mute button
-    let mic_icon_ref = mic_icon.clone();
-    mic_btn.connect_clicked(move |btn| {
-        toggle_mic_mute();
-        let now_muted = is_mic_muted();
-        mic_icon_ref.set_icon_name(Some(
-            if now_muted { "microphone-sensitivity-muted-symbolic" }
-            else { "microphone-sensitivity-high-symbolic" }
-        ));
-        if now_muted {
-            btn.set_label("Unmute");
-            btn.add_css_class("muted");
-        } else {
-            btn.set_label("Mute");
-            btn.remove_css_class("muted");
+    let c = Rc::downgrade(&controls);
+    vol_scale.connect_value_changed(move |scale| {
+        if let Some(c) = c.upgrade() {
+            if !c.rendering.get() {
+                c.pending_volume.set(Some(scale.value()));
+            }
         }
     });
+    let c = Rc::downgrade(&controls);
+    mute_btn.connect_clicked(move |_| {
+        if let Some(c) = c.upgrade() {
+            if let Some(v) = c.output.get() {
+                c.refresh(Action::MuteOutput(!v.muted));
+            }
+        }
+    });
+    let c = Rc::downgrade(&controls);
+    mic_btn.connect_clicked(move |_| {
+        if let Some(c) = c.upgrade() {
+            if let Some(v) = c.input.get() {
+                c.refresh(Action::MuteInput(!v.muted));
+            }
+        }
+    });
+    let c = controls.clone();
+    glib::timeout_add_local(std::time::Duration::from_millis(250), move || {
+        if c.window.upgrade().is_none() {
+            return glib::ControlFlow::Break;
+        }
+        if !c.busy.get() {
+            if let Some(volume) = c.pending_volume.take() {
+                c.refresh(Action::Volume(volume));
+            }
+        }
+        glib::ControlFlow::Continue
+    });
+    let c = controls.clone();
+    glib::timeout_add_seconds_local(5, move || {
+        if c.window.upgrade().is_none() {
+            return glib::ControlFlow::Break;
+        }
+        if !c.busy.get() && c.pending_volume.get().is_none() {
+            c.refresh(Action::Refresh);
+        }
+        glib::ControlFlow::Continue
+    });
+    controls.refresh(Action::Refresh);
 
     inner.append(&vol_title);
     inner.append(&vol_top);
@@ -302,16 +352,23 @@ fn build_ui(app: &adw::Application) {
     inner.append(&sep);
     inner.append(&mic_title);
     inner.append(&mic_row);
+    inner.append(&status);
 
     root.append(&inner);
     window.set_content(Some(&root));
 
     // Esc closes
     let ctl = gtk4::EventControllerKey::new();
-    let w = window.clone();
+    let w = window.downgrade();
     ctl.connect_key_pressed(move |_, key, _, _| {
-        if key == gtk4::gdk::Key::Escape { w.close(); glib::Propagation::Stop }
-        else { glib::Propagation::Proceed }
+        if key == gtk4::gdk::Key::Escape {
+            if let Some(w) = w.upgrade() {
+                w.close();
+            }
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
     });
     window.add_controller(ctl);
 

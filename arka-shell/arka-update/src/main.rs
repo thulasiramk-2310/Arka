@@ -1,6 +1,9 @@
+use adw::prelude::*;
 use gtk4::prelude::*;
 use libadwaita as adw;
-use adw::prelude::*;
+
+mod operation;
+use operation::Operation;
 
 const APP_ID: &str = "org.arka.update";
 
@@ -30,13 +33,15 @@ fn build_ui(app: &adw::Application) {
     let ver_row = adw::ActionRow::new();
     ver_row.set_title("ArkaOS");
     ver_row.set_subtitle(&current_version());
-    ver_row.add_prefix(&gtk4::Image::from_icon_name("system-software-install-symbolic"));
+    ver_row.add_prefix(&gtk4::Image::from_icon_name(
+        "system-software-install-symbolic",
+    ));
     ver_group.add(&ver_row);
 
     // Update section
     let upd_group = adw::PreferencesGroup::new();
     upd_group.set_title("Over-the-Air Update");
-    upd_group.set_description(Some("Updates are atomic and signed. Your data is never touched."));
+    upd_group.set_description(Some("Stage a system image update, then reboot to apply it. Keep a backup of your files before updating."));
 
     let check_btn = gtk4::Button::with_label("Check for Updates");
     check_btn.add_css_class("suggested-action");
@@ -56,7 +61,7 @@ fn build_ui(app: &adw::Application) {
     // Rollback section
     let rb_group = adw::PreferencesGroup::new();
     rb_group.set_title("Recovery");
-    rb_group.set_description(Some("Roll back to the previous working version of ArkaOS."));
+    rb_group.set_description(Some("Select the previous system deployment for the next boot. This discards any staged update and does not restore previous versions of your files."));
 
     let rb_btn = gtk4::Button::with_label("Roll Back to Previous Version");
     rb_btn.add_css_class("destructive-action");
@@ -76,6 +81,9 @@ fn build_ui(app: &adw::Application) {
     content.append(&ver_group);
     content.append(&upd_group);
     content.append(&rb_group);
+    let status = gtk4::Label::new(None);
+    status.set_wrap(true);
+    content.append(&status);
 
     let scroll = gtk4::ScrolledWindow::builder()
         .vexpand(true)
@@ -88,27 +96,39 @@ fn build_ui(app: &adw::Application) {
     toolbar.set_content(Some(&scroll));
     window.set_content(Some(&toolbar));
 
-    // Handlers — open foot terminal for long-running commands
-    check_btn.connect_clicked(|_| run_in_terminal("sudo bootc upgrade --check"));
-    update_btn.connect_clicked(|_| {
-        run_in_terminal("sudo bootc upgrade && echo '✓ Update complete. Reboot to apply.' && read -p 'Press Enter to close...'");
-    });
-    rb_btn.connect_clicked(|_| {
-        run_in_terminal("sudo bootc rollback && echo '✓ Rolled back. Reboot to apply.' && read -p 'Press Enter to close...'");
-    });
+    for (button, operation) in [
+        (check_btn, Operation::Check),
+        (update_btn, Operation::Upgrade),
+        (rb_btn, Operation::Rollback),
+    ] {
+        let status = status.clone();
+        button.connect_clicked(move |_| run_in_terminal(operation, &status));
+    }
 
     window.present();
 }
 
 fn current_version() -> String {
-    let v = std::fs::read_to_string("/etc/arkaos-release")
-        .unwrap_or_default();
+    let v = std::fs::read_to_string("/usr/lib/arkaos-release").unwrap_or_default();
     let v = v.trim();
-    if v.is_empty() { "0.1".into() } else { v.into() }
+    if v.is_empty() {
+        "Version unavailable".into()
+    } else {
+        v.into()
+    }
 }
 
-fn run_in_terminal(cmd: &str) {
-    let _ = std::process::Command::new("konsole")
-        .args(["-e", "sh", "-c", cmd])
-        .spawn();
+fn run_in_terminal(operation: Operation, status: &gtk4::Label) {
+    match std::process::Command::new("konsole")
+        .args(["-e", "sh", "-c", &operation.script()])
+        .spawn()
+    {
+        Ok(mut child) => {
+            status.set_label("Review progress and the final result in the terminal.");
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(error) => status.set_label(&format!("Could not open the update terminal: {error}")),
+    }
 }
