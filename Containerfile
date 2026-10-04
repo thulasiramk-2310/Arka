@@ -332,6 +332,12 @@ RUN set -e; \
       --output /usr/lib/modules/${KVER}/${KVER}.efi; \
     echo "UKI built: $(ls -lh /usr/lib/modules/${KVER}/${KVER}.efi)"
 
+# Fedora 44's KDE enables its own first-run wizard (plasma-setup) on top of
+# ArkaOS's OOBE, so new users were asked to set up the machine twice. Mask it:
+# ArkaOS's wizard creates the account. (Placed here, not by the SDDM step, so
+# an existing build cache is not invalidated.)
+RUN systemctl mask plasma-setup.service
+
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Copied here, a code change only reruns this block
 # instead of the themes, wallpaper, splash and initramfs above. Units and
