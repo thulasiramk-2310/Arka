@@ -39,51 +39,25 @@ fn main() {
     std::process::exit(app.run().value());
 }
 
-fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+const CSS: &str = "
+.wl-title { font-family: 'Noto Serif', serif; font-size: 36px; font-weight: 500; }
+.wl-sub { font-size: 15px; color: alpha(@window_fg_color, 0.75); }
+.wl-row { padding: 14px 4px; border-top: 1px solid alpha(@window_fg_color, 0.12); }
+.wl-rows { border-bottom: 1px solid alpha(@window_fg_color, 0.12); }
+.wl-row-title { font-size: 15px; font-weight: 600; }
+.wl-row-sub { font-size: 13px; color: alpha(@window_fg_color, 0.75); }
+.wl-note { font-size: 13px; color: alpha(@window_fg_color, 0.75); }
+button.wl-row-btn { background: none; box-shadow: none; padding: 0; border-radius: 0; }
+button.wl-row-btn:hover .wl-row { background-color: alpha(@window_fg_color, 0.04); }
+button.wl-done { border-radius: 999px; padding: 10px 26px; font-weight: 600;
+                 background-color: @window_fg_color; color: @window_bg_color; }
+";
 
+fn build_ui(app: &adw::Application) {
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
     let provider = gtk4::CssProvider::new();
-    provider.load_from_data(
-        "
-        .welcome-title {
-            font-size: 36px;
-            font-weight: bold;
-            color: #c8d8f0;
-        }
-        .welcome-sub {
-            font-size: 16px;
-            color: #8aaccc;
-            letter-spacing: 2px;
-        }
-        .arka-brand {
-            font-size: 52px;
-            font-weight: bold;
-            color: #c8d8f0;
-        }
-        .feature-check {
-            font-size: 15px;
-            color: #6fcf8a;
-        }
-        .feature-label {
-            font-size: 15px;
-            color: #c0d4e8;
-        }
-        .action-btn {
-            min-width: 130px;
-            min-height: 56px;
-            font-size: 13px;
-        }
-        .get-started {
-            font-size: 16px;
-            font-weight: bold;
-            min-height: 52px;
-            border-radius: 26px;
-        }
-        .dark-bg {
-            background-color: #070a10;
-        }
-        "
-    );
+    provider.load_from_data(CSS);
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
         &provider,
@@ -93,130 +67,97 @@ fn build_ui(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Welcome to ArkaOS")
-        .default_width(680)
-        .default_height(640)
-        .resizable(false)
+        .default_width(620)
+        .default_height(660)
         .build();
 
-    // Root vertical box
-    let root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    root.add_css_class("dark-bg");
+    let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    col.set_margin_top(40);
+    col.set_margin_bottom(28);
+    col.set_margin_start(40);
+    col.set_margin_end(40);
 
-    // ── Brand header ──────────────────────────────────────────────────
-    let brand_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    brand_box.set_margin_top(48);
-    brand_box.set_margin_bottom(24);
-    brand_box.set_halign(gtk4::Align::Center);
+    let label = |t: &str, c: &str| {
+        let l = gtk4::Label::new(Some(t));
+        l.add_css_class(c);
+        l.set_xalign(0.0);
+        l.set_wrap(true);
+        l
+    };
+    col.append(&label("Welcome to ArkaOS", "wl-title"));
+    let sub = label("A few places to start. You can come back to all of these from the app launcher.", "wl-sub");
+    sub.set_margin_top(10);
+    col.append(&sub);
 
-    let brand_lbl = gtk4::Label::new(Some("▲  ARKA"));
-    brand_lbl.add_css_class("arka-brand");
-
-    let title_lbl = gtk4::Label::new(Some("Welcome to ArkaOS"));
-    title_lbl.add_css_class("welcome-title");
-
-    let sub_lbl = gtk4::Label::new(Some("YOUR COMPUTER IS YOURS"));
-    sub_lbl.add_css_class("welcome-sub");
-
-    brand_box.append(&brand_lbl);
-    brand_box.append(&title_lbl);
-    brand_box.append(&sub_lbl);
-
-    // ── Privacy features ──────────────────────────────────────────────
-    let features: &[&str] = &[
-        "Searches are Private",
-        "Browser is Protected",
-        "Your Device Can't Be Tracked",
-        "Your Identity Stays Hidden on Networks",
+    // Shortcuts: one row each, title + what it opens.
+    let rows = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    rows.add_css_class("wl-rows");
+    rows.set_margin_top(28);
+    let items: &[(&str, &str, &str, &str)] = &[
+        ("network-wireless-symbolic", "Connect to Wi-Fi", "Choose a network and sign in.", "arka-wifi"),
+        ("applications-internet-symbolic", "Open Firefox", "Runs in a sandbox that sees only your Downloads folder.", "firefox"),
+        ("system-software-install-symbolic", "Install apps", "Browse and install apps with Capsule.", "arka-capsule"),
+        ("security-high-symbolic", "Review privacy settings", "See which privacy settings ArkaOS has in place right now.", "arka-dashboard"),
     ];
-
-    let feat_box = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
-    feat_box.set_halign(gtk4::Align::Center);
-    feat_box.set_margin_bottom(32);
-
-    for feat in features {
-        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-        row.set_halign(gtk4::Align::Center);
-
-        let check = gtk4::Label::new(Some("✓"));
-        check.add_css_class("feature-check");
-
-        let lbl = gtk4::Label::new(Some(feat));
-        lbl.add_css_class("feature-label");
-
-        row.append(&check);
-        row.append(&lbl);
-        feat_box.append(&row);
-    }
-
-    // ── Action buttons ─────────────────────────────────────────────────
-    let actions_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    actions_box.set_halign(gtk4::Align::Center);
-    actions_box.set_margin_bottom(32);
-
-    let btn_data: &[(&str, &str, &str)] = &[
-        ("network-wireless-symbolic",  "Connect WiFi",   "arka-wifi"),
-        ("applications-internet-symbolic", "Open Browser", "firefox"),
-        ("system-software-install-symbolic", "Install Apps", "arka-capsule"),
-        ("security-high-symbolic",     "Privacy Details", "arka-dashboard"),
-    ];
-
-    for (icon, label, cmd) in btn_data {
-        let btn = gtk4::Button::new();
-        btn.add_css_class("action-btn");
-        btn.add_css_class("suggested-action");
-
-        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-        vbox.set_halign(gtk4::Align::Center);
-
+    for (icon, title, what, cmd) in items {
+        let r = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        r.add_css_class("wl-row");
         let img = gtk4::Image::from_icon_name(icon);
-        img.set_pixel_size(24);
-
-        let lbl = gtk4::Label::new(Some(label));
-        lbl.set_wrap(true);
-        lbl.set_justify(gtk4::Justification::Center);
-        lbl.set_max_width_chars(12);
-
-        vbox.append(&img);
-        vbox.append(&lbl);
-        btn.set_child(Some(&vbox));
-
-        let cmd_owned = cmd.to_string();
-        btn.connect_clicked(move |_| {
-            spawn(&cmd_owned);
-        });
-
-        actions_box.append(&btn);
+        img.set_pixel_size(20);
+        img.set_valign(gtk4::Align::Center);
+        let t = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+        t.set_hexpand(true);
+        t.append(&label(title, "wl-row-title"));
+        t.append(&label(what, "wl-row-sub"));
+        let go = gtk4::Image::from_icon_name("go-next-symbolic");
+        go.set_valign(gtk4::Align::Center);
+        r.append(&img);
+        r.append(&t);
+        r.append(&go);
+        let b = gtk4::Button::new();
+        b.add_css_class("wl-row-btn");
+        b.set_child(Some(&r));
+        let cmd = cmd.to_string();
+        b.connect_clicked(move |_| spawn(&cmd));
+        rows.append(&b);
     }
+    col.append(&rows);
 
-    // ── Get Started button ─────────────────────────────────────────────
-    let start_btn = gtk4::Button::with_label("Get Started  →");
-    start_btn.add_css_class("get-started");
-    start_btn.add_css_class("suggested-action");
-    start_btn.set_margin_start(80);
-    start_btn.set_margin_end(80);
-    start_btn.set_margin_bottom(40);
+    let note = label(
+        "ArkaOS sets a few privacy settings for you. The Privacy dashboard lists exactly which ones, \
+         and whether each is in place.",
+        "wl-note",
+    );
+    note.set_margin_top(18);
+    col.append(&note);
 
+    let spacer = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    spacer.set_vexpand(true);
+    col.append(&spacer);
+
+    let done = gtk4::Button::with_label("Done");
+    done.add_css_class("wl-done");
+    done.set_halign(gtk4::Align::End);
+    done.set_margin_top(24);
     let app_clone = app.clone();
-    start_btn.connect_clicked(move |_| {
+    done.connect_clicked(move |_| {
         mark_shown();
         app_clone.quit();
     });
+    col.append(&done);
 
-    // Separator line
-    let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    sep.set_margin_start(48);
-    sep.set_margin_end(48);
-    sep.set_margin_bottom(24);
+    let scroll = gtk4::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .child(&col)
+        .build();
+    let tb = adw::ToolbarView::new();
+    let hb = adw::HeaderBar::new();
+    hb.set_show_title(false);
+    tb.add_top_bar(&hb);
+    tb.set_content(Some(&scroll));
+    window.set_content(Some(&tb));
 
-    root.append(&brand_box);
-    root.append(&feat_box);
-    root.append(&sep);
-    root.append(&actions_box);
-    root.append(&start_btn);
-
-    window.set_content(Some(&root));
-
-    // Esc = dismiss (same as Get Started)
+    // Esc = dismiss (same as Done)
     let ctl = gtk4::EventControllerKey::new();
     let app2 = app.clone();
     ctl.connect_key_pressed(move |_, key, _, _| {
@@ -231,4 +172,6 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    done.grab_focus();
+    arka_shell_common::theme::preview_shot(&window);
 }
