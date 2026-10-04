@@ -5,53 +5,36 @@ use adw::prelude::*;
 
 const APP_ID: &str = "org.arka.hotkeys";
 
+/// KDE Plasma 6 default shortcuts only — ArkaOS adds none of its own yet, so
+/// this sheet must never list a key that doesn't work. (Meta = the Windows /
+/// Super key.) Change these in System Settings > Keyboard > Shortcuts.
 const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
-    ("Apps", &[
-        ("Super + Space",   "Open app launcher"),
-        ("Super + S",       "Settings"),
-        ("Super + D",       "Privacy dashboard"),
-        ("Super + W",       "WiFi networks"),
-        ("Super + U",       "System updates"),
-        ("Super + P",       "Capsule — install apps"),
-        ("Super + M",       "App permissions"),
-        ("Super + N",       "Sound & volume"),
-        ("Super + T",       "Bluetooth"),
-        ("Super + /",       "This cheat sheet"),
+    ("Find things", &[
+        ("Meta",           "Open the app launcher"),
+        ("Alt + Space",    "Search apps, files and settings (KRunner)"),
     ]),
     ("Windows", &[
-        ("Super + Enter",   "Open terminal"),
-        ("Super + B",       "Open browser"),
-        ("Super + E",       "File manager"),
-        ("Super + Shift+Q", "Close window"),
-        ("Alt + F4",        "Close window"),
-        ("Super + F",       "Fullscreen"),
-        ("Super + V",       "Toggle floating"),
+        ("Alt + Tab",      "Switch between windows"),
+        ("Meta + W",       "Overview of all windows and desktops"),
+        ("Meta + D",       "Peek at the desktop"),
+        ("Meta + Left / Right", "Snap a window to the left or right half"),
+        ("Alt + F4",       "Close the window"),
     ]),
-    ("Power", &[
-        ("Super + L",                 "Lock screen"),
-        ("Super + Space → Sleep",     "Suspend the system"),
-        ("Super + Space → Lock",      "Lock the screen"),
-        ("Super + Space → Restart",   "Reboot"),
-        ("Super + Space → Shut Down", "Power off"),
-    ]),
-    ("Media Keys", &[
-        ("Volume Up/Down",  "Raise / lower volume 5%"),
-        ("Mute",            "Toggle mute"),
-        ("Brightness Up",   "Increase screen brightness"),
-        ("Brightness Down", "Decrease screen brightness"),
+    ("Apps", &[
+        ("Ctrl + Alt + T", "Open a terminal"),
+        ("Meta + E",       "Open the file manager"),
+        ("Meta + V",       "Clipboard history"),
     ]),
     ("Screenshots", &[
-        ("Print",           "Screenshot entire screen"),
-        ("Super + Shift+S", "Screenshot selected area"),
+        ("Print",          "Screenshot tool"),
+        ("Meta + Shift + S", "Screenshot a selected area"),
     ]),
-    ("Volume", &[
-        ("F3 / Volume Up",   "Raise volume 5%"),
-        ("F2 / Volume Down", "Lower volume 5%"),
-        ("F4 / Mute",        "Toggle mute"),
+    ("Desktops", &[
+        ("Ctrl + F1 – F4", "Switch to virtual desktop 1 – 4"),
     ]),
-    ("Workspaces", &[
-        ("Super + 1–3",     "Switch workspace"),
-        ("Super+Shift+1–3", "Move window to workspace"),
+    ("Session", &[
+        ("Meta + L",       "Lock the screen"),
+        ("Ctrl + Alt + Del", "Log out, restart or shut down"),
     ]),
 ];
 
@@ -62,18 +45,19 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Keyboard Shortcuts")
-        .default_width(480)
-        .default_height(560)
-        .resizable(false)
+        .default_width(560)
+        .default_height(640)
         .build();
 
     let provider = gtk4::CssProvider::new();
-    provider.load_from_data(".kbd { font-family: monospace; font-size: 12px; color: #4fc3f7; }");
+    provider.load_from_data(".kbd { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: @text_lo; \
+        padding: 2px 8px; border: 1px solid @border_ui; border-radius: 6px; }");
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
         &provider,
@@ -81,19 +65,29 @@ fn build_ui(app: &adw::Application) {
     );
 
     let hb = adw::HeaderBar::new();
-    hb.set_title_widget(Some(&adw::WindowTitle::new("Keyboard Shortcuts", "ArkaOS")));
+    hb.set_show_title(false);
 
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-    content.set_margin_start(16);
-    content.set_margin_end(16);
-    content.set_margin_top(16);
-    content.set_margin_bottom(16);
+    content.set_margin_start(28);
+    content.set_margin_end(28);
+    content.set_margin_top(20);
+    content.set_margin_bottom(28);
+    let title = gtk4::Label::new(Some("Keyboard shortcuts"));
+    title.add_css_class("arka-title");
+    title.set_xalign(0.0);
+    let sub = gtk4::Label::new(Some("The standard KDE Plasma shortcuts. Meta is the Windows key. Change them in System Settings > Keyboard > Shortcuts."));
+    sub.add_css_class("arka-sub");
+    sub.set_xalign(0.0);
+    sub.set_wrap(true);
+    content.append(&title);
+    content.append(&sub);
 
     for (section, binds) in HOTKEYS {
         let group = adw::PreferencesGroup::new();
         group.set_title(section);
         for (key, desc) in *binds {
             let row = adw::ActionRow::new();
+            row.set_use_markup(false);
             row.set_title(desc);
             let key_lbl = gtk4::Label::new(Some(key));
             key_lbl.add_css_class("kbd");
@@ -125,4 +119,5 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
