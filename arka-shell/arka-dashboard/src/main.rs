@@ -20,8 +20,8 @@ fn main() {
 }
 
 fn build_window(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
-    arka_shell_common::theme::install_adw();
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let (tx, rx) = std::sync::mpsc::channel::<state::StateUpdate>();
     let rx = Arc::new(Mutex::new(rx));
@@ -31,7 +31,7 @@ fn build_window(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Privacy Dashboard")
-        .default_width(720)
+        .default_width(980)
         .default_height(680)
         .build();
 
@@ -46,4 +46,5 @@ fn build_window(app: &adw::Application) {
     });
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }

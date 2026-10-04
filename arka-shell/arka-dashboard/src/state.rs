@@ -33,15 +33,14 @@ impl Default for ReliabilityState {
 #[derive(Clone, Debug)]
 pub struct DashboardState {
     pub available: bool,
-    pub privacy_score: u8,
     pub dns_status: DnsStatus,
     pub mac_randomization: bool,
     pub hostname_privacy: bool,
     pub ipv6_privacy: bool,
     pub sandbox_status: SandboxStatus,
     pub browser_sandbox: BrowserSandbox,
-    pub telemetry_blocked: bool,
-    pub tracking_blocked: bool,
+    /// Unix seconds of arkad's last completed check (0 = never/unknown).
+    pub last_check: u64,
     pub reliability: ReliabilityState,
 }
 
@@ -49,15 +48,13 @@ impl Default for DashboardState {
     fn default() -> Self {
         Self {
             available: false,
-            privacy_score: 0,
             dns_status: DnsStatus::Unknown("…".into()),
             mac_randomization: false,
             hostname_privacy: false,
             ipv6_privacy: false,
             sandbox_status: SandboxStatus::Unknown("…".into()),
             browser_sandbox: BrowserSandbox::Unknown("…".into()),
-            telemetry_blocked: false,
-            tracking_blocked: false,
+            last_check: 0,
             reliability: ReliabilityState::default(),
         }
     }
@@ -67,4 +64,6 @@ impl Default for DashboardState {
 pub enum StateUpdate {
     Full(Box<DashboardState>),
     EnforceResult(Result<(), String>),
+    /// `bootc status` parsed, or why it could not be read.
+    Updates(Result<arka_update::status::UpdateStatus, String>),
 }

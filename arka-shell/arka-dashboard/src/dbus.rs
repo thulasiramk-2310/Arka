@@ -12,7 +12,7 @@ use crate::state::{DashboardState, ReliabilityState, StateUpdate};
 )]
 trait Arkad {
     #[zbus(property)]
-    fn privacy_score(&self) -> zbus::Result<u8>;
+    fn last_check(&self) -> zbus::Result<u64>;
     #[zbus(property)]
     fn dns_status(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -91,15 +91,13 @@ async fn fetch_full(
 ) -> zbus::Result<()> {
     let state = DashboardState {
         available:         true,
-        privacy_score:     proxy.privacy_score().await?,
         dns_status:        DnsStatus::from(proxy.dns_status().await?),
         mac_randomization: proxy.mac_randomization().await?,
         hostname_privacy:  proxy.hostname_privacy().await?,
         ipv6_privacy:      proxy.ipv6_privacy().await?,
         sandbox_status:    SandboxStatus::from(proxy.sandbox_status().await?),
         browser_sandbox:   BrowserSandbox::from(proxy.browser_sandbox().await?),
-        telemetry_blocked: true,
-        tracking_blocked:  true,
+        last_check:        proxy.last_check().await.unwrap_or(0),
         // Best-effort: if arka-pulse is unreachable, reliability stays the
         // default "unavailable" rather than failing the whole privacy fetch.
         reliability:       tokio::time::timeout(std::time::Duration::from_secs(1), fetch_reliability(pulse))
@@ -146,5 +144,15 @@ pub fn call_enforce_all(tx: Sender<StateUpdate>) {
             Ok::<(), zbus::Error>(())
         });
         tx.send(StateUpdate::EnforceResult(result.map_err(|e| e.to_string()))).ok();
+    });
+}
+
+/// Read the update status arka-bootc-status.service publishes (bootc status
+/// needs root). Read-only: never upgrades or rolls back — the Updates app does
+/// that, in a terminal, with the user's password.
+pub fn fetch_updates(tx: Sender<StateUpdate>) {
+    std::thread::spawn(move || {
+        let result = arka_update::status::read_published();
+        tx.send(StateUpdate::Updates(result)).ok();
     });
 }

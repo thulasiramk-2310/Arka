@@ -1,15 +1,20 @@
 use std::sync::mpsc::Sender;
 
 use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
+use arka_update::status::UpdateStatus;
 use gtk4::glib;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use adw::prelude::*;
 
-use crate::dbus::call_enforce_all;
+use crate::dbus::{call_enforce_all, fetch_updates};
 use crate::state::{DashboardState, StateUpdate};
 
 const CSS: &str = include_str!("style.css");
+
+/// arkad re-checks every 60 s; older than three rounds counts as stale, and a
+/// stale reading is never shown as green.
+const STALE_SECS: u64 = 180;
 
 // --- helpers ----------------------------------------------------------------
 
@@ -21,11 +26,6 @@ fn load_css() {
         &provider,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
-}
-
-fn score_markup(score: u8) -> String {
-    let c = if score >= 90 { "#22c55e" } else if score >= 70 { "#f59e0b" } else { "#ef4444" };
-    format!("<span foreground='{c}' font_size='xx-large' font_weight='900'>{score}</span>")
 }
 
 fn set_badge(label: &gtk4::Label, text: &str, good: bool, warn: bool) {
@@ -44,84 +44,100 @@ fn make_icon(name: &str) -> gtk4::Image {
     img
 }
 
-fn make_action_row(title: &str, subtitle: &str, icon: &str) -> (adw::ActionRow, gtk4::Label) {
-    let row = adw::ActionRow::new();
-    row.set_title(title);
-    row.set_subtitle(subtitle);
-    row.add_prefix(&make_icon(icon));
-    row.set_activatable(false);
-
-    let badge = gtk4::Label::new(Some("…"));
-    badge.set_valign(gtk4::Align::Center);
-    badge.add_css_class("badge-yellow");
-    row.add_suffix(&badge);
-
-    (row, badge)
+fn label(text: &str, class: &str) -> gtk4::Label {
+    let l = gtk4::Label::new(Some(text));
+    l.add_css_class(class);
+    l.set_xalign(0.0);
+    l.set_halign(gtk4::Align::Start);
+    l.set_wrap(true);
+    l
 }
 
-fn static_row(title: &str, subtitle: &str, icon: &str, badge_text: &str) -> adw::ActionRow {
-    let row = adw::ActionRow::new();
-    row.set_title(title);
-    row.set_subtitle(subtitle);
-    row.add_prefix(&make_icon(icon));
-    row.set_activatable(false);
-
-    let badge = gtk4::Label::new(Some(badge_text));
-    badge.set_valign(gtk4::Align::Center);
-    badge.add_css_class("badge-green");
-    row.add_suffix(&badge);
-    row
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
-struct ScoreRow {
-    bar:   gtk4::LevelBar,
-    pts:   gtk4::Label,
-    check: gtk4::Image,
+fn ago(secs: u64) -> String {
+    match secs {
+        0..=59 => format!("{secs} s ago"),
+        60..=3599 => format!("{} min ago", secs / 60),
+        _ => format!("{} h ago", secs / 3600),
+    }
 }
 
-impl ScoreRow {
-    fn new(title: &str, max: u8) -> (adw::ActionRow, Self) {
-        let row = adw::ActionRow::new();
-        row.set_title(title);
-        row.set_activatable(false);
+/// A page: serif title, subtitle, then `body`, centred and scrollable.
+fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::ScrolledWindow {
+    let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    col.set_margin_top(32);
+    col.set_margin_bottom(32);
+    col.set_margin_start(24);
+    col.set_margin_end(24);
+    col.append(&label(title, "dash-title"));
+    let s = label(sub, "dash-sub");
+    s.set_margin_top(8);
+    col.append(&s);
+    body.as_ref().set_margin_top(24);
+    col.append(body);
+    let clamp = adw::Clamp::builder().maximum_size(680).tightening_threshold(560).child(&col).build();
+    gtk4::ScrolledWindow::builder()
+        .vexpand(true)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .child(&clamp)
+        .build()
+}
 
-        let check = gtk4::Image::from_icon_name("emblem-ok-symbolic");
-        check.set_pixel_size(16);
-        check.add_css_class("score-check-pending");
-        row.add_prefix(&check);
+// --- privacy rows -----------------------------------------------------------
 
-        let bar = gtk4::LevelBar::new();
-        bar.set_min_value(0.0);
-        bar.set_max_value(max as f64);
-        bar.set_value(0.0);
-        bar.set_size_request(130, -1);
-        bar.set_valign(gtk4::Align::Center);
-        bar.add_css_class("score-bar");
-        row.add_suffix(&bar);
+#[derive(Clone, Copy, PartialEq)]
+enum Row { Checking, Configured, Attention, Unavailable, Stale }
 
-        let pts = gtk4::Label::new(Some(&format!("0/{max}")));
-        pts.set_width_chars(6);
-        pts.set_halign(gtk4::Align::End);
-        pts.add_css_class("dim-label");
-        row.add_suffix(&pts);
+/// One setting: what it does (never a promise of protection) + its status.
+struct SettingRow { dot: gtk4::Box, state: gtk4::Label, act: gtk4::Label }
 
-        (row, ScoreRow { bar, pts, check })
+impl SettingRow {
+    fn new(parent: &gtk4::Box, title: &str, does: &str) -> Self {
+        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        row.add_css_class("dash-row");
+        let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        dot.add_css_class("dot");
+        dot.set_valign(gtk4::Align::Start);
+        dot.set_margin_top(7);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+        col.set_hexpand(true);
+        col.append(&label(title, "dash-row-title"));
+        col.append(&label(does, "dash-row-sub"));
+        let act = label("", "dash-row-act");
+        act.set_visible(false);
+        col.append(&act);
+        let state = gtk4::Label::new(Some("Checking…"));
+        state.add_css_class("state");
+        state.set_valign(gtk4::Align::Start);
+        row.append(&dot);
+        row.append(&col);
+        row.append(&state);
+        parent.append(&row);
+        SettingRow { dot, state, act }
     }
 
-    fn update(&self, earned: u8, max: u8) {
-        self.bar.set_value(earned as f64);
-        self.pts.set_text(&format!("{earned}/{max}"));
-        if earned > 0 {
-            self.check.set_icon_name(Some("emblem-ok-symbolic"));
-            self.check.remove_css_class("score-check-pending");
-            self.check.remove_css_class("score-check-bad");
-            self.check.add_css_class("score-check-good");
-        } else {
-            self.check.set_icon_name(Some("dialog-warning-symbolic"));
-            self.check.remove_css_class("score-check-pending");
-            self.check.remove_css_class("score-check-good");
-            self.check.add_css_class("score-check-bad");
+    fn set(&self, st: Row) {
+        for c in ["ok", "warn"] {
+            self.dot.remove_css_class(c);
+            self.state.remove_css_class(c);
         }
+        let (text, class) = match st {
+            Row::Checking => ("Checking…", None),
+            Row::Configured => ("Configured", Some("ok")),
+            Row::Attention => ("Needs attention", Some("warn")),
+            Row::Unavailable => ("Unavailable", None),
+            Row::Stale => ("Not recently checked", None),
+        };
+        self.state.set_text(text);
+        if let Some(c) = class {
+            self.dot.add_css_class(c);
+            self.state.add_css_class(c);
+        }
+        self.act.set_visible(st == Row::Attention);
+        self.act.set_text("Try Re-apply settings below. If it stays this way, the Activity page shows what arkad saw.");
     }
 }
 
@@ -217,9 +233,9 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     // Predictions are a HEURISTIC — always framed as *possible*, never certain.
     match &r.prediction {
         Some((summary, prob)) => {
-            rows.pred.set_text(&format!("possible: {summary} (~{:.0}%)", prob * 100.0))
+            rows.pred.set_text(&format!("Estimated: possible {summary} (~{:.0}%)", prob * 100.0))
         }
-        None => rows.pred.set_text("None"),
+        None => rows.pred.set_text("None estimated"),
     }
 }
 
@@ -270,12 +286,12 @@ fn event_icon(cat: &str, ev: &str) -> &'static str {
     }
 }
 
-fn event_color(ev: &str) -> &'static str {
+fn event_class(ev: &str) -> &'static str {
     match ev {
-        "drift"     => "#f59e0b",
-        "recovered" => "#22c55e",
-        "started" | "ready" | "active" => "#3b82f6",
-        _           => "#7d7d8a",
+        "drift"     => "ev-drift",
+        "recovered" => "ev-recovered",
+        "started" | "ready" | "active" => "ev-info",
+        _           => "ev-other",
     }
 }
 
@@ -391,10 +407,7 @@ fn populate_timeline(container: &gtk4::Box) {
         let icon = gtk4::Image::from_icon_name(event_icon(&ev.cat, &ev.ev));
         icon.set_pixel_size(16);
 
-        let color = event_color(&ev.ev);
-        let css = gtk4::CssProvider::new();
-        css.load_from_data(&format!("image {{ color: {color}; }}"));
-        icon.style_context().add_provider(&css, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        icon.add_css_class(event_class(&ev.ev));
 
         row.add_prefix(&icon);
         group.add(&row);
@@ -411,354 +424,268 @@ pub fn build(
 ) -> Box<dyn Fn(StateUpdate)> {
     load_css();
 
-    // ── header card ─────────────────────────────────────────────────────────
-    let header_card = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-    header_card.set_halign(gtk4::Align::Center);
-    header_card.set_margin_top(32);
-    header_card.set_margin_bottom(8);
+    // ── Overview: what ArkaOS has set up, as last checked ────────────────────
+    let rows_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    rows_box.add_css_class("dash-rows");
+    let dns = SettingRow::new(&rows_box, "Encrypted DNS", "Requires system DNS lookups to be encrypted.");
+    let mac = SettingRow::new(&rows_box, "Private network address", "Uses a random hardware address on network connections.");
+    let host = SettingRow::new(&rows_box, "Generic device name", "Uses the generic network name \"arka\" instead of yours.");
+    let ipv6 = SettingRow::new(&rows_box, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
+    let sandbox = SettingRow::new(&rows_box, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");
 
-    let brand = gtk4::Label::new(Some("A R K A"));
-    brand.add_css_class("arka-brand");
+    let fresh = label("Checking…", "dash-note");
+    fresh.set_margin_top(14);
 
-    let score_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    score_row.set_halign(gtk4::Align::Center);
+    let reapply = gtk4::Button::with_label("Re-apply settings");
+    reapply.add_css_class("pill");
+    reapply.set_halign(gtk4::Align::Start);
+    let reapply_note = label("Asks for an administrator password.", "dash-note");
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    actions.set_margin_top(20);
+    reapply_note.set_valign(gtk4::Align::Center);
+    reapply_note.set_wrap(false);
+    actions.append(&reapply);
+    actions.append(&reapply_note);
 
-    let score_num = gtk4::Label::new(None);
-    score_num.set_use_markup(true);
-    score_num.set_markup(&score_markup(0));
+    let tech = label("", "mono");
+    tech.set_selectable(true);
+    let expander = gtk4::Expander::new(Some("Technical details"));
+    expander.set_child(Some(&tech));
+    expander.set_margin_top(24);
 
-    let score_denom = gtk4::Label::new(Some("/ 100"));
-    score_denom.add_css_class("score-denom");
-    score_denom.set_valign(gtk4::Align::End);
+    let overview_body = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    overview_body.append(&rows_box);
+    overview_body.append(&fresh);
+    overview_body.append(&actions);
+    overview_body.append(&expander);
+    let overview = page("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.", &overview_body);
 
-    score_row.append(&score_num);
-    score_row.append(&score_denom);
-
-    let tagline = gtk4::Label::new(Some("Your Computer Is Yours"));
-    tagline.add_css_class("score-tagline");
-
-    header_card.append(&brand);
-    header_card.append(&score_row);
-    header_card.append(&tagline);
-
-    // ── network section ──────────────────────────────────────────────────────
-    let net_group = adw::PreferencesGroup::new();
-    net_group.set_title("Network Privacy");
-
-    let (dns_row, dns_badge) = make_action_row(
-        "Encrypted DNS",
-        "Your provider can't read the sites you look up in your DNS traffic (DoT · Quad9)",
-        "network-server-symbolic",
-    );
-    let (mac_row, mac_badge) = make_action_row(
-        "Device can't be tracked by hardware",
-        "Your network identity changes on every connection",
-        "network-wireless-symbolic",
-    );
-    let (host_row, host_badge) = make_action_row(
-        "Harder to track locally",
-        "A random MAC address + generic hostname make you harder for nearby devices to identify",
-        "computer-symbolic",
-    );
-    let (ipv6_row, ipv6_badge) = make_action_row(
-        "Rotating IPv6 address",
-        "Your IPv6 address changes periodically to limit long-term tracking",
-        "preferences-system-network-symbolic",
-    );
-    net_group.add(&dns_row);
-    net_group.add(&mac_row);
-    net_group.add(&host_row);
-    net_group.add(&ipv6_row);
-
-    // ── browser section ──────────────────────────────────────────────────────
-    let browser_group = adw::PreferencesGroup::new();
-    browser_group.set_title("Browser");
-
-    let (bsandbox_row, bsandbox_badge) = make_action_row(
-        "Browser can't access your files",
-        "Firefox runs in an isolated container, away from your data",
-        "application-x-executable-symbolic",
-    );
-    let (bstatus_row, bstatus_badge) = make_action_row(
-        "App containment is active",
-        "The security wrapper is running and protecting you",
-        "security-medium-symbolic",
-    );
-
-    browser_group.add(&bsandbox_row);
-    browser_group.add(&bstatus_row);
-    browser_group.add(&static_row(
-        "No tracking cookies",
-        "Cookies are deleted when you close the browser",
-        "emblem-documents-symbolic",
-        "Per-Session",
-    ));
-    browser_group.add(&static_row(
-        "Blocks fingerprinting scripts",
-        "Firefox's Enhanced Tracking Protection blocks known fingerprinting scripts",
-        "emblem-system-symbolic",
-        "Blocked",
-    ));
-    browser_group.add(&static_row(
-        "WiFi passwords are protected",
-        "Your saved networks are invisible to the browser",
-        "network-wireless-signal-excellent-symbolic",
-        "Protected",
-    ));
-
-    // ── score breakdown ──────────────────────────────────────────────────────
-    let score_group = adw::PreferencesGroup::new();
-    score_group.set_title("Privacy Score Breakdown");
-    score_group.set_description(Some("100 points total across 8 privacy factors"));
-
-    let (dns_srow, dns_sr)     = ScoreRow::new("Private Searches",    25);
-    let (mac_srow, mac_sr)     = ScoreRow::new("Hidden Device ID",     20);
-    let (host_srow, host_sr)   = ScoreRow::new("Network Anonymity",    10);
-    let (ipv6_srow, ipv6_sr)   = ScoreRow::new("Rotating IP Address",  10);
-    let (brow_srow, brow_sr)   = ScoreRow::new("Browser Isolation",    10);
-    let (sand_srow, sand_sr)   = ScoreRow::new("App Containment",      15);
-    let (tele_srow, tele_sr)   = ScoreRow::new("No Telemetry",          5);
-    let (track_srow, track_sr) = ScoreRow::new("No Tracking",           5);
-
-    score_group.add(&dns_srow);
-    score_group.add(&mac_srow);
-    score_group.add(&host_srow);
-    score_group.add(&ipv6_srow);
-    score_group.add(&brow_srow);
-    score_group.add(&sand_srow);
-    score_group.add(&tele_srow);
-    score_group.add(&track_srow);
-
-    // ── quick actions ────────────────────────────────────────────────────────
-    let actions_group = adw::PreferencesGroup::new();
-    actions_group.set_title("Quick Actions");
-
-    let actions_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    actions_box.set_margin_top(8);
-    actions_box.set_margin_bottom(8);
-    actions_box.set_halign(gtk4::Align::Center);
-
-    let fix_btn = gtk4::Button::with_label("Fix All");
-    fix_btn.add_css_class("suggested-action");
-    fix_btn.add_css_class("pill");
-
-    let harden_btn = gtk4::Button::with_label("Harden Browser");
-    harden_btn.add_css_class("pill");
-    harden_btn.set_sensitive(false);
-
-    let logs_btn = gtk4::Button::with_label("View Logs");
-    logs_btn.add_css_class("pill");
-    logs_btn.set_sensitive(false);
-
-    actions_box.append(&fix_btn);
-    actions_box.append(&harden_btn);
-    actions_box.append(&logs_btn);
-    actions_group.add(&actions_box);
-
-    // ── status page ──────────────────────────────────────────────────────────
-    let status_content = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
-    status_content.set_margin_start(16);
-    status_content.set_margin_end(16);
-    status_content.set_margin_bottom(32);
-    let (health_group, health_rows) = build_health_group();
-    status_content.append(&header_card);
-    status_content.append(&health_group);
-    status_content.append(&net_group);
-    status_content.append(&browser_group);
-    status_content.append(&score_group);
-    status_content.append(&actions_group);
-
-    let status_clamp = adw::Clamp::builder()
-        .maximum_size(720)
-        .tightening_threshold(640)
-        .build();
-    status_clamp.set_child(Some(&status_content));
-
-    let status_scroll = gtk4::ScrolledWindow::builder()
-        .vexpand(true)
-        .hscrollbar_policy(gtk4::PolicyType::Never)
-        .build();
-    status_scroll.set_child(Some(&status_clamp));
-
-    // ── timeline page ────────────────────────────────────────────────────────
+    // ── Activity ─────────────────────────────────────────────────────────────
     let timeline_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    timeline_content.set_margin_start(16);
-    timeline_content.set_margin_end(16);
-    timeline_content.set_margin_top(16);
-    timeline_content.set_margin_bottom(16);
     populate_timeline(&timeline_content);
+    let activity = page("Activity", "What arkad recorded on this computer. Nothing here leaves it.", &timeline_content);
 
-    let timeline_clamp = adw::Clamp::builder()
-        .maximum_size(720)
-        .tightening_threshold(640)
-        .build();
-    timeline_clamp.set_child(Some(&timeline_content));
+    // ── Health (arka-pulse: read-only, estimates labelled as such) ───────────
+    let (health_group, health_rows) = build_health_group();
+    let health = page("Health", "Watched locally by arka-pulse. Predictions are estimates, never certainties.", &health_group);
 
-    let timeline_scroll = gtk4::ScrolledWindow::builder()
-        .vexpand(true)
-        .hscrollbar_policy(gtk4::PolicyType::Never)
-        .build();
-    timeline_scroll.set_child(Some(&timeline_clamp));
+    // ── Updates & recovery ───────────────────────────────────────────────────
+    let upd_rows = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    upd_rows.add_css_class("dash-rows");
+    let mut upd_vals = Vec::new();
+    for t in ["Installed version", "Downloaded update", "Restart needed", "Previous version"] {
+        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        row.add_css_class("dash-row");
+        let k = label(t, "dash-row-title");
+        k.set_hexpand(true);
+        let v = gtk4::Label::new(Some("Checking…"));
+        v.add_css_class("state");
+        v.set_wrap(true);
+        v.set_xalign(1.0);
+        row.append(&k);
+        row.append(&v);
+        upd_rows.append(&row);
+        upd_vals.push(v);
+    }
+    let upd_note = label(
+        "Switching back to the previous version changes the system only. Files and settings \
+         in your home folder stay as they are now; older copies of personal files are not restored.",
+        "dash-note",
+    );
+    upd_note.set_margin_top(16);
+    let upd_err = label("", "dash-note");
+    upd_err.set_visible(false);
+    upd_err.set_margin_top(8);
+    let open_updates = gtk4::Button::with_label("Open Updates");
+    open_updates.add_css_class("pill");
+    open_updates.set_halign(gtk4::Align::Start);
+    open_updates.set_margin_top(20);
+    open_updates.connect_clicked(|_| { let _ = std::process::Command::new("arka-update").spawn(); });
+    let upd_body = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    upd_body.append(&upd_rows);
+    upd_body.append(&upd_note);
+    upd_body.append(&upd_err);
+    upd_body.append(&open_updates);
+    let updates = page("Updates & recovery", "Which version of ArkaOS is running, and what you can go back to.", &upd_body);
 
-    // ── view stack ───────────────────────────────────────────────────────────
-    let stack = adw::ViewStack::new();
-    let status_page = stack.add_titled(&status_scroll, Some("status"), "Status");
-    status_page.set_icon_name(Some("security-high-symbolic"));
-    let timeline_page = stack.add_titled(&timeline_scroll, Some("timeline"), "Timeline");
-    timeline_page.set_icon_name(Some("document-open-recent-symbolic"));
-
-    // Refresh timeline on tab switch
-    let tc_ref = timeline_content.clone();
-    stack.connect_visible_child_notify(move |s| {
-        if s.visible_child_name().as_deref() == Some("timeline") {
-            populate_timeline(&tc_ref);
-        }
-    });
-
-    // ── switcher bar ─────────────────────────────────────────────────────────
-    let switcher_bar = adw::ViewSwitcherBar::new();
-    switcher_bar.set_stack(Some(&stack));
-    switcher_bar.set_reveal(true);
-
-    // Keyboard access: the switcher bar isn't in the focus chain, so give the
-    // tabs shortcuts (Ctrl+1 Status, Ctrl+2 Timeline).
-    let keys = gtk4::EventControllerKey::new();
-    let stack_keys = stack.clone();
-    keys.connect_key_pressed(move |_, key, _, modifier| {
-        if modifier.contains(gtk4::gdk::ModifierType::CONTROL_MASK) {
-            match key {
-                gtk4::gdk::Key::_1 => {
-                    stack_keys.set_visible_child_name("status");
-                    return glib::Propagation::Stop;
-                }
-                gtk4::gdk::Key::_2 => {
-                    stack_keys.set_visible_child_name("timeline");
-                    return glib::Propagation::Stop;
-                }
+    // ── navigation: sidebar + content, with Plasma's real window controls ───
+    let stack = gtk4::Stack::new();
+    stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+    let pages: [(&str, &str, &str, &gtk4::ScrolledWindow); 4] = [
+        ("overview", "Overview", "security-high-symbolic", &overview),
+        ("activity", "Activity", "document-open-recent-symbolic", &activity),
+        ("health", "Health", "computer-symbolic", &health),
+        ("updates", "Updates & recovery", "system-software-update-symbolic", &updates),
+    ];
+    let list = gtk4::ListBox::new();
+    list.add_css_class("navigation-sidebar");
+    for (id, title, icon, w) in pages {
+        stack.add_named(w, Some(id));
+        let r = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        r.set_margin_top(6);
+        r.set_margin_bottom(6);
+        r.append(&make_icon(icon));
+        r.append(&gtk4::Label::new(Some(title)));
+        let row = gtk4::ListBoxRow::new();
+        row.set_child(Some(&r));
+        row.set_widget_name(id);
+        list.append(&row);
+    }
+    {
+        let (stack, tc, tx) = (stack.clone(), timeline_content.clone(), tx.clone());
+        list.connect_row_selected(move |_, row| {
+            let Some(row) = row else { return };
+            let id = row.widget_name();
+            stack.set_visible_child_name(&id);
+            match id.as_str() {
+                "activity" => populate_timeline(&tc),
+                "updates" => fetch_updates(tx.clone()),
                 _ => {}
             }
-        }
-        glib::Propagation::Proceed
-    });
-    window.add_controller(keys);
+        });
+    }
+    list.select_row(list.row_at_index(0).as_ref());
 
-    // ── assemble ─────────────────────────────────────────────────────────────
-    let toolbar = adw::ToolbarView::new();
-    let headerbar = adw::HeaderBar::new();
+    let side_tb = adw::ToolbarView::new();
+    let side_hb = adw::HeaderBar::new();
+    side_hb.set_show_end_title_buttons(false);
+    side_hb.set_title_widget(Some(&adw::WindowTitle::new("ArkaOS", "")));
+    side_tb.add_top_bar(&side_hb);
+    side_tb.set_content(Some(&list));
+    let side_page = adw::NavigationPage::new(&side_tb, "ArkaOS");
 
-    // Refresh button (visible when on Timeline)
-    let refresh_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
-    refresh_btn.set_tooltip_text(Some("Refresh timeline"));
-    let tc_ref2 = timeline_content.clone();
-    refresh_btn.connect_clicked(move |_| {
-        populate_timeline(&tc_ref2);
-    });
-    headerbar.pack_start(&refresh_btn);
+    let content_tb = adw::ToolbarView::new();
+    let content_hb = adw::HeaderBar::new();
+    content_hb.set_title_widget(Some(&adw::WindowTitle::new("Privacy Dashboard", "")));
+    content_tb.add_top_bar(&content_hb);
+    content_tb.set_content(Some(&stack));
+    let content_page = adw::NavigationPage::new(&content_tb, "Privacy Dashboard");
 
-    headerbar.set_title_widget(Some(
-        &adw::WindowTitle::new("Privacy Dashboard", "ArkaOS"),
-    ));
-    toolbar.add_top_bar(&headerbar);
-    toolbar.set_content(Some(&stack));
-    toolbar.add_bottom_bar(&switcher_bar);
+    let split = adw::NavigationSplitView::new();
+    split.set_sidebar(Some(&side_page));
+    split.set_content(Some(&content_page));
+    split.set_min_sidebar_width(200.0);
+    split.set_max_sidebar_width(240.0);
+    {
+        let bp = adw::Breakpoint::new(adw::BreakpointCondition::parse("max-width: 600sp").expect("breakpoint"));
+        bp.add_setter(&split, "collapsed", Some(&true.to_value()));
+        window.add_breakpoint(bp);
+    }
 
     let toast_overlay = adw::ToastOverlay::new();
-    toast_overlay.set_child(Some(&toolbar));
+    toast_overlay.set_child(Some(&split));
     window.set_content(Some(&toast_overlay));
 
-    // Fix All button
-    let tx_fix = tx;
-    fix_btn.connect_clicked(move |_| {
-        call_enforce_all(tx_fix.clone());
-    });
+    // Keyboard: Ctrl+1..4 switch pages.
+    {
+        let keys = gtk4::EventControllerKey::new();
+        let list = list.clone();
+        keys.connect_key_pressed(move |_, key, _, m| {
+            use gtk4::gdk::Key;
+            if m.contains(gtk4::gdk::ModifierType::CONTROL_MASK) {
+                let i = match key { Key::_1 => 0, Key::_2 => 1, Key::_3 => 2, Key::_4 => 3, _ => return glib::Propagation::Proceed };
+                list.select_row(list.row_at_index(i).as_ref());
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        window.add_controller(keys);
+    }
 
-    // ── updater closure ───────────────────────────────────────────────────────
+    {
+        let (tx, reapply2) = (tx.clone(), reapply.clone());
+        reapply.connect_clicked(move |_| {
+            reapply2.set_sensitive(false);
+            call_enforce_all(tx.clone());
+        });
+    }
+
+    // ── updater ──────────────────────────────────────────────────────────────
     Box::new(move |update: StateUpdate| match update {
         StateUpdate::Full(s) => {
-            apply_state(
-                &s,
-                &score_num,
-                &dns_badge, &mac_badge, &host_badge, &ipv6_badge,
-                &bsandbox_badge, &bstatus_badge,
-                &dns_sr, &mac_sr, &host_sr, &ipv6_sr,
-                &brow_sr, &sand_sr, &tele_sr, &track_sr,
-            );
+            apply_privacy(&s, [&dns, &mac, &host, &ipv6, &sandbox], &fresh, &tech);
             apply_health(&s.reliability, &health_rows);
         }
         StateUpdate::EnforceResult(r) => {
-            let msg = if r.is_ok() {
-                "All privacy controls enforced"
-            } else {
-                "Enforcement failed — check arkad logs"
+            reapply.set_sensitive(true);
+            let msg = match r {
+                Ok(()) => "Settings re-applied. Statuses update after the next check.".to_string(),
+                Err(e) => format!("Couldn't re-apply settings: {e}"),
             };
-            toast_overlay.add_toast(adw::Toast::new(msg));
+            toast_overlay.add_toast(adw::Toast::new(&msg));
         }
+        StateUpdate::Updates(r) => apply_updates(r, &upd_vals, &upd_err),
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn apply_state(
-    s: &DashboardState,
-    score_num: &gtk4::Label,
-    dns_badge: &gtk4::Label,
-    mac_badge: &gtk4::Label,
-    host_badge: &gtk4::Label,
-    ipv6_badge: &gtk4::Label,
-    bsandbox_badge: &gtk4::Label,
-    bstatus_badge: &gtk4::Label,
-    dns_sr:   &ScoreRow,
-    mac_sr:   &ScoreRow,
-    host_sr:  &ScoreRow,
-    ipv6_sr:  &ScoreRow,
-    brow_sr:  &ScoreRow,
-    sand_sr:  &ScoreRow,
-    tele_sr:  &ScoreRow,
-    track_sr: &ScoreRow,
-) {
+fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 5], fresh: &gtk4::Label, tech: &gtk4::Label) {
     if !s.available {
-        score_num.set_text("—");
-        for badge in [dns_badge, mac_badge, host_badge, ipv6_badge, bsandbox_badge, bstatus_badge] {
-            set_badge(badge, "Unavailable", false, true);
-        }
-        for (row, total) in [(dns_sr, 25), (mac_sr, 20), (host_sr, 10), (ipv6_sr, 10), (brow_sr, 10), (sand_sr, 15), (tele_sr, 5), (track_sr, 5)] {
-            row.update(0, total);
-        }
+        for r in rows { r.set(Row::Unavailable); }
+        fresh.set_text("The ArkaOS privacy service isn't answering. Statuses can't be shown until it does.");
+        tech.set_text("Service: org.arka.arkad on the system D-Bus — not reachable");
         return;
     }
-    score_num.set_markup(&score_markup(s.privacy_score));
+    let age = now_secs().saturating_sub(s.last_check);
+    let stale = s.last_check == 0 || age > STALE_SECS;
+    let b = |v: bool| if v { Row::Configured } else { Row::Attention };
+    let dns = match &s.dns_status {
+        DnsStatus::Unknown(_) => Row::Checking,
+        d => b(d.is_encrypted()),
+    };
+    let sandbox = match (&s.sandbox_status, &s.browser_sandbox) {
+        (SandboxStatus::Unknown(_), _) | (_, BrowserSandbox::Unknown(_)) => Row::Checking,
+        (st, br) => b(st.is_active() && br.is_isolated()),
+    };
+    let states = [dns, b(s.mac_randomization), b(s.hostname_privacy), b(s.ipv6_privacy), sandbox];
+    for (r, st) in rows.into_iter().zip(states) {
+        r.set(if stale && st != Row::Checking { Row::Stale } else { st });
+    }
+    fresh.set_text(&if s.last_check == 0 {
+        "Waiting for the privacy service's first check…".to_string()
+    } else if stale {
+        format!("Last checked {}. These may be out of date.", ago(age))
+    } else {
+        format!("Checked {}.", ago(age))
+    });
+    tech.set_text(&format!(
+        "Service    org.arka.arkad (system D-Bus, read-only properties)\n\
+         arkad::dns       DnsStatus = {}\n\
+         arkad::mac       MacRandomization = {}\n\
+         arkad::hostname  HostnamePrivacy = {}\n\
+         arkad::ipv6      Ipv6Privacy = {}\n\
+         arkad::sandbox   SandboxStatus = {}, BrowserSandbox = {}\n\
+         LastCheck  {}",
+        s.dns_status.as_str(), s.mac_randomization, s.hostname_privacy, s.ipv6_privacy,
+        s.sandbox_status.as_str(), s.browser_sandbox.as_str(), s.last_check,
+    ));
+}
 
-    let dns_good = s.dns_status == DnsStatus::Encrypted;
-    let dns_warn = matches!(s.dns_status, DnsStatus::Degraded);
-    set_badge(dns_badge, s.dns_status.as_str(), dns_good, dns_warn);
-
-    set_badge(mac_badge,
-        if s.mac_randomization { "Enabled" } else { "Disabled" },
-        s.mac_randomization, false);
-
-    set_badge(host_badge,
-        if s.hostname_privacy { "Locked" } else { "Exposed" },
-        s.hostname_privacy, false);
-
-    set_badge(ipv6_badge,
-        if s.ipv6_privacy { "Enabled" } else { "Disabled" },
-        s.ipv6_privacy, false);
-
-    let bsandbox_good = s.sandbox_status.is_active() && matches!(
-        s.browser_sandbox,
-        BrowserSandbox::Persistent | BrowserSandbox::Ephemeral | BrowserSandbox::PrivateWorkspace
-    );
-    set_badge(bsandbox_badge, s.browser_sandbox.as_str(), bsandbox_good, false);
-
-    let bstatus_good = s.sandbox_status == SandboxStatus::Active;
-    let bstatus_warn = s.sandbox_status == SandboxStatus::Partial;
-    set_badge(bstatus_badge, s.sandbox_status.as_str(), bstatus_good, bstatus_warn);
-
-    dns_sr.update(  if dns_good { 25 } else { 0 }, 25);
-    mac_sr.update(  if s.mac_randomization { 20 } else { 0 }, 20);
-    host_sr.update( if s.hostname_privacy { 10 } else { 0 }, 10);
-    ipv6_sr.update( if s.ipv6_privacy { 10 } else { 0 }, 10);
-    brow_sr.update( if bsandbox_good { 10 } else { 0 }, 10);
-    sand_sr.update( if bstatus_good { 15 } else { 0 }, 15);
-    tele_sr.update( if s.telemetry_blocked { 5 } else { 0 }, 5);
-    track_sr.update(if s.tracking_blocked  { 5 } else { 0 }, 5);
+fn apply_updates(r: Result<UpdateStatus, String>, vals: &[gtk4::Label], err: &gtk4::Label) {
+    match r {
+        Ok(u) => {
+            err.set_visible(false);
+            let ver = |d: &arka_update::status::Deployment| {
+                d.version.clone().or_else(|| d.image.clone()).unwrap_or_else(|| "Unknown".into())
+            };
+            vals[0].set_text(&ver(&u.installed));
+            vals[1].set_text(&match &u.staged {
+                Some(d) if d.download_only => format!("{} (downloaded, not yet applied)", ver(d)),
+                Some(d) => ver(d),
+                None => "None".into(),
+            });
+            vals[2].set_text(if u.restart_needed { "Yes" } else { "No" });
+            vals[3].set_text(if u.rollback_queued {
+                "Selected for the next restart"
+            } else if u.rollback_available {
+                "Available"
+            } else {
+                "None on this computer"
+            });
+        }
+        Err(e) => {
+            for v in vals { v.set_text("—"); }
+            err.set_text(&format!("Couldn't read the update status ({e}). Open Updates to check."));
+            err.set_visible(true);
+        }
+    }
 }
