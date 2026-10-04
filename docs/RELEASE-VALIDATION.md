@@ -132,3 +132,33 @@ build, install or recovery commands. No host bootloader operation is required.
 Signing, Secure Boot, disk encryption and end-to-end image verification require
 separate design and recovery tests. Read-only system files alone do not prove
 those properties or prevent persistence in writable user/configuration data.
+
+## Nokia regressions required on the Fedora 44 candidate
+
+The [saved Nokia journals](NOKIA-USB-DIAGNOSIS.md) prove repeated serial-getty
+crashes in a Fedora 42 image. A working splash or active graphical target is
+insufficient. In the disposable ArkaOS guest, capture these read-only checks:
+
+```sh
+rpm -q util-linux-core systemd kernel-core
+cat /proc/cmdline
+systemctl --failed --no-pager
+journalctl -b -u serial-getty@ttyS0.service --no-pager
+journalctl -b -t systemd-coredump --no-pager
+```
+
+Record package versions, image digest and boot ID. Require no new getty cores,
+terminal-name failures or restart-limit failures. Repeat with serial hardware
+available in QEMU and on the Nokia without a usable ttyS0. Retain serial access
+for VM diagnostics; do not globally mask login services to hide errors.
+Protected boot configuration remains under its existing owner until integration.
+
+For fresh disposable USB media, verify the flashed GPT before booting. A primary
+CRC failure with a valid backup is distinct from simple backup-header relocation.
+Actual data-preserving repair of an existing stick is a separate operation.
+
+Check Firefox audible playback and Capsule install/retry on the image; neither
+is established by the old Nokia journals. Review ABRT/DrKonqi consent settings
+and observe outbound reporting in the isolated guest before making telemetry
+claims. Evaluate residual CPU-mitigation warnings per hardware target rather
+than silently changing host firmware or disabling SMT on every machine.

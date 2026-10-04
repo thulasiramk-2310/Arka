@@ -92,9 +92,9 @@ person living in it, or the assistant during a review).
 ## 2026-09-13 — FIRST BARE-METAL BOOT (Ram + assistant, real hardware)
 
 **2026-10-05 review:** this entry records historical observations, not current
-release validation. The original Nokia crash logs/photos were not located in
-the repository or the available build scratchpad. No kernel-crash diagnosis is
-established from these notes alone. The reported audio/remote causes and GPT
+release validation. The later [USB journal extraction](NOKIA-USB-DIAGNOSIS.md)
+records serial-getty crashes in the old Fedora 42 image and primary GPT checksum
+damage; photos remain unavailable. No kernel panic is recorded in that export. The reported audio/remote causes and GPT
 workaround below remain useful evidence; current fixes still need hardware tests.
 A displayed 100/100 score was a configuration aggregate, not a protection proof.
 

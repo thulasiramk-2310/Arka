@@ -202,3 +202,12 @@ Upstream references: [bootc status schema](https://github.com/bootc-dev/bootc/bl
 [bootc rollback behavior](https://bootc.dev/bootc/man/bootc-rollback.8.html),
 [PulseAudio client server selection](https://wiki.freedesktop.org/www/Software/PulseAudio/FAQ/),
 [sgdisk options](https://www.rodsbooks.com/gdisk/sgdisk.html).
+
+### Nokia evidence obtained later on 2026-10-05
+
+The missing-journal limitation above is now resolved by a read-only USB export;
+photos remain unavailable. [The diagnosis](NOKIA-USB-DIAGNOSIS.md) identifies ten
+agetty serial-login crashes across two old Fedora 42 boots and a separate primary
+GPT checksum failure. These findings do not validate the current Fedora 44 image.
+The boot configuration ownership restriction and read-only USB scope remain in
+force; neither the stick nor protected boot files were changed.

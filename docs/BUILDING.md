@@ -123,3 +123,12 @@ entry missing until this relocation was performed; this is separate from a
 kernel or desktop crash. See the [sgdisk manual](https://www.rodsbooks.com/gdisk/sgdisk.html).
 Do not run automatic GPT repair on first boot: that could target an internal
 Linux or Windows drive.
+
+### Existing sticks with damaged GPT metadata
+
+The Nokia extraction on 2026-10-05 found a **primary partition-table CRC
+failure with a valid backup**, not just a backup header at an old image boundary.
+See [the diagnosis](NOKIA-USB-DIAGNOSIS.md). Do not treat `sgdisk -e` as a generic
+repair command for such a stick or reflash over evidence you still need.
+Verification output must be reviewed for reported problems; a command finishing
+is not proof of an intact table. Preserve needed files before planning recovery.
