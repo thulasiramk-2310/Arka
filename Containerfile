@@ -150,12 +150,15 @@ RUN chmod 755 /usr/libexec/arkaos-oobe-apply && \
     touch /home/arkasetup/.hushlogin && \
     chown arkasetup:arkasetup /home/arkasetup/.bash_profile /home/arkasetup/.hushlogin
 
-# ArkaOS default wallpaper: aurora light + the boot splash's glowing triangles,
-# no text, rendered at 4K so HiDPI panels stay sharp. Users can change it.
+# ArkaOS default wallpapers, one per look: the Arka triangle as hairlines on a
+# quiet field, no text, rendered at 4K so HiDPI panels stay sharp. default.png
+# (the dark one) backs the login and lock screens. Users can change them.
 COPY wallpapers/make-default.sh /tmp/make-default.sh
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
-    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default.png 3840 2160 && \
+    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-light.png 3840 2160 light && \
+    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-dark.png 3840 2160 dark && \
+    cp /usr/share/arka/wallpapers/default-dark.png /usr/share/arka/wallpapers/default.png && \
     rm /tmp/make-default.sh && \
     dnf remove -y -q ImageMagick
 
@@ -166,6 +169,7 @@ COPY desktop-files/ /usr/share/applications/
 # Inter typeface (ArkaOS design system) + the ArkaOS Plasma color scheme.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y rsms-inter-fonts
 COPY ArkaOS.colors /usr/share/color-schemes/ArkaOS.colors
+COPY ArkaOSLight.colors /usr/share/color-schemes/ArkaOSLight.colors
 
 # Design-system defaults for every new user (read from /etc/skel on account
 # creation): ArkaOS color scheme, green #16C784 accent, Inter font — applied

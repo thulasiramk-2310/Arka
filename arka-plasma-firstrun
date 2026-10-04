@@ -21,11 +21,21 @@ if [ -n "$VOUT" ]; then
     done
 fi
 
-WALL=/usr/share/arka/wallpapers/default.png
-
-# Apply the ArkaOS color scheme + green #16C784 accent (harmless if already
-# set from skel), then the wallpaper.
-plasma-apply-colorscheme ArkaOS 2>/dev/null || true
+# Apply the look chosen in setup (written by arkaos-oobe-apply; dark when
+# absent): the matching ArkaOS colour scheme, Plasma style and wallpaper, with
+# the green #16C784 accent. Colours and style only, not a whole global theme,
+# so Arka icons/cursor/sounds stay. All of it stays changeable in Settings.
+LOOK=$(cat "$HOME/.config/arka-look" 2>/dev/null)
+[ "$LOOK" = light ] || LOOK=dark
+WALL=/usr/share/arka/wallpapers/default-$LOOK.png
+if [ "$LOOK" = light ]; then
+    plasma-apply-colorscheme ArkaOSLight 2>/dev/null || true
+    plasma-apply-desktoptheme breeze-light 2>/dev/null || true
+    command -v kwriteconfig6 >/dev/null &&
+        kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
+else
+    plasma-apply-colorscheme ArkaOS 2>/dev/null || true
+fi
 [ -x "$(command -v kwriteconfig6)" ] && {
     kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
     kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
