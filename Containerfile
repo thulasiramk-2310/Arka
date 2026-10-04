@@ -41,10 +41,6 @@ RUN printf 'layout=uki\nuki_generator=ukify\n' > /etc/kernel/install.conf
 
 # Phase 4: bubblewrap-sandboxed Firefox
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y firefox bubblewrap
-COPY arkaos-firefox /usr/bin/firefox-sandbox
-RUN chmod 755 /usr/bin/firefox-sandbox && \
-    mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
-    ln -sf firefox-sandbox /usr/bin/firefox
 
 # Graphical session: full KDE Plasma spin + SDDM login manager.
 # Plasma provides the panel, launcher, settings, file manager, window
@@ -72,29 +68,15 @@ RUN systemctl enable --force sddm.service && \
       > /etc/sddm.conf.d/10-wayland.conf
 
 
-# Install arkad
-COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
-COPY arkad/arkad.toml /etc/arkad/arkad.toml
-COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
-COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
-RUN mkdir -p /etc/arkad && \
-    systemctl enable arkad.service
 
-# Install arka-pulsed (reliability daemon; read-only org.arka.pulse, mirrors arkad)
-COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
-COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
-COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
-COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
-RUN systemctl enable arka-pulsed.service
 
 
 # Firefox managed privacy policy: Enhanced Tracking Protection (strict) with
 # cryptomining + fingerprinting blocking. Placed in Firefox's app-dir under /usr
 # (which the bwrap sandbox binds read-only) — NOT /etc/firefox, which the sandbox
 # deliberately does not expose. Backs the dashboard's "Blocks fingerprinting
-# scripts" claim; verify at runtime via about:policies. Below the KDE layer so
-# editing it doesn't bust the KDE cache.
-COPY firefox-policies.json /usr/lib64/firefox/distribution/policies.json
+# scripts" claim; verify at runtime via about:policies. Copied in the late
+# block below so editing it doesn't bust the KDE cache.
 
 # mako notification config + skel/Pictures for screenshots
 RUN mkdir -p /etc/skel/.config/mako /etc/skel/Pictures && \
@@ -357,6 +339,34 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 # arkad's polkit action (admin auth for EnforceAll). Placed late: a new file
 # early in this stage would invalidate the cached package layers below it.
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
+
+# Small, often-edited files live here, AFTER every package install: changing
+# one of them must only rerun these cheap steps, never the 1500-package KDE
+# install (moving them here cost one full rebuild; keeping them early cost one
+# per edit).
+# bubblewrap-sandboxed Firefox wrapper (firefox itself is installed above)
+COPY arkaos-firefox /usr/bin/firefox-sandbox
+RUN chmod 755 /usr/bin/firefox-sandbox && \
+    mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
+    ln -sf firefox-sandbox /usr/bin/firefox
+
+# Install arkad
+COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
+COPY arkad/arkad.toml /etc/arkad/arkad.toml
+COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
+COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
+RUN mkdir -p /etc/arkad && \
+    systemctl enable arkad.service
+
+# Install arka-pulsed (reliability daemon; read-only org.arka.pulse, mirrors arkad)
+COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
+COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
+COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
+COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
+RUN systemctl enable arka-pulsed.service
+
+# Firefox managed privacy policy (see the comment near the KDE install).
+COPY firefox-policies.json /usr/lib64/firefox/distribution/policies.json
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Copied here, a code change only reruns this block
