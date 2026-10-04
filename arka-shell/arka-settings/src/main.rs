@@ -13,14 +13,14 @@ fn main() {
 }
 
 fn build_ui(app: &adw::Application) {
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
-    arka_shell_common::theme::install_adw();
+    // Follow the desktop look (Light/Dark) instead of forcing dark.
+    arka_shell_common::theme::follow_look();
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Settings")
-        .default_width(720)
-        .default_height(560)
+        .default_width(860)
+        .default_height(620)
         .build();
 
     let provider = gtk4::CssProvider::new();
@@ -37,7 +37,7 @@ fn build_ui(app: &adw::Application) {
     );
 
     let hb = adw::HeaderBar::new();
-    hb.set_title_widget(Some(&adw::WindowTitle::new("Settings", "ArkaOS")));
+    hb.set_show_title(false);
 
     // Sidebar navigation
     let nav = adw::NavigationSplitView::new();
@@ -130,24 +130,25 @@ fn build_ui(app: &adw::Application) {
     window.add_controller(ctl);
 
     window.present();
+    arka_shell_common::theme::preview_shot(&window);
 }
 
 // ── Pages ───────────────────────────────────────────────────────────────────
 
 fn page_general() -> gtk4::Widget {
-    let b = page_box();
+    let b = page_box("General", "Signing in, locking the screen, and this computer.");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("Login");
 
     let al_row = adw::ActionRow::new();
-    al_row.set_title("Login Screen and Automatic Login");
-    al_row.set_subtitle("Configure SDDM in Plasma settings; administrator authentication may be required");
+    al_row.set_title("Login screen and automatic sign-in");
+    al_row.set_subtitle("Opens Plasma's login screen settings. Changing them asks for an administrator password.");
     al_row.set_activatable(true);
     al_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_sddm").spawn(); });
     group.add(&al_row);
     let lock_row = adw::ActionRow::new();
-    lock_row.set_title("Screen Locking");
+    lock_row.set_title("Screen locking");
     lock_row.set_activatable(true);
     lock_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_screenlocker").spawn(); });
     group.add(&lock_row);
@@ -158,12 +159,12 @@ fn page_general() -> gtk4::Widget {
     let ver = std::fs::read_to_string("/usr/lib/arkaos-release")
         .unwrap_or_else(|_| "0.1".into());
     let ver_row = adw::ActionRow::new();
-    ver_row.set_title("ArkaOS Version");
+    ver_row.set_title("ArkaOS version");
     ver_row.set_subtitle(ver.trim());
     about_group.add(&ver_row);
 
     let host_row = adw::ActionRow::new();
-    host_row.set_title("Hostname");
+    host_row.set_title("Network name");
     let hostname = Command::new("hostname").output()
         .ok().and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_else(|| "arka".into());
@@ -175,8 +176,13 @@ fn page_general() -> gtk4::Widget {
     b.upcast()
 }
 
+fn current_look() -> &'static str {
+    let p = gtk4::glib::user_config_dir().join("arka-look");
+    if std::fs::read_to_string(p).map(|s| s.trim() == "light").unwrap_or(false) { "light" } else { "dark" }
+}
+
 fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
-    let b = page_box();
+    let b = page_box("Appearance", "Light or dark, and your wallpaper. Everything here stays yours to change.");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("Wallpaper");
@@ -186,18 +192,18 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
         .join("arkaos").join("wallpaper");
     let current_path = std::fs::read_to_string(&saved_wp)
         .ok()
-        .unwrap_or_else(|| "/usr/share/arka/wallpapers/default.png".into());
+        .unwrap_or_else(|| format!("/usr/share/arka/wallpapers/default-{}.png", current_look()));
 
     let wp_row = adw::ActionRow::new();
-    wp_row.set_title("Current Wallpaper");
+    wp_row.set_title("Current wallpaper");
     wp_row.set_subtitle(&current_path);
     let wp_img = gtk4::Image::from_icon_name("image-x-generic-symbolic");
     wp_row.add_prefix(&wp_img);
     group.add(&wp_row);
 
     let custom_row = adw::ActionRow::new();
-    custom_row.set_title("Choose Wallpaper");
-    custom_row.set_subtitle("Pick any image from your files");
+    custom_row.set_title("Choose a wallpaper");
+    custom_row.set_subtitle("Pick any image from your files.");
     let choose_btn = gtk4::Button::with_label("Browse…");
     choose_btn.add_css_class("suggested-action");
     choose_btn.add_css_class("pill");
@@ -206,8 +212,8 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     group.add(&custom_row);
 
     let reset_row = adw::ActionRow::new();
-    reset_row.set_title("Reset to Default");
-    reset_row.set_subtitle("Restore the ArkaOS branded wallpaper");
+    reset_row.set_title("Use the ArkaOS wallpaper");
+    reset_row.set_subtitle("The one that matches your look.");
     let reset_btn = gtk4::Button::with_label("Reset");
     reset_btn.add_css_class("pill");
     reset_btn.set_valign(gtk4::Align::Center);
@@ -215,14 +221,37 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     group.add(&reset_row);
 
     let theme_group = adw::PreferencesGroup::new();
-    theme_group.set_title("Theme");
-
-    let dark_row = adw::SwitchRow::new();
-    dark_row.set_title("Dark Mode");
-    dark_row.set_subtitle("ArkaOS is always dark — privacy is the aesthetic");
-    dark_row.set_active(true);
-    dark_row.set_sensitive(false);
-    theme_group.add(&dark_row);
+    theme_group.set_title("Look");
+    theme_group.set_description(Some(
+        "Applies to the desktop and ArkaOS apps. The login screen is shared by everyone on this \
+         computer and keeps its look until an administrator changes it.",
+    ));
+    let look_row = adw::ActionRow::new();
+    look_row.set_title("Light or dark");
+    let look_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    look_box.add_css_class("linked");
+    look_box.set_valign(gtk4::Align::Center);
+    let light_btn = gtk4::ToggleButton::with_label("Light");
+    let dark_btn = gtk4::ToggleButton::with_label("Dark");
+    dark_btn.set_group(Some(&light_btn));
+    if current_look() == "light" { light_btn.set_active(true) } else { dark_btn.set_active(true) }
+    look_box.append(&light_btn);
+    look_box.append(&dark_btn);
+    look_row.add_suffix(&look_box);
+    theme_group.add(&look_row);
+    for (btn, look) in [(&light_btn, "light"), (&dark_btn, "dark")] {
+        let wp = wp_row.clone();
+        btn.connect_toggled(move |b| {
+            if !b.is_active() || current_look() == look { return; }
+            let wp = wp.clone();
+            glib::spawn_future_local(async move {
+                let ok = gtk4::gio::spawn_blocking(move || {
+                    Command::new("/usr/libexec/arka-apply-look").arg(look).status().map(|s| s.success()).unwrap_or(false)
+                }).await.unwrap_or(false);
+                if !ok { wp.set_subtitle("Couldn't switch the look. Try System Settings > Colors & Themes."); }
+            });
+        });
+    }
 
     // Wire up Browse button
     let wp_row_ref = wp_row.clone();
@@ -254,29 +283,28 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     // Wire up Reset button
     let wp_row_ref2 = wp_row.clone();
     reset_btn.connect_clicked(move |_| {
-        let default = "/usr/share/arka/wallpapers/default.png";
-        apply_wallpaper(default.into(), wp_row_ref2.clone());
+        let default = format!("/usr/share/arka/wallpapers/default-{}.png", current_look());
+        apply_wallpaper(default, wp_row_ref2.clone());
     });
 
-    b.append(&group);
     b.append(&theme_group);
+    b.append(&group);
     b.upcast()
 }
 
 fn page_privacy() -> gtk4::Widget {
-    let b = page_box();
+    let b = page_box("Privacy", "What ArkaOS has set up, and what your apps may use.");
     let group = adw::PreferencesGroup::new();
-    group.set_title("Privacy");
-    group.set_description(Some("Review current protection checks and app permissions."));
     for (title, subtitle, program) in [
-        ("Privacy Dashboard", "Live checks, unavailable controls and enforcement results", "arka-dashboard"),
-        ("App Permissions", "Review direct Flatpak grants", "arka-perms"),
+        ("Privacy dashboard", "Which privacy settings are in place right now, as last checked.", "arka-dashboard"),
+        ("App permissions", "What apps installed with Capsule are allowed to use.", "arka-perms"),
     ] {
         let row = adw::ActionRow::new();
         row.set_title(title);
         row.set_subtitle(subtitle);
         row.set_activatable(true);
         row.connect_activated(move |_| { let _ = Command::new(program).spawn(); });
+        row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
         group.add(&row);
     }
     b.append(&group);
@@ -284,14 +312,14 @@ fn page_privacy() -> gtk4::Widget {
 }
 
 fn page_internet() -> gtk4::Widget {
-    let b = page_box();
+    let b = page_box("Internet", "Wi-Fi and how website names are looked up.");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("Network");
 
     let wifi_row = adw::ActionRow::new();
-    wifi_row.set_title("WiFi Networks");
-    wifi_row.set_subtitle("Open the WiFi picker");
+    wifi_row.set_title("Wi-Fi networks");
+    wifi_row.set_subtitle("Choose a network and sign in.");
     wifi_row.set_activatable(true);
     wifi_row.connect_activated(|_| {
         let _ = Command::new("arka-wifi").spawn();
@@ -304,9 +332,9 @@ fn page_internet() -> gtk4::Widget {
     dns_group.set_title("DNS");
 
     let dns_row = adw::ActionRow::new();
-    dns_row.set_title("DNS-over-TLS");
-    dns_row.set_subtitle("Quad9 (9.9.9.9) — privacy-first, malware-blocking");
-    dns_row.set_subtitle("View the current system-resolver check in Privacy Dashboard");
+    dns_row.set_title("Encrypted DNS");
+    dns_row.set_subtitle("ArkaOS sets system DNS to require encryption (DNS over TLS, Quad9). Its current state is in the Privacy dashboard.");
+    dns_row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
     dns_row.set_activatable(true);
     dns_row.connect_activated(|_| { let _ = Command::new("arka-dashboard").spawn(); });
     dns_group.add(&dns_row);
@@ -317,56 +345,37 @@ fn page_internet() -> gtk4::Widget {
 }
 
 fn page_updates() -> gtk4::Widget {
-    let b = page_box();
-
+    let b = page_box(
+        "Updates",
+        "New versions download next to the one you're using and take over only when you restart. \
+         The previous version is kept so you can go back.",
+    );
     let group = adw::PreferencesGroup::new();
-    group.set_title("System Updates");
-    group.set_description(Some("ArkaOS uses bootc for atomic, rollback-safe updates."));
-
-    let ver = std::fs::read_to_string("/usr/lib/arkaos-release")
-        .unwrap_or_else(|_| "0.1".into());
+    let ver = std::fs::read_to_string("/usr/lib/arkaos-release").unwrap_or_default();
     let cur_row = adw::ActionRow::new();
-    cur_row.set_title("Current Version");
-    cur_row.set_subtitle(ver.trim());
+    cur_row.set_title("ArkaOS version");
+    cur_row.set_subtitle(if ver.trim().is_empty() { "Shown in the Updates app" } else { ver.trim() });
     group.add(&cur_row);
-
-    let check_btn = gtk4::Button::with_label("Check for Updates");
-    check_btn.add_css_class("suggested-action");
-    check_btn.add_css_class("pill");
-    check_btn.set_halign(gtk4::Align::Start);
-    check_btn.connect_clicked(|_| run_in_terminal("sudo bootc upgrade --check && read -p 'Press Enter...'"));
-
-    let update_btn = gtk4::Button::with_label("Update Now");
-    update_btn.add_css_class("suggested-action");
-    update_btn.add_css_class("pill");
-    update_btn.set_halign(gtk4::Align::Start);
-    update_btn.connect_clicked(|_| run_in_terminal("sudo bootc upgrade && read -p 'Reboot to apply. Press Enter...'"));
-
-    let rollback_btn = gtk4::Button::with_label("Roll Back");
-    rollback_btn.add_css_class("destructive-action");
-    rollback_btn.add_css_class("pill");
-    rollback_btn.set_halign(gtk4::Align::Start);
-    rollback_btn.connect_clicked(|_| run_in_terminal("sudo bootc rollback && read -p 'Reboot to apply. Press Enter...'"));
-
-    let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    btn_box.set_margin_top(8);
-    btn_box.append(&check_btn);
-    btn_box.append(&update_btn);
-    btn_box.append(&rollback_btn);
-
+    let open_row = adw::ActionRow::new();
+    open_row.set_title("Check, download, or go back");
+    open_row.set_subtitle("Opens the Updates app.");
+    open_row.set_activatable(true);
+    open_row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
+    open_row.connect_activated(|_| { let _ = Command::new("arka-update").spawn(); });
+    group.add(&open_row);
     b.append(&group);
-    b.append(&btn_box);
     b.upcast()
 }
 
 fn page_advanced() -> gtk4::Widget {
-    let b = page_box();
+    let b = page_box("Advanced", "Details for troubleshooting. These open a terminal with read-only commands.");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("System");
 
     let bootc_row = adw::ActionRow::new();
-    bootc_row.set_title("bootc status");
+    bootc_row.set_title("System image status");
+    bootc_row.set_subtitle("bootc status");
     bootc_row.set_activatable(true);
     bootc_row.connect_activated(|_| run_in_terminal("bootc status; read -p 'Press Enter...'"));
     let chevron = gtk4::Image::from_icon_name("go-next-symbolic");
@@ -374,14 +383,15 @@ fn page_advanced() -> gtk4::Widget {
     group.add(&bootc_row);
 
     let composefs_row = adw::ActionRow::new();
-    composefs_row.set_title("Immutable Filesystem");
+    composefs_row.set_title("Read-only system image");
     composefs_row.set_subtitle("The bootc system image is read-only; user data and system configuration remain writable");
     let composefs_icon = gtk4::Image::from_icon_name("object-locked-symbolic");
     composefs_row.add_suffix(&composefs_icon);
     group.add(&composefs_row);
 
     let tpm_row = adw::ActionRow::new();
-    tpm_row.set_title("TPM / Measured Boot");
+    tpm_row.set_title("TPM measurements");
+    tpm_row.set_subtitle("systemd-analyze pcrs");
     tpm_row.set_activatable(true);
     tpm_row.connect_activated(|_| run_in_terminal("systemd-analyze pcrs 2>/dev/null || echo 'No TPM'; read -p 'Press Enter...'"));
     let chevron2 = gtk4::Image::from_icon_name("go-next-symbolic");
@@ -392,7 +402,8 @@ fn page_advanced() -> gtk4::Widget {
     logs_group.set_title("Logs");
 
     let journal_row = adw::ActionRow::new();
-    journal_row.set_title("System Journal");
+    journal_row.set_title("System log");
+    journal_row.set_subtitle("The last 50 entries");
     journal_row.set_activatable(true);
     journal_row.connect_activated(|_| run_in_terminal("journalctl -n 50 --no-pager; read -p 'Press Enter...'"));
     let chevron3 = gtk4::Image::from_icon_name("go-next-symbolic");
@@ -400,7 +411,8 @@ fn page_advanced() -> gtk4::Widget {
     logs_group.add(&journal_row);
 
     let arkad_row = adw::ActionRow::new();
-    arkad_row.set_title("arkad Logs");
+    arkad_row.set_title("Privacy service log");
+    arkad_row.set_subtitle("arkad, the last 30 entries");
     arkad_row.set_activatable(true);
     arkad_row.connect_activated(|_| run_in_terminal("journalctl -u arkad -n 30 --no-pager; read -p 'Press Enter...'"));
     let chevron4 = gtk4::Image::from_icon_name("go-next-symbolic");
@@ -414,12 +426,13 @@ fn page_advanced() -> gtk4::Widget {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-fn page_box() -> gtk4::Box {
+fn page_box(title: &str, sub: &str) -> gtk4::Box {
     let b = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
-    b.set_margin_start(20);
-    b.set_margin_end(20);
-    b.set_margin_top(20);
-    b.set_margin_bottom(20);
+    b.set_margin_start(32);
+    b.set_margin_end(32);
+    b.set_margin_top(24);
+    b.set_margin_bottom(24);
+    b.append(&arka_shell_common::theme::page_header(title, sub));
     b
 }
 
