@@ -8,6 +8,9 @@ edition = "2021"
 # depend on this crate (dns/sandbox only) in the static musl build without GTK.
 default = []
 gtk = ["dep:gtk4"]
+# `adw` adds follow_look() for libadwaita apps.
+adw = ["gtk", "dep:libadwaita"]
 
 [dependencies]
 gtk4 = { version = "0.9", optional = true }
+libadwaita = { version = "0.7", optional = true }
