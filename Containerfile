@@ -336,6 +336,15 @@ RUN systemctl mask plasma-setup.service
 # setup screen types its "hello world" in.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y jetbrains-mono-fonts
 
+# Light login screen: the same theme with look=light and the light wallpaper.
+# arkaos-oobe-apply selects it when the user picks Light in setup.
+RUN cp -a /usr/share/sddm/themes/arkaos /usr/share/sddm/themes/arkaos-light && \
+    sed -i -e 's/^look=.*/look=light/' \
+           -e 's|^background=.*|background=/usr/share/arka/wallpapers/default-light.png|' \
+           /usr/share/sddm/themes/arkaos-light/theme.conf && \
+    sed -i -e 's/^Name=.*/Name=ArkaOS Light/' -e 's/^Theme-Id=.*/Theme-Id=arkaos-light/' \
+           /usr/share/sddm/themes/arkaos-light/metadata.desktop
+
 # arkad's polkit action (admin auth for EnforceAll). Placed late: a new file
 # early in this stage would invalidate the cached package layers below it.
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy

@@ -71,6 +71,11 @@ runuser -u "$user" -- sh -c '
 ' arka-setup-look "/home/$user" "$look"
 
 mkdir -p /etc/sddm.conf.d
+# Login screen follows the chosen look (arkaos-light is built from the same
+# theme with look=light; see Containerfile).
+if [ "$look" = "light" ]; then
+    printf '[Theme]\nCurrent=arkaos-light\n' > /etc/sddm.conf.d/30-arka-theme.conf
+fi
 if [ "$autologin" = "1" ]; then
     printf '[Autologin]\nUser=%s\nSession=plasma.desktop\n' "$user" \
         > /etc/sddm.conf.d/20-autologin.conf

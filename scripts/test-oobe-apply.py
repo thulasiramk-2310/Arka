@@ -148,6 +148,15 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(writes[0][1:4], ['-u', 'alice', '--'])
         self.assertNotIn('test-password', str(writes))
 
+    def test_light_look_selects_the_light_login_theme(self):
+        self.assertEqual(self.run_helper(look='light').returncode, 0)
+        theme = self.root / 'etc/sddm.conf.d/30-arka-theme.conf'
+        self.assertEqual(theme.read_text(), '[Theme]\nCurrent=arkaos-light\n')
+
+    def test_dark_look_keeps_the_image_login_theme(self):
+        self.assertEqual(self.run_helper(look='dark').returncode, 0)
+        self.assertFalse((self.root / 'etc/sddm.conf.d/30-arka-theme.conf').exists())
+
     def test_legacy_caller_defaults_to_dark(self):
         self.assertEqual(self.run_helper().returncode, 0)
         self.assertEqual((self.root / 'home/alice/.config/arka-look').read_text(), 'dark\n')

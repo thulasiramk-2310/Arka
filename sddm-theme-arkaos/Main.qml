@@ -32,12 +32,19 @@ Rectangle {
         var la = luminance(a), lb = luminance(b)
         return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
     }
-    // Lighten toward white (keeping the hue) until it reads at 3:1 on dark UI.
+    // theme.conf "look" = dark (default) or light. arkaos-oobe-apply selects
+    // the arkaos-light copy of this theme when the user picks Light in setup.
+    readonly property bool light: config.look ? String(config.look).trim() === "light" : false
+
+    // Shift toward white (dark look) or black (light look), keeping the hue,
+    // until the colour reads at 3:1 on the UI behind it.
     function readable(col) {
+        var behind = light ? "#ffffff" : "#0f141c"
+        var toward = light ? "#33000000" : "#33ffffff"
         var out = col
-        for (var i = 0; i < 12 && contrast(out, "#0f141c") < 3; i++)
-            out = Qt.tint(out, "#33ffffff")
-        return contrast(out, "#0f141c") >= 3 ? out : "#f5f7fa"
+        for (var i = 0; i < 12 && contrast(out, behind) < 3; i++)
+            out = Qt.tint(out, toward)
+        return contrast(out, behind) >= 3 ? out : (light ? "#111111" : "#f5f7fa")
     }
     readonly property color pickedAccent: {
         var want = config.accent ? String(config.accent).trim() : "auto"
@@ -50,20 +57,22 @@ Rectangle {
 
     QtObject {
         id: c
-        readonly property color bg:        "#07080e"
+        readonly property color bg:        root.light ? "#eceff3" : "#07080e"
         readonly property color accent:    root.pickedAccent
-        readonly property color accentHi:  Qt.lighter(accent, 1.12)
+        readonly property color accentHi:  root.light ? Qt.darker(accent, 1.08) : Qt.lighter(accent, 1.12)
         readonly property color onAccent:  root.contrast(accent, "#07080e") >= root.contrast(accent, "#ffffff") ? "#07080e" : "#ffffff"
         readonly property color accentFg:  root.readable(accent)
         readonly property color ring:      accentFg
-        readonly property color glass:     Qt.rgba(1, 1, 1, 0.10)
-        readonly property color glassHi:   Qt.rgba(1, 1, 1, 0.16)
-        readonly property color glassLine: Qt.rgba(1, 1, 1, 0.22)
-        readonly property color textHi:    "#f5f7fa"
-        readonly property color textLo:    "#c9d0da"
-        readonly property color hint:      "#b9c1cc"
-        readonly property color danger:    "#ff8a8c"
-        readonly property color warn:      "#f2c766"
+        // "glass" = translucent fields/pills: white on the dark look, ink on the light one
+        readonly property color glass:     root.light ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(1, 1, 1, 0.10)
+        readonly property color glassHi:   root.light ? Qt.rgba(1, 1, 1, 0.92) : Qt.rgba(1, 1, 1, 0.16)
+        readonly property color glassLine: root.light ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(1, 1, 1, 0.22)
+        readonly property color textHi:    root.light ? "#111111" : "#f5f7fa"
+        readonly property color textLo:    root.light ? "#3d4450" : "#c9d0da"
+        readonly property color hint:      root.light ? "#5c636e" : "#b9c1cc"
+        readonly property color danger:    root.light ? "#b42318" : "#ff8a8c"
+        readonly property color warn:      root.light ? "#b45309" : "#f2c766"
+        readonly property color scrim:     root.light ? "#ffffff" : "#000000"
         readonly property string font:     "Inter"
     }
 
@@ -159,7 +168,7 @@ Rectangle {
         blurMax: 96
         blurMultiplier: 0.6
         saturation: 0.1
-        brightness: -0.08
+        brightness: root.light ? 0.06 : -0.08
         autoPaddingEnabled: false
         opacity: root.signin ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 380; easing.type: Easing.OutCubic } }
@@ -168,7 +177,7 @@ Rectangle {
     readonly property bool softwareGfx: GraphicsInfo.api === GraphicsInfo.Software
     Rectangle {   // overall scrim
         anchors.fill: parent
-        color: "black"
+        color: c.scrim
         opacity: root.signin ? (root.softwareGfx ? 0.86 : 0.52) : 0.18
         Behavior on opacity { NumberAnimation { duration: 380 } }
     }
@@ -176,16 +185,16 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         height: parent.height * 0.5
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#99000000" }
-            GradientStop { position: 1.0; color: "#00000000" }
+            GradientStop { position: 0.0; color: Qt.rgba(c.scrim.r, c.scrim.g, c.scrim.b, 0.6) }
+            GradientStop { position: 1.0; color: Qt.rgba(c.scrim.r, c.scrim.g, c.scrim.b, 0) }
         }
     }
     Rectangle {   // bottom fade for the footer
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: parent.height * 0.28
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#00000000" }
-            GradientStop { position: 1.0; color: "#8c000000" }
+            GradientStop { position: 0.0; color: Qt.rgba(c.scrim.r, c.scrim.g, c.scrim.b, 0) }
+            GradientStop { position: 1.0; color: Qt.rgba(c.scrim.r, c.scrim.g, c.scrim.b, 0.55) }
         }
     }
 
@@ -562,7 +571,7 @@ Rectangle {
                 id: avatar
                 anchors.fill: parent
                 radius: width / 2
-                color: Qt.rgba(1, 1, 1, 0.12)
+                color: root.light ? Qt.rgba(0, 0, 0, 0.06) : Qt.rgba(1, 1, 1, 0.12)
                 border.width: 2
                 border.color: c.accentFg
                 property string pic: root.userRole(userField.text, "ic")
