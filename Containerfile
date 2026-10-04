@@ -63,7 +63,10 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 
 # Enable SDDM (started once firstboot flips the default to graphical.target).
 # Default to the Plasma Wayland session.
-RUN systemctl enable sddm.service && \
+# Fedora 44's KDE install makes Plasma Login Manager (plasmalogin) the display
+# manager. ArkaOS keeps SDDM for now (its login theme is an SDDM theme), so
+# --force repoints display-manager.service at sddm.
+RUN systemctl enable --force sddm.service && \
     mkdir -p /etc/sddm.conf.d && \
     printf '[General]\nDisplayServer=wayland\n\n[Wayland]\nSessionDir=/usr/share/wayland-sessions\n' \
       > /etc/sddm.conf.d/10-wayland.conf
