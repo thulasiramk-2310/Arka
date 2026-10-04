@@ -292,7 +292,7 @@ RUN dnf install -y --setopt=retries=25 plymouth-plugin-script && \
 # other shape inherits from breeze_cursors. ArkaSound: soft sine-based event
 # sounds. Plymouth splash images. All need ImageMagick/xcursorgen/sox once.
 COPY plymouth-theme-arkaos/ /usr/share/plymouth/themes/arkaos/
-RUN dnf install -y -q ImageMagick xcursorgen sox && \
+RUN dnf install -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
     # -- cursor ---------------------------------------------------------------
     mkdir -p /tmp/cur /usr/share/icons/ArkaCursor/cursors && \
     cd /tmp/cur && \
