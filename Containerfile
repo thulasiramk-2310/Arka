@@ -345,8 +345,21 @@ RUN cp -a /usr/share/icons/Arka /usr/share/icons/Arka-Light && \
            /usr/share/icons/Arka-Light/index.theme && \
     gtk-update-icon-cache -q -f /usr/share/icons/Arka-Light 2>/dev/null || true
 
+# Update status for unprivileged apps (bootc status needs root): written to
+# /run/arkaos/bootc-status.json at boot, every 10 min, and when deployments change.
+COPY systemd/arka-bootc-status.service systemd/arka-bootc-status.timer systemd/arka-bootc-status.path /usr/lib/systemd/system/
+RUN systemctl enable arka-bootc-status.timer arka-bootc-status.path
+
 # Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
 COPY arka-apply-look /usr/libexec/arka-apply-look
+
+# Updates download in the background but never restart the computer on their
+# own: Fedora's bootc-fetch-apply-updates timer runs `bootc upgrade --apply`,
+# which reboots. Keep the timer, drop --apply; the Updates app shows "Restart
+# needed" and the user picks the moment.
+RUN mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
+    printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
+      > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf
 
 # Light login screen: the same theme with look=light and the light wallpaper.
 # arkaos-oobe-apply selects it when the user picks Light in setup.

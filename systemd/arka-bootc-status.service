@@ -1,0 +1,9 @@
+[Unit]
+Description=Publish read-only system update status for ArkaOS apps
+Documentation=file:///usr/share/doc/arkaos
+# `bootc status` needs root. This writes its JSON to a world-readable file so
+# the Updates app and Privacy dashboard can show it without any privilege.
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'mkdir -p /run/arkaos && bootc status --json --format-version=1 > /run/arkaos/bootc-status.json.tmp && chmod 0644 /run/arkaos/bootc-status.json.tmp && mv -f /run/arkaos/bootc-status.json.tmp /run/arkaos/bootc-status.json'

@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh ArkaOS update status
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

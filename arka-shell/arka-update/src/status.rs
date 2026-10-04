@@ -73,6 +73,16 @@ impl From<Entry> for Deployment {
 
 /// Invalid, unsupported or non-bootc output is an error, never "up to date".
 /// Cached update metadata alone does not represent a staged deployment.
+/// Where arka-bootc-status.service publishes `bootc status` for unprivileged readers.
+pub const PUBLISHED: &str = "/run/arkaos/bootc-status.json";
+
+/// Read the status published by arka-bootc-status.service (no privileges needed).
+pub fn read_published() -> Result<UpdateStatus, String> {
+    let json = std::fs::read_to_string(PUBLISHED)
+        .map_err(|e| format!("update status not published yet ({e})"))?;
+    parse_status(&json)
+}
+
 pub fn parse_status(json: &str) -> Result<UpdateStatus, String> {
     let host: Host = serde_json::from_str(json).map_err(|e| format!("Invalid bootc status: {e}"))?;
     if host.api_version != "org.containers.bootc/v1" || host.kind != "BootcHost" {

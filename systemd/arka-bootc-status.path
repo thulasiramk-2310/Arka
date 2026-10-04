@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh ArkaOS update status when system versions change
+
+[Path]
+# Staging an update or selecting a rollback changes the deployments here.
+PathChanged=/ostree/deploy/default/deploy
+Unit=arka-bootc-status.service
+
+[Install]
+WantedBy=paths.target
