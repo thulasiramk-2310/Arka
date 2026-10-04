@@ -222,7 +222,8 @@ RUN printf '[Desktop Entry]\nType=Application\nName=ArkaOS Privacy Activity\nExe
 
 # Custom ArkaOS SDDM login theme (dark, green accent, fade-in animation).
 COPY sddm-theme-arkaos/ /usr/share/sddm/themes/arkaos/
-RUN printf '[Theme]\nCurrent=arkaos\n' > /etc/sddm.conf.d/30-arka-theme.conf
+RUN printf '[Theme]\nCurrent=arkaos\n' > /etc/sddm.conf.d/30-arka-theme.conf && \
+    printf '[Users]\nHideUsers=arkasetup\n' > /etc/sddm.conf.d/31-arka-hide-setup.conf
 # The login theme follows the desktop accent (theme.conf accent=auto), read
 # from the sddm user's colour scheme. Seed it with the ArkaOS scheme so a fresh
 # install matches the desktop default. "C" copies only when the file is
