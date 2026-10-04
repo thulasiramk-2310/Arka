@@ -341,12 +341,15 @@ RUN dnf install -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
 RUN printf '[Mouse]\ncursorTheme=ArkaCursor\n' > /etc/skel/.config/kcminputrc
 
 # Activate the boot splash: set the theme, rebuild the initramfs so plymouth
-# carries it, and add rhgb+quiet kargs so the splash actually shows.
+# carries it, and add rhgb+quiet kargs so the splash actually shows. Disk
+# images get console=ttyS0 from bootc-image-builder, and plymouth falls back to
+# text ("details") whenever a serial console is present, so tell it to leave
+# serial consoles alone: splash on screen, boot log still on the serial port.
 RUN plymouth-set-default-theme arkaos && \
     KVER=$(ls /usr/lib/modules | head -1) && \
     dracut --force --no-hostonly /usr/lib/modules/$KVER/initramfs.img $KVER && \
     mkdir -p /usr/lib/bootc/kargs.d && \
-    printf 'kargs = ["rhgb", "quiet"]\n' > /usr/lib/bootc/kargs.d/10-arkaos-splash.toml
+    printf 'kargs = ["rhgb", "quiet", "plymouth.ignore-serial-consoles"]\n' > /usr/lib/bootc/kargs.d/10-arkaos-splash.toml
 
 RUN bootc container lint
 
