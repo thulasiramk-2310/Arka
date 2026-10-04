@@ -71,15 +71,18 @@ BWRAP_ARGS=(
     --dir /run/user/"${UID}"
     --bind-try /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}" \
                /run/user/"${UID}"/"${WAYLAND_DISPLAY:-wayland-0}"
-    # Audio: thread the PipeWire socket and the PulseAudio-compat socket dir
+    # Audio: thread the PipeWire and PulseAudio-compat sockets
     # through so the browser can actually play sound. libpulse/libpipewire find
     # these automatically under XDG_RUNTIME_DIR. This is a deliberate capability
     # grant. Direct audio-server access can include microphone recording;
     # this is not a playback-only permission or a portal-mediated grant.
     --bind-try /run/user/"${UID}"/pipewire-0 \
                /run/user/"${UID}"/pipewire-0
-    --bind-try /run/user/"${UID}"/pulse \
-               /run/user/"${UID}"/pulse
+    --bind-try /run/user/"${UID}"/pulse/native \
+               /run/user/"${UID}"/pulse/native
+    # Select the mounted socket explicitly; do not inherit a launcher server
+    # or rely on client configuration hidden by the isolated home and /etc.
+    --setenv PULSE_SERVER unix:/run/user/"${UID}"/pulse/native
     --setenv XDG_RUNTIME_DIR /run/user/"${UID}"
     --setenv WAYLAND_DISPLAY "${WAYLAND_DISPLAY:-wayland-0}"
     --setenv MOZ_ENABLE_WAYLAND 1

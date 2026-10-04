@@ -37,9 +37,22 @@ class WrapperTests(unittest.TestCase):
         self.assertEqual(args[args.index('--cap-drop') + 1], 'ALL')
         names = {args[i + 1] for i, value in enumerate(args) if value == '--setenv'}
         self.assertEqual(names, {'PATH', 'HOME', 'LANG', 'LC_ALL', 'XDG_RUNTIME_DIR',
-                                 'WAYLAND_DISPLAY', 'MOZ_ENABLE_WAYLAND'})
+                                 'WAYLAND_DISPLAY', 'MOZ_ENABLE_WAYLAND', 'PULSE_SERVER'})
         self.assertNotIn('synthetic-secret', args)
         self.assertIn('--new-session', args)
+
+    def test_audio_sockets_and_server_are_explicit_without_exposing_runtime_directory(self):
+        self.env['PULSE_SERVER'] = 'tcp:untrusted.invalid'
+        args = json.loads(self.run_wrapper().stdout)
+        runtime = f'/run/user/{os.getuid()}'
+        binds = [(args[i + 1], args[i + 2]) for i, arg in enumerate(args) if arg == '--bind-try']
+        for socket in [f'{runtime}/pulse/native', f'{runtime}/pipewire-0']:
+            self.assertIn((socket, socket), binds)
+        self.assertNotIn((runtime, runtime), binds)
+        self.assertNotIn((f'{runtime}/pulse', f'{runtime}/pulse'), binds)
+        pos = args.index('PULSE_SERVER')
+        self.assertEqual(args[pos + 1], f'unix:{runtime}/pulse/native')
+        self.assertNotIn('tcp:untrusted.invalid', args)
 
     def test_downloads_symlink_cannot_expose_the_whole_home(self):
         (self.home / 'Downloads').symlink_to(self.home, target_is_directory=True)
