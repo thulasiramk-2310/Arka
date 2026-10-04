@@ -254,6 +254,12 @@ RUN printf '[Desktop Entry]\nType=Application\nName=ArkaOS Privacy Activity\nExe
 # Custom ArkaOS SDDM login theme (dark, green accent, fade-in animation).
 COPY sddm-theme-arkaos/ /usr/share/sddm/themes/arkaos/
 RUN printf '[Theme]\nCurrent=arkaos\n' > /etc/sddm.conf.d/30-arka-theme.conf
+# The login theme follows the desktop accent (theme.conf accent=auto), read
+# from the sddm user's colour scheme. Seed it with the ArkaOS scheme so a fresh
+# install matches the desktop default. "C" copies only when the file is
+# missing, so "Apply Plasma Settings" (which rewrites it) always wins.
+RUN printf 'd /var/lib/sddm/.config 0755 sddm sddm -\nC /var/lib/sddm/.config/kdeglobals - - - - /usr/share/color-schemes/ArkaOS.colors\nz /var/lib/sddm/.config/kdeglobals 0644 sddm sddm -\n' \
+      > /usr/lib/tmpfiles.d/arka-sddm-accent.conf
 
 # Lock screen: ArkaOS wallpaper behind the (already dark+green) Plasma locker.
 RUN printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=/usr/share/arka/wallpapers/default.png\n' \
