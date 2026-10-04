@@ -185,6 +185,7 @@ button.oobe-tile {{
 }}
 button.oobe-tile:hover {{ background-color: {hover}; }}
 button.oobe-tile:checked {{ background-color: transparent; border: 2px solid {fg}; }}
+button.oobe-tile:focus-visible {{ outline: 2px solid {faint}; outline-offset: 2px; }}
 .oobe-tile-name {{ font-size: 16px; font-weight: 600; color: {fg}; }}
 
 checkbutton.oobe-choice {{ padding: 14px 0; color: {fg}; }}
@@ -497,6 +498,9 @@ fn build_ui(app: &adw::Application) {
     for (t, d) in [(&light_tile, false), (&dark_tile, true)] {
         let set_look = set_look.clone();
         t.connect_toggled(move |b| if b.is_active() { set_look(d) });
+        // Keyboard: moving focus onto a look picks it, like a radio group, so
+        // arrow + Enter chooses what is highlighted.
+        t.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
     }
     let look_body = gtk4::Box::new(gtk4::Orientation::Horizontal, 20);
     {
@@ -561,6 +565,9 @@ fn build_ui(app: &adw::Application) {
                       "Faster start-up. Anyone who turns on this computer goes straight to your desktop.");
     auto.set_group(Some(&ask));
     ask.set_active(true);
+    for c in [&ask, &auto] {
+        c.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
+    }
     let sign_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     sign_body.append(&ask);
     sign_body.append(&auto);
