@@ -26,6 +26,7 @@ anyhow = "1"
 # real backend
 zbus = { version = "4", features = ["tokio"] }                         # read org.arka.arkad properties
 arka-pulse = { path = "../arka-pulse", default-features = false }      # in-process PulseEngine::health()
+arka-shell-common = { path = "../arka-shell/arka-shell-common", default-features = false }
 
 [profile.release]
 opt-level = "z"

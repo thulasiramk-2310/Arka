@@ -1,0 +1,59 @@
+name: Source checks
+
+on:
+  push:
+    paths:
+      - "arka-agent/**"
+      - "arka-pulse/**"
+      - "arka-shell/**"
+      - "arkaos-oobe-apply"
+      - "arkaos-firstboot"
+      - "scripts/test-oobe-apply.py"
+      - ".github/workflows/checks.yml"
+  pull_request:
+    paths:
+      - "arka-agent/**"
+      - "arka-pulse/**"
+      - "arka-shell/**"
+      - "arkaos-oobe-apply"
+      - "arkaos-firstboot"
+      - "scripts/test-oobe-apply.py"
+      - ".github/workflows/checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check first-run shell syntax
+        run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot
+      - name: Test setup with isolated accounts and paths
+        run: python3 scripts/test-oobe-apply.py
+
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Test reliability core
+        run: cargo test --locked --manifest-path arka-pulse/Cargo.toml
+      - name: Test agent and daemon status contract
+        run: cargo test --locked --manifest-path arka-agent/Cargo.toml
+      - name: Test shared privacy states and tray
+        run: cargo test --locked --manifest-path arka-shell/Cargo.toml -p arka-shell-common -p arka-privacy-tray
+
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Install desktop build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
+      - name: Check the dashboard
+        run: cargo check --locked --manifest-path arka-shell/Cargo.toml -p arka-dashboard

@@ -66,11 +66,11 @@ impl MockBackend {
             status: PrivacyStatus {
                 privacy_score: 100,
                 mac_randomization: true,
-                dns_status: "DoT active (Quad9 9.9.9.9)".into(),
+                dns_status: "Encrypted".into(),
                 hostname_privacy: true,
                 ipv6_privacy: true,
-                sandbox_status: "active".into(),
-                browser_sandbox: "bubblewrap".into(),
+                sandbox_status: "Active".into(),
+                browser_sandbox: "Ephemeral".into(),
             },
             pulse: PulseReport {
                 worst: "OK".into(),

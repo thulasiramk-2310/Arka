@@ -9,22 +9,46 @@
 #   usage: arkaos-oobe-apply <username> <autologin:0|1>   (password on stdin)
 set -euo pipefail
 
-user="${1:?username required}"
-autologin="${2:?autologin flag required}"
+if [ "$#" -ne 2 ]; then
+    echo "arkaos-oobe-apply: expected username and autologin flag" >&2
+    exit 2
+fi
+user="$1"
+autologin="$2"
+
+# Serialize account creation, including retries from the graphical and TUI paths.
+exec 9>/run/arkaos-oobe.lock
+flock -n 9 || { echo "arkaos-oobe-apply: setup is already running" >&2; exit 1; }
+if [ -e /var/lib/arkaos-firstboot-done ]; then
+    echo "arkaos-oobe-apply: setup is already complete" >&2
+    exit 1
+fi
 
 # Validate the username here too — never trust the caller alone.
-if ! printf '%s' "$user" | grep -Eq '^[a-z][a-z0-9_-]{0,30}$'; then
+if [[ ! "$user" =~ ^[a-z][a-z0-9_-]{0,30}$ ]]; then
     echo "arkaos-oobe-apply: invalid username" >&2
     exit 2
 fi
 
-# Idempotent: if the account already exists (a retried run), don't fail.
-if ! id -u "$user" >/dev/null 2>&1; then
-    useradd -m -G wheel -s /bin/bash "$user"
+if [[ "$autologin" != "0" && "$autologin" != "1" ]]; then
+    echo "arkaos-oobe-apply: invalid autologin flag" >&2
+    exit 2
+fi
+
+# Never reset an existing account, including root or the setup user.
+if id -u "$user" >/dev/null 2>&1; then
+    echo "arkaos-oobe-apply: account already exists; choose a new username" >&2
+    exit 2
 fi
 
 # Password arrives on stdin so it never appears in argv / process list.
-IFS= read -r pass
+IFS= read -r pass || { echo "arkaos-oobe-apply: password required" >&2; exit 2; }
+if [ "${#pass}" -lt 8 ]; then
+    echo "arkaos-oobe-apply: password must be at least 8 characters" >&2
+    exit 2
+fi
+trap 'unset pass' EXIT
+useradd -m -G wheel -s /bin/bash "$user"
 printf '%s:%s\n' "$user" "$pass" | chpasswd
 unset pass
 
@@ -40,7 +64,9 @@ fi
 mkdir -p /var/lib/sddm
 printf '[Last]\nUser=%s\nSession=/usr/share/wayland-sessions/plasma.desktop\n' "$user" \
     > /var/lib/sddm/state.conf
+chown sddm:sddm /var/lib/sddm/state.conf
 
 # Hand the machine to the graphical target and stop the first-run flow for good.
 systemctl set-default graphical.target
 touch /var/lib/arkaos-firstboot-done
+rm -f /etc/sudoers.d/95-arkaos-oobe

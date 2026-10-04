@@ -10,3 +10,9 @@ OVMF_*.qcow2
 
 # VCS
 .git/
+
+# Local credentials do not belong in an image build context
+tokens
+.arka_pat
+*.pat
+.aws/

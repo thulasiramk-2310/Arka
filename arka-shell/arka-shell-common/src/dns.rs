@@ -9,6 +9,11 @@ pub enum DnsStatus {
 }
 
 impl DnsStatus {
+    /// Only the daemon's explicit encrypted state confirms this control.
+    pub fn is_encrypted(&self) -> bool {
+        matches!(self, Self::Encrypted)
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             Self::Encrypted       => "Encrypted",
@@ -40,4 +45,17 @@ impl From<&str> for DnsStatus {
 
 impl Default for DnsStatus {
     fn default() -> Self { Self::Unknown("Unknown".into()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DnsStatus;
+
+    #[test]
+    fn only_encrypted_is_positive() {
+        assert!(DnsStatus::from("Encrypted").is_encrypted());
+        for value in ["Plaintext", "Degraded", "ForcedPlaintext", "Error", "Unknown", "Initializing", "", "DoT active", "future-state"] {
+            assert!(!DnsStatus::from(value).is_encrypted(), "{value}");
+        }
+    }
 }

@@ -13,7 +13,7 @@
 
 mod privacy;
 
-use privacy::{drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
+use privacy::{browser_active, dns_active, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
 
 use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Tray, TrayMethods};
@@ -154,11 +154,8 @@ trait Arkad {
     fn ipv6_privacy(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn browser_sandbox(&self) -> zbus::Result<String>;
-}
-
-/// A string status is "active" unless arkad reports it as Unknown/empty.
-fn active_str(s: &str) -> bool {
-    !s.is_empty() && !s.starts_with("Unknown") && !s.eq_ignore_ascii_case("unknown")
+    #[zbus(property)]
+    fn sandbox_status(&self) -> zbus::Result<String>;
 }
 
 async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
@@ -168,17 +165,20 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
     let hostname = p.hostname_privacy().await.unwrap_or(false);
     let ipv6 = p.ipv6_privacy().await.unwrap_or(false);
     let browser = p.browser_sandbox().await.unwrap_or_else(|_| "Unknown".into());
+    let sandbox = p.sandbox_status().await.unwrap_or_else(|_| "Unknown".into());
+    let dns_ok = dns_active(&dns);
+    let browser_ok = browser_active(&browser, &sandbox);
     Some(Enforcement {
         mac,
-        dns_ok: active_str(&dns),
-        dns_detail: if active_str(&dns) { format!("Encrypted — {dns}") } else { dns },
+        dns_ok,
+        dns_detail: dns,
         hostname,
         ipv6,
-        browser_ok: active_str(&browser),
-        browser_detail: if active_str(&browser) {
+        browser_ok,
+        browser_detail: if browser_ok {
             format!("Sandboxed — {browser}")
         } else {
-            "Not sandboxed".into()
+            format!("Not confirmed — {browser} / {sandbox}")
         },
     })
 }

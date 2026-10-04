@@ -279,37 +279,36 @@ fn event_color(ev: &str) -> &'static str {
     }
 }
 
-/// "This week" report card: aggregates the last 7 days of privacy.jsonl into
-/// the numbers a user actually cares about — protections enforced, drifts
-/// caught and fixed, sandboxed launches, and whether DNS stayed encrypted.
+/// Count recorded events. The log does not measure DNS coverage or browser launches.
 fn weekly_report_card(all: &[LogEvent]) -> adw::PreferencesGroup {
     let now = glib::DateTime::now_local()
         .map(|d| d.to_unix() as u64)
         .unwrap_or(0);
     let week_ago = now.saturating_sub(7 * 24 * 3600);
-    let week: Vec<&LogEvent> = all.iter().filter(|e| e.ts >= week_ago).collect();
+    let week: Vec<&LogEvent> = all.iter().filter(|e| e.ts >= week_ago && e.ts <= now).collect();
 
     let drifts    = week.iter().filter(|e| e.ev == "drift").count();
     let recovered = week.iter().filter(|e| e.ev == "recovered").count();
-    let sandboxed = week.iter().filter(|e| e.cat == "sandbox").count();
-    let dns_ok    = !week.iter().any(|e| e.cat == "dns" && e.ev == "drift");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("This Week");
-    group.set_description(Some("Privacy report · last 7 days"));
+    group.set_description(Some(if week.is_empty() {
+        "No event records available for the last 7 days"
+    } else {
+        "Recorded events · last 7 days"
+    }));
 
-    let stats: [(&str, String, &str); 4] = [
+    let stats: [(&str, String, &str); 3] = [
         ("Privacy events", week.len().to_string(), "view-list-symbolic"),
         (
-            "Drifts caught &amp; fixed",
-            if drifts == 0 { "0 — clean".into() } else { format!("{drifts} caught / {recovered} fixed") },
+            "Drift events",
+            drifts.to_string(),
             "security-high-symbolic",
         ),
-        ("Sandboxed launches", sandboxed.to_string(), "system-lock-screen-symbolic"),
         (
-            "Encrypted DNS",
-            if dns_ok { "100% (DoT · Quad9)".into() } else { "interrupted — re-enforced".into() },
-            "network-server-symbolic",
+            "Recovery events",
+            recovered.to_string(),
+            "view-refresh-symbolic",
         ),
     ];
 

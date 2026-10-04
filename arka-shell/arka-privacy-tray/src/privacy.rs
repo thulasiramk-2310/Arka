@@ -15,6 +15,15 @@
 //!     and coalesced so warning-fatigue can't set in.
 
 use serde::Deserialize;
+use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
+
+pub fn dns_active(value: &str) -> bool {
+    DnsStatus::from(value).is_encrypted()
+}
+
+pub fn browser_active(mode: &str, sandbox: &str) -> bool {
+    BrowserSandbox::from(mode).is_isolated() && SandboxStatus::from(sandbox).is_active()
+}
 
 /// Live snapshot of arkad's enforcement, read from its D-Bus properties.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -232,6 +241,22 @@ impl Notifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_daemon_values_raise_attention() {
+        for dns in ["Plaintext", "ForcedPlaintext", "Degraded", "Error", "Initializing", "Unknown", "", "future-state"] {
+            let mut e = enf_all_on();
+            e.dns_ok = dns_active(dns);
+            assert_eq!(level(&e, false), Level::Critical, "{dns}");
+        }
+        assert!(dns_active("Encrypted"));
+        for (mode, sandbox) in [("None", "Active"), ("Ephemeral", "Inactive"), ("Ephemeral", "Partial"), ("Unknown", "Active"), ("Ephemeral", "Unknown")] {
+            let mut e = enf_all_on();
+            e.browser_ok = browser_active(mode, sandbox);
+            assert_eq!(level(&e, false), Level::Critical, "{mode}/{sandbox}");
+        }
+        assert!(browser_active("Ephemeral", "Active"));
+    }
 
     fn enf_all_on() -> Enforcement {
         Enforcement {

@@ -6,6 +6,30 @@ use arka_agent::approval::TerminalApprover;
 use arka_agent::backend::MockBackend;
 use arka_agent::config::Config;
 use arka_agent::ollama::MockLlm;
+use arka_agent::facts::Status;
+use arka_agent::tools::arkad;
+
+#[tokio::test]
+async fn status_facts_use_the_daemons_exact_contract() {
+    let mut backend = MockBackend::healthy();
+    for (dns, expected) in [("Encrypted", Status::On), ("Plaintext", Status::Off), ("Error", Status::Off), ("Initializing", Status::Off)] {
+        backend.status.dns_status = dns.into();
+        let out = arkad::system_status(&backend).await.unwrap();
+        assert_eq!(out.facts.iter().find(|f| f.domain == "dns").unwrap().status, Some(expected));
+    }
+    for (sandbox, browser, expected) in [
+        ("Active", "Ephemeral", Status::On),
+        ("Active", "None", Status::Off),
+        ("Inactive", "Ephemeral", Status::Off),
+        ("Partial", "Ephemeral", Status::Off),
+        ("Active", "future-mode", Status::Off),
+    ] {
+        backend.status.sandbox_status = sandbox.into();
+        backend.status.browser_sandbox = browser.into();
+        let out = arkad::system_status(&backend).await.unwrap();
+        assert_eq!(out.facts.iter().find(|f| f.domain == "browser").unwrap().status, Some(expected));
+    }
+}
 
 fn tmp_cfg() -> Config {
     let mut cfg = Config::default();

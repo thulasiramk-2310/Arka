@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -e /var/lib/arkaos-firstboot-done ] && exit 0
 exec </dev/tty1 >/dev/tty1 2>&1
 # Plymouth must release the console before the TUI draws. quit is async —
 # wait for the daemon to actually die or the first draw races it and lands
@@ -135,10 +136,16 @@ spin_pid() {
             sleep 0.1
         done
     done
-    wait "$pid" 2>/dev/null
-    printf "\r   ${G}OK${E} %-56s\n" "$msg"
+    local status=0
+    wait "$pid" 2>/dev/null || status=$?
+    if [ "$status" -eq 0 ]; then
+        printf "\r   ${G}OK${E} %-56s\n" "$msg"
+    else
+        printf "\r   ${R}FAILED${E} %-56s\n" "$msg"
+    fi
+    return "$status"
 }
-spin() { local msg="$1"; shift; "$@" &>/dev/null & spin_pid $! "$msg"; }
+spin() { local msg="$1"; shift; "$@" >/dev/null & spin_pid $! "$msg"; }
 
 # ── Step 1: username ─────────────────────────────────────────────────────────
 err=""
@@ -253,40 +260,25 @@ else
 fi
 printf "\n"
 
-# video/input are nss-systemd only (not in /etc/group) — useradd reads /etc/group
-# logind grants device ACLs automatically for local VT sessions
-spin "Creating user account" useradd -m -G wheel -s /bin/bash "$username"
-
-# Hash password with openssl + set via usermod — bypasses PAM, always works
-(
-    hashed=$(printf '%s' "$password" | openssl passwd -6 -stdin 2>/dev/null)
-    usermod -p "$hashed" "$username"
-) &>/dev/null &
-spin_pid $! "Setting password"
-
-# Login is handled by SDDM (the graphical login manager). Autologin ON
-# configures SDDM to log the user straight into the Plasma desktop; OFF
-# shows the SDDM login page each boot.
+# Both first-run interfaces use the same validated, serialized root helper.
 if [[ "${al_choice,,}" != "n" ]]; then
-    mkdir -p /etc/sddm.conf.d
-    printf '[Autologin]\nUser=%s\nSession=plasma.desktop\n' "$username" \
-        > /etc/sddm.conf.d/20-autologin.conf
+    autologin=1
     al_note="${G}Autologin ON${E}  -- desktop loads automatically on boot"
 else
-    rm -f /etc/sddm.conf.d/20-autologin.conf
+    autologin=0
     al_note="${Y}Autologin OFF${E} -- SDDM shows a login page each boot"
 fi
 
-# Seed SDDM's last-user state so the login page greets the account we just
-# created (otherwise the first login has an empty username).
-mkdir -p /var/lib/sddm
-printf '[Last]\nUser=%s\nSession=/usr/share/wayland-sessions/plasma.desktop\n' "$username" \
-    > /var/lib/sddm/state.conf
-chown sddm:sddm /var/lib/sddm/state.conf 2>/dev/null || true
-
-# Switch to the graphical target so SDDM/Plasma starts after this reboot.
-spin "Enabling desktop" systemctl set-default graphical.target
-spin "Finalising" touch /var/lib/arkaos-firstboot-done
+configure_account() {
+    printf '%s\n' "$password" | /usr/libexec/arkaos-oobe-apply "$username" "$autologin"
+}
+if ! spin "Creating account and configuring desktop" configure_account; then
+    unset password confirm
+    printf '\n   Setup failed. The first-run flow has not completed.\n'
+    printf '   Choose a new username if an account was partially created.\n'
+    exit 1
+fi
+unset password confirm
 
 # ── Welcome ──────────────────────────────────────────────────────────────────
 if [[ $COLS -ge 80 ]]; then

@@ -64,6 +64,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arka-pulse",
+ "arka-shell-common",
  "clap",
  "hex",
  "reqwest",
@@ -78,6 +79,10 @@ dependencies = [
 [[package]]
 name = "arka-pulse"
 version = "0.0.1"
+
+[[package]]
+name = "arka-shell-common"
+version = "0.1.0"
 
 [[package]]
 name = "async-broadcast"

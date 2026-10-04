@@ -7,6 +7,10 @@ pub enum SandboxStatus {
 }
 
 impl SandboxStatus {
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Active)
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             Self::Active    => "Active",
@@ -46,6 +50,10 @@ pub enum BrowserSandbox {
 }
 
 impl BrowserSandbox {
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, Self::Persistent | Self::Ephemeral | Self::PrivateWorkspace)
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             Self::Persistent       => "Persistent",
@@ -75,4 +83,27 @@ impl From<&str> for BrowserSandbox {
 
 impl Default for BrowserSandbox {
     fn default() -> Self { Self::Unknown("Unknown".into()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BrowserSandbox, SandboxStatus};
+
+    #[test]
+    fn failed_and_unknown_sandbox_states_are_not_active() {
+        assert!(SandboxStatus::from("Active").is_active());
+        for value in ["Inactive", "Partial", "Unknown", "Initializing", "", "future-state"] {
+            assert!(!SandboxStatus::from(value).is_active(), "{value}");
+        }
+    }
+
+    #[test]
+    fn only_known_browser_modes_are_isolated() {
+        for value in ["Persistent", "Ephemeral", "PrivateWorkspace"] {
+            assert!(BrowserSandbox::from(value).is_isolated(), "{value}");
+        }
+        for value in ["None", "Unknown", "Initializing", "", "future-state"] {
+            assert!(!BrowserSandbox::from(value).is_isolated(), "{value}");
+        }
+    }
 }

@@ -17,6 +17,7 @@ sway-foot*
 /wp.png
 # config.toml tracked — remove from ignore
 arkad/target/
+arka-pulse/target/
 arka-shell/target/
 legacy/target/
 

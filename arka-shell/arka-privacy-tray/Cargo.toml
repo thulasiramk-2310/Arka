@@ -13,6 +13,7 @@ path = "src/main.rs"
 # log (/var/log/arkaos/privacy.jsonl). No new privileged path, no per-connection
 # or per-domain logging (that is phase 2 — see docs/PHASE2-LOGGING-SCOPE.md).
 [dependencies]
+arka-shell-common = { path = "../arka-shell-common", default-features = false }
 ksni = "0.3"
 zbus = { version = "5", features = ["tokio"] }
 tokio = { version = "1", features = ["full"] }

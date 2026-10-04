@@ -4,6 +4,7 @@
 
 use crate::backend::SystemBackend;
 use crate::facts::{Fact, Status};
+use arka_shell_common::{BrowserSandbox, DnsStatus, SandboxStatus};
 
 use super::ToolOutput;
 
@@ -67,8 +68,9 @@ pub async fn system_status<B: SystemBackend>(backend: &B) -> anyhow::Result<Tool
         s.browser_sandbox,
     );
 
-    let dns_on = s.dns_status.to_lowercase().contains("active")
-        || s.dns_status.to_lowercase().contains("dot");
+    let dns_on = DnsStatus::from(s.dns_status.as_str()).is_encrypted();
+    let browser_on = SandboxStatus::from(s.sandbox_status.as_str()).is_active()
+        && BrowserSandbox::from(s.browser_sandbox.as_str()).is_isolated();
     let facts = vec![
         Fact::new("score", format!("{}/100", s.privacy_score)).num(s.privacy_score as i64),
         Fact::new("mac", format!("randomized ({})", word(s.mac_randomization)))
@@ -84,7 +86,7 @@ pub async fn system_status<B: SystemBackend>(backend: &B) -> anyhow::Result<Tool
         )
         .stat(onoff(s.ipv6_privacy)),
         Fact::new("browser", s.browser_sandbox.clone()).stat(
-            if s.sandbox_status.to_lowercase().contains("active") {
+            if browser_on {
                 Status::On
             } else {
                 Status::Off
