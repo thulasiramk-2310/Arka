@@ -1,3 +1,5 @@
+mod install;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -314,9 +316,7 @@ fn build_apps_tab(
     catalog_flow.set_margin_start(16); catalog_flow.set_margin_end(16);
     catalog_flow.set_margin_bottom(16);
 
-    let inst = installed.borrow();
-    populate_catalog(&catalog_flow, CATALOG, "", &inst, favorites);
-    drop(inst);
+    populate_catalog(&catalog_flow, CATALOG, "", installed, favorites);
 
     content.append(&catalog_flow);
     scroll.set_child(Some(&content));
@@ -361,8 +361,7 @@ fn build_apps_tab(
             i += 1;
         }
         // Re-populate catalog
-        let inst = installed2.borrow();
-        populate_catalog(&cat_flow2, CATALOG, &q, &inst, &favorites2);
+        populate_catalog(&cat_flow2, CATALOG, &q, &installed2, &favorites2);
     });
 
     page
@@ -372,7 +371,7 @@ fn populate_catalog(
     flow: &gtk4::FlowBox,
     apps: &[CatalogApp],
     query: &str,
-    installed: &[String],
+    installed: &Rc<RefCell<Vec<String>>>,
     favorites: &Rc<RefCell<Vec<String>>>,
 ) {
     while let Some(child) = flow.first_child() { flow.remove(&child); }
@@ -385,14 +384,15 @@ fn populate_catalog(
     }).collect();
 
     for app in filtered {
-        let is_installed = installed.iter().any(|id| id == app.id);
-        flow.insert(&make_catalog_card(app, is_installed, favorites), -1);
+        let is_installed = installed.borrow().iter().any(|id| id == app.id);
+        flow.insert(&make_catalog_card(app, is_installed, installed, favorites), -1);
     }
 }
 
 fn make_catalog_card(
     app: &CatalogApp,
     installed: bool,
+    installed_ids: &Rc<RefCell<Vec<String>>>,
     favorites: &Rc<RefCell<Vec<String>>>,
 ) -> gtk4::FlowBoxChild {
     let child = gtk4::FlowBoxChild::new();
@@ -461,7 +461,29 @@ fn make_catalog_card(
         let b = gtk4::Button::with_label("Install");
         b.add_css_class("suggested-action");
         let id = app.id;
-        b.connect_clicked(move |_| install_app(id));
+        let installed_ids = installed_ids.clone();
+        b.connect_clicked(move |button| {
+            button.set_sensitive(false);
+            button.set_label("Installing…");
+            let button = button.clone();
+            let installed_ids = installed_ids.clone();
+            glib::MainContext::default().spawn_local(async move {
+                match install_app(id).await {
+                    Ok(()) => {
+                        let mut ids = installed_ids.borrow_mut();
+                        if !ids.iter().any(|value| value == id) { ids.push(id.to_owned()); }
+                        button.set_label("Installed ✓");
+                        button.remove_css_class("suggested-action");
+                        button.add_css_class("installed-btn");
+                    }
+                    Err(error) => {
+                        button.set_label("Retry install");
+                        button.set_tooltip_text(Some(&error));
+                        button.set_sensitive(true);
+                    }
+                }
+            });
+        });
         b
     };
     btn.set_halign(gtk4::Align::Fill);
@@ -712,22 +734,22 @@ fn save_favorites(favorites: &[String]) {
 
 // ── Utils ────────────────────────────────────────────────────────────────────
 
-fn install_app(id: &str) {
-    // Self-contained install: the image ships no pre-configured flatpak remote,
-    // so ensure Flathub exists first, then install. Both are done at the USER
-    // level (--user) so no root/polkit is needed — matching ArkaOS's single-user,
-    // least-privilege model. `--if-not-exists` makes the remote-add idempotent.
-    let cmd = format!(
-        "flatpak remote-add --user --if-not-exists flathub \
-             https://dl.flathub.org/repo/flathub.flatpakrepo && \
-         flatpak install --user -y flathub '{}' \
-             && echo '✓ Installed!' || echo '✗ Installation failed'; \
-         read -p 'Press Enter...'",
-        id
-    );
-    let _ = std::process::Command::new("konsole")
-        .args(["-e", "sh", "-c", &cmd])
-        .spawn();
+async fn install_app(id: &str) -> Result<(), String> {
+    use gtk4::gio::{Subprocess, SubprocessFlags};
+    use std::ffi::OsStr;
+    // --nofork keeps the child attached so the button can await completion.
+    // App IDs are positional arguments, never interpolated shell source.
+    let args = ["konsole", "--nofork", "-e", "sh", "-c", install::SCRIPT, "arka-capsule-install", id];
+    let argv: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
+    let terminal = Subprocess::newv(&argv, SubprocessFlags::NONE)
+        .map_err(|e| format!("Could not open the installer: {e}"))?;
+    terminal.wait_future().await.map_err(|e| format!("Installer failed: {e}"))?;
+    // A terminal exit alone does not prove installation. Query Flatpak anew.
+    let args = ["flatpak", "info", "--user", id];
+    let argv: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
+    let check = Subprocess::newv(&argv, SubprocessFlags::STDOUT_SILENCE | SubprocessFlags::STDERR_SILENCE)
+        .map_err(|e| format!("Could not verify installation: {e}"))?;
+    check.wait_check_future().await.map_err(|_| "Installation was cancelled or failed. Retry to view the details.".into())
 }
 
 fn flatpak_installed() -> Vec<String> {
