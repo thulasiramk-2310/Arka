@@ -1,6 +1,9 @@
 # ArkaOS Developer Preview 1
 
-**Version 0.1.0-dp1**
+**Version 0.1.0-dp1 — historical release notes**
+
+These notes and DP1 screenshots do not validate the current Fedora 44 candidate.
+“Configured” means a setting was found in place, not that a user is protected.
 
 Privacy-first • Immutable • Built on Linux • Designed for people
 
@@ -18,7 +21,9 @@ immutable image — updates are atomic, rollback is built in, and the root
 filesystem is read-only at runtime. A system daemon (arkad) continuously
 enforces privacy invariants (randomized MAC, encrypted DNS, generic hostname,
 IPv6 privacy addresses) and shows you what it did, in plain language, on a
-privacy dashboard. The browser runs in a sandbox that cannot see your files.
+privacy dashboard. The browser wrapper hides the real home except Downloads,
+which remains accessible. This does not isolate all applications or prevent
+network tracking.
 
 It looks and feels like one product: one palette, one typeface, one icon
 language, one motion system — from the boot splash to the login screen to

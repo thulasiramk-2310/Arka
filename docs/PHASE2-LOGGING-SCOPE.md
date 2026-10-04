@@ -18,8 +18,9 @@ by sandbox."*
 Not observable today. bubblewrap hides machine-id by **mount namespace** — the
 file is simply absent inside the sandbox, so Firefox gets `ENOENT` internally
 and **no block event is produced**. There is nothing to log. Phase 1 correctly
-asserts the sandbox *guarantee* as a state ("Sandboxed · no home, no
-machine-id") rather than faking an attempt that never surfaced.
+reports the configured wrapper boundary ("Home hidden except Downloads")
+without inventing access-attempt events. That configuration check alone does
+not prove a running browser is isolated.
 
 To make real per-attempt blocks observable would require one of:
 - seccomp with `SCMP_ACT_LOG` on the bwrap filter (logs *syscalls*, not paths —

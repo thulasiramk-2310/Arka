@@ -30,8 +30,9 @@ available by default.
 
 The OS ships as a single immutable image: updates are atomic, rollback is built
 in, and the root filesystem is read-only at runtime. A system daemon —
-[`arkad`](arkad/) — continuously enforces privacy protections and shows you
-everything it did, in plain language.
+[`arkad`](arkad/) — periodically checks configured privacy settings, retries failures, and logs
+selected enforcement events. A successful check describes those settings, not
+every application or network connection.
 
 > **Built on Linux. Designed for people.**
 
@@ -50,7 +51,7 @@ by design. Details: [Release Notes](docs/RELEASE-NOTES-DP1.md) · [Changelog](CH
 
 ## Since DP1 — DP2 groundwork
 
-Progress toward Developer Preview 2, verified as it lands (see [Field Notes](docs/FIELD-NOTES.md)):
+Source work and recorded test observations toward Developer Preview 2 (see [Field Notes](docs/FIELD-NOTES.md)):
 
 - 🖥️ **First bare-metal boot.** ArkaOS booted on real hardware for the first time —
   an Intel i5-10210U laptop, from a USB stick, internal disk untouched: GRUB → KDE
@@ -60,12 +61,13 @@ Progress toward Developer Preview 2, verified as it lands (see [Field Notes](doc
 - 🩺 **arka-pulse reliability engine.** A read-only *System Health* surface
   (`org.arka.pulse`, mirroring `arkad`): deterministic monitoring, honest about
   what it can't yet measure. See the [design](docs/RELIABILITY-ARKA-PULSE.md).
-- 🔒 **Privacy claims, audited.** Every Privacy Dashboard statement is now either
-  backed by the implementation or reworded to be precise — a managed Firefox policy
-  (Enhanced Tracking Protection + fingerprint-script blocking) makes the
-  anti-fingerprinting claim real; DNS/MAC/IPv6 wording tightened to what's actually
-  enforced. Honesty over marketing.
-- 🐞 **Fixes from real use:** browser-sandbox audio, Capsule (Flathub) app installs.
+- 🔒 **Privacy wording under review.** Firefox tracking and fingerprinting-script
+  blocking settings reduce some tracking; they do not prevent fingerprinting.
+  “Configured” means the checked setting is in place, not “you are protected.”
+  Missing or stale checks must remain unknown. See the [threat model](docs/THREAT-MODEL.md).
+- 🐞 **Source fixes from real use:** browser audio socket access and Capsule's
+  user-level Flathub setup. Playback and installation still need a rebuilt-image
+  test on the Nokia; source tests are not hardware confirmation.
 
 Still a developer preview — no installer, one hardware data point, and known polish
 (display scaling, login theme) tracked in the field notes.
@@ -84,17 +86,21 @@ lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## The privacy model
 
 <p align="center">
-  <img src="assets/branding/privacy.svg" width="100%" alt="App requests go through the permission manager and sandbox before reaching Linux and hardware; arkad enforces network privacy underneath everything"/>
+  <img src="assets/branding/privacy.svg" width="100%" alt="Conceptual privacy components: application permissions, browser sandbox and arkad configuration checks; not a universal access mediator"/>
 </p>
 
-**The browser cannot see your files.** Firefox runs inside bubblewrap: home
-hidden behind tmpfs, `/etc` reduced to an allowlist, no D-Bus, only
-`~/Downloads` passed through. The proof runs against the exact deployed
-wrapper: [PHASE4-SANDBOX.md](PHASE4-SANDBOX.md).
+**The browser has a restricted filesystem view.** The wrapper hides the real
+home except `~/Downloads`, which remains readable and writable. It exposes
+allowlisted system files, Wayland and audio sockets; audio access can include
+microphone recording. Session D-Bus is hidden. Earlier isolation checks are
+recorded in [PHASE4-SANDBOX.md](PHASE4-SANDBOX.md); each release still needs testing.
 
-**And underneath, always:** randomized MAC, encrypted DNS (DoT · Quad9),
-generic hostname, IPv6 privacy addresses — enforced at boot, re-verified every
-60 seconds, every event logged to the timeline your Dashboard renders.
+**Periodic configuration checks:** arkad attempts MAC randomization, strict
+DNS-over-TLS policy, a generic hostname and IPv6 temporary-address settings.
+Checks can fail; configured DNS policy does not prove that every app uses it.
+The tray requires a completed check less than three 30-second polls old.
+OS rollback selects another system deployment; it does not restore older
+personal files or guarantee that the selected image will boot.
 
 ## From one image, everything
 
@@ -120,6 +126,11 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 
 ## Screenshots
 
+**Historical DP1 screenshots — outdated for the Fedora 44 candidate.** Desktop,
+setup and theme work is changing. The dashboard score and report's DNS coverage
+shown below are obsolete indicators, not evidence of current protection or
+measured traffic. Replacement screenshots must come from a tested image.
+
 <p align="center">
   <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
 </p>
@@ -134,8 +145,8 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/dp1/dashboard.png" width="49%" alt="ArkaOS Privacy Dashboard — a 100/100 privacy score with network and browser protections listed as active"/>
-  <img src="assets/screenshots/dp1/privacy-report.png" width="49%" alt="ArkaOS Privacy Report — this week's privacy events, drifts caught, encrypted-DNS coverage and a live event timeline"/>
+  <img src="assets/screenshots/dp1/dashboard.png" width="49%" alt="Historical Privacy Dashboard with an obsolete 100/100 configuration score; not evidence of current protection"/>
+  <img src="assets/screenshots/dp1/privacy-report.png" width="49%" alt="Historical Privacy Report with obsolete inferred DNS coverage; not a current measurement"/>
 </p>
 
 <p align="center">

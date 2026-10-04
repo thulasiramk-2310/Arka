@@ -83,7 +83,7 @@ Flathub's AppStream instead of hand-curating, so branding stays aligned and
 self-updates; and let proprietary-app EULAs be accepted by the user at install
 time, not by ArkaOS.
 
-## Screenshot grid — done
+## Screenshot grid — historical DP1 capture
 
 Real captures only — no mockups. The full DP1 set was captured live (2026-07-11)
 and archived under `assets/screenshots/dp1/`: desktop, lock screen, wizard,
@@ -96,3 +96,7 @@ Forward-looking candidate work (hardware, FDE, installer, service abstractions,
 ecosystem, accessibility, …) is intentionally **not** here — it lives in
 `docs/FUTURE-CONSIDERATIONS.md`, committed to nothing, so this file stays a
 factual record of landed work rather than a speculative roadmap.
+
+DP1 screenshots are outdated for the Fedora 44 candidate. Their privacy scores
+and inferred DNS coverage are not current measurements; recapture after image
+validation and UI work are complete.

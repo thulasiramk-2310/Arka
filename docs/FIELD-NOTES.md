@@ -91,6 +91,13 @@ person living in it, or the assistant during a review).
 
 ## 2026-09-13 — FIRST BARE-METAL BOOT (Ram + assistant, real hardware)
 
+**2026-10-05 review:** this entry records historical observations, not current
+release validation. The original Nokia crash logs/photos were not located in
+the repository or the available build scratchpad. No kernel-crash diagnosis is
+established from these notes alone. The reported audio/remote causes and GPT
+workaround below remain useful evidence; current fixes still need hardware tests.
+A displayed 100/100 score was a configuration aggregate, not a protection proof.
+
 > ArkaOS booted on a **real laptop** for the first time ever — not a VM. Machine:
 > **Nokia PureBook, Intel Core i5-10210U, Intel UHD graphics, 8 GB RAM**, AMI
 > Aptio UEFI. Booted **externally from a USB stick** (BIB raw image `dd`'d to a
@@ -109,7 +116,8 @@ person living in it, or the assistant during a review).
 
 **"It just works" (bare metal)**
 - Wi-Fi connects, touchpad works, brightness + volume keys work, suspend/resume
-  works. arkad: PrivacyScore 100/100 (DoT/MAC/hostname/IPv6 all enforced).
+  works. arkad displayed PrivacyScore 100/100 for its DoT/MAC/hostname/IPv6
+  checks; this was not an independent audit of traffic or browser protection.
 
 **Awkward / bugs (real use surfaced them — batch-fix then reflash)**
 1. **No audio in sandboxed Firefox.** Volume 100 %, system audio fine (Intel sink
@@ -151,8 +159,9 @@ Audited every Privacy Dashboard claim against the actual implementation:
   image): *"No tracking cookies — deleted on close"* and *"Computer ID is hidden —
   websites can't fingerprint you."* Firefox runs at defaults (cookies persist, no
   RFP). **Must fix**: implement the protection (bake `policies.json`/`user.js` —
-  session cookies + fingerprinting resistance) so the claims become true, **or**
-  remove the claims. Implement is the on-brand choice.
+  session cookies + fingerprinting resistance) and describe their limits, **or**
+  remove the claims. Fingerprinting resistance cannot justify “websites cannot
+  fingerprint you.”
 - **Three claims are OVERSTATED** (backed but too absolute): DNS *"ISP cannot see
   what you look up"* (DoT hides queries, not destination IPs/SNI); *"Anonymous on
   local networks / can't identify your computer"* (MAC+hostname reduce ID, not
@@ -165,8 +174,9 @@ Fold the rewrites + Firefox config into the display/UX rebuild batch.
 - `dd` of the BIB raw image onto a *larger* USB leaves a **"primary GPT corrupt /
   PMBR size mismatch"**; strict AMI firmware then won't enumerate the stick as
   bootable (no UEFI-USB entry appears). Fix: `sudo sgdisk -e /dev/sdX` (relocate
-  the backup GPT to the physical end + rewrite a valid primary), then it boots.
-  Worth making BIB/first-boot self-heal this, or documenting it in BUILDING.md.
+  the backup GPT to the physical end), then it boots.
+  Now documented in BUILDING.md. Do not auto-repair disks at first boot; the
+  selected external stick must be explicitly identified before any write.
 
 **Would I miss it?** First real-hardware session, so too early — but seeing the
 green ARKA desktop fill a real panel, with Wi-Fi and the privacy score live, is

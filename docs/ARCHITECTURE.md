@@ -15,16 +15,15 @@ inside a bubblewrap sandbox that hides the real home, /etc secrets, and D-Bus.
 
 ## Why these foundations
 
-**Why bootc / immutable?** The privacy promise is only as strong as the
-integrity story. An OS defined by a `Containerfile` is reproducible, diffable,
-and atomic: an update either fully lands or doesn't exist. Rollback is free.
-Malware can't persist in a rootfs it can't write to (composefs mounts it
-read-only). This is the same architectural bet GrapheneOS makes on Android's
-verified boot — we take the closest desktop equivalent.
+**Why bootc / immutable?** Image deployments make system changes reviewable and
+provide atomic staging and a previous deployment for recovery. Read-only system
+files reduce routine modification; writable `/etc`, `/var` and user files remain
+persistence surfaces. Composefs alone is not a signed, end-to-end verified boot
+chain. Successful rollback and data preservation need release testing.
 
-**Why Fedora (fedora-bootc:42)?** Newest kernel/systemd/Plasma with a
-first-class bootc story. We tried CentOS Stream 10 first; it lacked sway/KDE
-freshness and its kernel misses CONFIG_FS_VERITY (see PHASE3-FINDINGS.md).
+**Why Fedora bootc?** The current candidate targets Fedora 44 for its kernel,
+systemd and Plasma integration. Earlier DP1 findings used Fedora 42; they do not
+validate a new image automatically.
 
 **Why KDE Plasma, not a custom compositor?** We built a Hyprland shell first
 (phases 5–12) and hit the long tail: window controls, session management,
@@ -65,11 +64,13 @@ arkaos-firstboot         — first-boot TUI: user creation, autologin choice
 
 ## How arkad works
 
-Single-threaded main loop (no tokio — nothing here needs async):
-enforce all invariants on start, then re-verify every 60 s and re-enforce on
-drift. Every enforcement/drift/recovery is appended to
-`/var/log/arkaos/privacy.jsonl` — that file is the source of truth for the
-dashboard timeline and weekly report. Enforcement goes through well-known CLI
+A Tokio loop attempts configuration on startup and checks each control on a
+bounded 10–60 second interval. Manual and periodic reconciliation share a mutex;
+subprocesses have timeouts. Failures stay unconfirmed and are retried. Selected
+enforcement/drift/recovery events are appended to
+`/var/log/arkaos/privacy.jsonl` — that file supplies the
+dashboard timeline and weekly event counts, not traffic or DNS uptime.
+Enforcement goes through well-known CLI
 tools (nmcli, hostnamectl, sysctl, resolved drop-ins), never bespoke netlink:
 auditable and boring on purpose. Config: `/etc/arkad/arkad.toml`
 (serde+toml, secure defaults baked in; runs with no file present).
@@ -79,10 +80,18 @@ auditable and boring on purpose. Config: `/etc/arkad/arkad.toml`
 `/usr/bin/firefox` → wrapper → bubblewrap → `/usr/bin/firefox-unwrapped`.
 Home is a tmpfs (real home invisible), /etc is an allowlist (no NetworkManager
 creds, no arkad config, no machine-id), /run is a tmpfs (no D-Bus), only
-~/Downloads is re-exposed rw. Wayland socket is passed through. Baked at build
-time; composefs makes the wrapper unremovable at runtime. Verified by proof:
-a sentinel file in the real home must be unreadable inside (`firefox --shell`
-runs the identical bwrap args for headless testing). See PHASE4-SANDBOX.md.
+~/Downloads is re-exposed rw. Wayland and audio sockets are passed through;
+direct audio-server access includes recording capability. The wrapper ships
+in the system image, but administrators and other browser installations can
+bypass it. Test its boundary with a sentinel file in the real home:
+`firefox --shell` uses identical bwrap arguments. Earlier observations are in
+PHASE4-SANDBOX.md; repeat them on each release candidate.
+
+`LastCheck` is a read-only D-Bus Unix timestamp updated only after a complete
+reconcile, including one with failed controls. Zero means no completed check.
+The tray polls every 30 seconds and accepts ages strictly below 90 seconds;
+missing, zero, future or older timestamps display a neutral unknown state.
+“Configured” describes settings found in place, not a general protection claim.
 
 ## Desktop branding pipeline (build → first login)
 

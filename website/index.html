@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ArkaOS — Privacy that's enforced, not promised.</title>
+<title>ArkaOS — Privacy settings. Clear status.</title>
 <meta name="description" content="ArkaOS is a privacy-first, immutable Linux desktop in Developer Preview — enforced privacy, atomic recovery, and a system you can inspect.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -98,7 +98,7 @@
     <div style="position:absolute;inset:0;background-image:linear-gradient(#0E1119 1px,transparent 1px),linear-gradient(90deg,#0E1119 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(circle at 30% 20%,#000,transparent 70%);mask-image:radial-gradient(circle at 30% 20%,#000,transparent 70%);pointer-events:none"></div>
     <div style="position:relative;min-width:0">
       <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.18em;color:#EAB94A;margin-bottom:22px">DEVELOPER PREVIEW · ARKAOS</p>
-      <h1 style="font-size:clamp(38px,5.4vw,62px);line-height:1.04;font-weight:700;letter-spacing:-.025em;text-wrap:pretty">Privacy that's <span style="color:#16C784">enforced</span>, not promised.</h1>
+      <h1 style="font-size:clamp(38px,5.4vw,62px);line-height:1.04;font-weight:700;letter-spacing:-.025em;text-wrap:pretty">Privacy settings.<br><span style="color:#16C784">Clear status.</span></h1>
       <p style="margin-top:22px;font-size:17px;line-height:1.6;color:#8B93A3;max-width:52ch;text-wrap:pretty">ArkaOS is an immutable Linux desktop designed around privacy, recoverability, and clear system state. Built on proven Linux infrastructure instead of reinventing it.</p>
       <div style="display:flex;gap:12px;margin-top:32px;flex-wrap:wrap">
         <a class="btnp" href="#try" style="font-size:14px;font-weight:600;color:#06070C;background:#16C784;padding:13px 22px;border-radius:7px">Try ArkaOS</a>
@@ -111,11 +111,11 @@
     <figure style="position:relative;min-width:0;background:#0E1119;border:1px solid #1C2230;border-radius:14px;padding:22px;box-shadow:0 0 0 1px rgba(22,199,132,.06),0 24px 60px -30px rgba(22,199,132,.25)">
       <figcaption style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:1px solid #1C2230;font-family:'JetBrains Mono',monospace;font-size:12.5px;flex-wrap:wrap">
         <span style="color:#EEF1F6">arkad · privacy daemon</span>
-        <span style="color:#16C784;display:flex;align-items:center;gap:7px"><span style="width:7px;height:7px;border-radius:50%;background:#16C784;display:inline-block;animation:arkaPulse 2.4s ease-in-out infinite"></span>enforcing</span>
+        <span style="color:#16C784;display:flex;align-items:center;gap:7px"><span style="width:7px;height:7px;border-radius:50%;background:#16C784;display:inline-block;animation:arkaPulse 2.4s ease-in-out infinite"></span>example configuration</span>
       </figcaption>
       <ul id="daemonRows" style="display:flex;flex-direction:column;gap:2px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px"></ul>
       <p style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3">re-checked every 60s</p>
-      <p style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8B93A3;line-height:1.5">Visual representation of arkad's enforced states — not live telemetry from your machine.</p>
+      <p style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8B93A3;line-height:1.5">Illustrative configuration states. Configured means a checked setting is in place, not that you are protected. This is not live status from your machine.</p>
     </figure>
   </section>
 
@@ -201,7 +201,7 @@
       <article class="card amber" style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
         <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EAB94A;letter-spacing:.14em">02</p>
         <h3 style="margin-top:14px;font-size:20px;font-weight:600">Recoverable by design</h3>
-        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">The system ships as an image, not as a pile of packages. Updates are atomic, and the previous image stays bootable.</p>
+        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">System updates are staged as images. A retained deployment provides a rollback option; successful boot and data preservation still need testing.</p>
         <ul style="margin-top:18px;display:flex;flex-direction:column;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">
           <li>read-only root</li><li>atomic updates</li><li>rollback</li><li>immutable image</li>
         </ul>
@@ -248,8 +248,8 @@
       <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
 
         <div style="background:#0E1119;border:1px solid #1C2230;border-top:2px solid #16C784;border-radius:10px;padding:26px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#16C784">VERIFIED</p>
-          <p style="margin-top:8px;font-size:13px;color:#8B93A3">Observed working in our test images.</p>
+          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#16C784">CONFIGURED / RECORDED TESTS</p>
+          <p style="margin-top:8px;font-size:13px;color:#8B93A3">Settings and mechanisms recorded in earlier images; the Fedora 44 candidate needs fresh release validation.</p>
           <ul style="margin-top:20px;display:flex;flex-direction:column;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.5;color:#EEF1F6">
             <li>MAC address randomized</li>
             <li>DNS-over-TLS to Quad9</li>
@@ -478,7 +478,7 @@ bootc-image-builder \
     { name: "ArkaOS Desktop", meta: "KDE Plasma session", tag: "ships today", color: "#16C784", body: "ArkaOS ships an unmodified KDE Plasma session. Arka-specific desktop surfaces are a design exploration, and are labelled as such wherever they are shown.", chips: ["KDE Plasma", "Wayland", "first-run setup · experimental"] },
     { name: "Applications + Sandbox", meta: "bubblewrap", tag: "ships today", color: "#16C784", body: "Firefox runs inside a bubblewrap sandbox with a restricted view of the filesystem. That is a real containment boundary, not complete isolation — a sandboxed browser can still be exploited.", chips: ["bubblewrap", "Firefox", "Flatpak apps"] },
     { name: "arkad + arka-pulse", meta: "Arka system services", tag: "the Arka layer", color: "#54D6C6", body: "arkad applies and re-checks privacy state. arka-pulse watches system health locally: telemetry, detection, prediction and verification. Automated recovery remains constrained and experimental.", chips: ["MAC randomization", "DoT · Quad9", "masked hostname", "IPv6 privacy addresses", "prediction · experimental"] },
-    { name: "Fedora bootc + composefs", meta: "immutable image foundation", tag: "upstream", color: "#EAB94A", body: "The whole OS is delivered as a container-native image. composefs mounts the root filesystem read-only and verifies it. Updates are atomic and the previous image stays bootable.", chips: ["read-only root", "atomic updates", "rollback", "ostree"] },
+    { name: "Fedora bootc + composefs", meta: "immutable image foundation", tag: "upstream", color: "#EAB94A", body: "System files arrive as a bootc image and are read-only at runtime. Composefs alone does not prove image authenticity. Updates are staged atomically; a retained deployment enables rollback, which still needs boot testing.", chips: ["read-only root", "atomic updates", "rollback", "ostree"] },
     { name: "Linux kernel", meta: "upstream Fedora kernel", tag: "upstream", color: "#8B93A3", body: "ArkaOS does not fork the kernel. Hardware support, security fixes and drivers come from the same place every other Fedora system gets them.", chips: ["upstream drivers", "systemd", "SELinux"] },
     { name: "Hardware", meta: "x86_64 · UEFI", tag: "in validation", color: "#8B93A3", body: "Real-hardware testing has begun on a small set of machines. Wi-Fi, GPU and suspend behaviour vary, and broad hardware compatibility is not something we can promise yet.", chips: ["UEFI boot", "measured boot · partial", "no compatibility guarantee"] }
   ];

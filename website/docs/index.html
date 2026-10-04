@@ -69,7 +69,7 @@
       <h1 style="margin-top:14px;font-size:clamp(32px,4.4vw,46px);font-weight:700;letter-spacing:-.025em;line-height:1.08">ArkaOS, documented as it actually is.</h1>
       <p style="margin-top:18px;font-size:17px;line-height:1.65;color:#8B93A3;text-wrap:pretty">This is a Developer Preview. These pages describe what runs today, what we are still validating, and what does not exist yet. Where a claim cannot be demonstrated, it is labelled rather than softened.</p>
       <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:11px">
-        <span style="border:1px solid rgba(22,199,132,.4);color:#16C784;border-radius:4px;padding:6px 10px">● VERIFIED</span>
+        <span style="border:1px solid rgba(22,199,132,.4);color:#16C784;border-radius:4px;padding:6px 10px">● CONFIGURED</span>
         <span style="border:1px solid rgba(84,214,198,.4);color:#54D6C6;border-radius:4px;padding:6px 10px">◐ EXPERIMENTAL</span>
         <span style="border:1px solid #2A3244;color:#8B93A3;border-radius:4px;padding:6px 10px">○ NOT YET</span>
       </div>
@@ -77,7 +77,7 @@
       <section id="what-is-arkaos" style="margin-top:64px;border-top:1px solid #1C2230;padding-top:36px">
         <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">01</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What is ArkaOS?</h2>
-        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">ArkaOS is an independent Linux desktop built on the Fedora bootc immutable image foundation. The runtime root filesystem is read-only, updates are atomic, and the previous image stays bootable. On top of that foundation it adds two system services of its own — <code style="color:#16C784">arkad</code> for privacy enforcement and <code style="color:#54D6C6">arka-pulse</code> for reliability monitoring — and ships a KDE Plasma desktop.</p>
+        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">ArkaOS is an independent Linux desktop built on the Fedora bootc immutable image foundation. System image files are read-only at runtime. Updates are staged atomically and a retained deployment can be selected for rollback; this does not guarantee a successful boot or restore personal files. On top of that foundation it adds two system services of its own — <code style="color:#16C784">arkad</code> for privacy enforcement and <code style="color:#54D6C6">arka-pulse</code> for reliability monitoring — and ships a KDE Plasma desktop.</p>
         <p style="margin-top:16px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The premise is narrow on purpose. Privacy settings that a careful user would configure by hand are applied by default and re-checked while the system runs. The system can describe its own state, and it can be returned to a known-good one.</p>
 
         <div style="margin-top:28px;background:#0E1119;border:1px solid #1C2230;border-left:2px solid #16C784;border-radius:10px;padding:24px">
@@ -89,7 +89,7 @@
 + recoverable system
 + Arka-specific desktop experience
 + transparent verification</pre>
-          <p style="margin-top:14px;font-size:14.5px;line-height:1.65;color:#8B93A3">Fedora KDE with a weekend of hardening gets you close on privacy. It does not give you enforcement that survives reboots and updates, a service that reports degradation, or a published list of what is unproven.</p>
+          <p style="margin-top:14px;font-size:14.5px;line-height:1.65;color:#8B93A3">ArkaOS packages privacy defaults and periodic checks with a desktop status surface. Settings can fail or conflict with local configuration; the project records these limits and tests each image.</p>
         </div>
 
         <h3 style="margin-top:36px;font-size:19px;font-weight:600">What ArkaOS is not</h3>
@@ -107,7 +107,7 @@
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">There is no installer ISO. Three routes work today. Start with the virtual machine unless you are testing hardware support on purpose.</p>
 
         <h3 style="margin-top:36px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Run in a VM <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#16C784;border:1px solid rgba(22,199,132,.4);border-radius:4px;padding:4px 8px">RECOMMENDED</span></h3>
-        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">QEMU/KVM with 4 GB of RAM and 40 GB of disk. Nothing touches your host disk, and rollback is safe to test.</p>
+        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">QEMU/KVM with 4 GB of RAM and 40 GB of disk. Use only a disposable image file and no physical disk passthrough. Test rollback and personal-data preservation inside that guest.</p>
         <pre style="margin-top:16px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.8;color:#EEF1F6;overflow-x:auto">qemu-system-x86_64 \
   -enable-kvm -m 4096 -smp 4 \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
@@ -122,7 +122,7 @@
         <p style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EAB94A;line-height:1.7">Select only a disposable external test stick by model, serial and size; unmount its partitions first. Never select the internal Linux/Windows disk. dd erases the whole selected stick. sgdisk -e moves the backup GPT to its physical end when the image is smaller; stop if writing or verification fails.</p>
 
         <h3 style="margin-top:40px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Build from source <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#54D6C6;border:1px solid rgba(84,214,198,.4);border-radius:4px;padding:4px 8px">CONTRIBUTORS</span></h3>
-        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">The image is a container build. Building it yourself is the only way to read exactly what is in the system you are booting.</p>
+        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">The image is a container build. The build recipe and resulting image can be inspected; building locally also lets you test source changes.</p>
         <pre style="margin-top:16px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.8;color:#EEF1F6;overflow-x:auto">git clone https://github.com/thulasiramk-2310/Arka
 cd Arka
 podman build -t arkaos:dev .
@@ -130,14 +130,14 @@ bootc-image-builder --type qcow2 arkaos:dev</pre>
 
         <div style="margin-top:32px;background:#0E1119;border:1px solid #1C2230;border-radius:10px;padding:22px">
           <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:#54D6C6">FIRST RUN</p>
-          <p style="margin-top:12px;font-size:14.5px;line-height:1.65;color:#8B93A3">A graphical first-run setup is being developed and validated. In the current preview, expect to confirm some settings from a terminal. <code style="color:#EEF1F6">arkad</code> applies its privacy state before the desktop session starts either way.</p>
+          <p style="margin-top:12px;font-size:14.5px;line-height:1.65;color:#8B93A3">A graphical first-run setup is being developed and validated. In the current preview, expect to confirm some settings from a terminal. <code style="color:#EEF1F6">arkad</code> attempts to apply privacy settings during startup; check its current status for failures.</p>
         </div>
       </section>
 
       <section id="prove" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
         <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">03</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What we prove / what we don't</h2>
-        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Each row states the mechanism, not the feeling. Where a stronger-sounding claim would be tempting, the weaker accurate one is written instead.</p>
+        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Configured means a checked setting is in place, not that you are protected. These rows describe expected mechanisms, not live checks of your machine. Missing or stale observations remain unknown; every candidate needs fresh image tests.</p>
 
         <div style="margin-top:28px;display:flex;flex-direction:column;gap:2px">
           <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) 110px;gap:16px;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#8B93A3;border-bottom:1px solid #1C2230">
@@ -281,18 +281,18 @@ $ bootc rollback         # return to the previous image</pre>
 
   // ── proof table ──
   var TAGS = {
-    verified: { label: "● verified", color: "#16C784" },
+    configured: { label: "● configured", color: "#16C784" },
     experimental: { label: "◐ experimental", color: "#54D6C6" },
     "not yet": { label: "○ not yet", color: "#8B93A3" }
   };
   var PROOFS = [
-    { mech: "MAC address randomized", note: "Per-connection randomization at the NetworkManager layer. Does not hide you from anything above link level.", tag: "verified" },
-    { mech: "DNS-over-TLS · Quad9", note: "Resolution is encrypted in transit and goes to Quad9 rather than your ISP's resolver.", tag: "verified" },
-    { mech: "Hostname masked", note: "A generic hostname is advertised on the network instead of your machine name.", tag: "verified" },
-    { mech: "IPv6 privacy addresses", note: "Temporary addresses rather than ones derived from the interface identifier.", tag: "verified" },
-    { mech: "Firefox in bubblewrap", note: "A real containment boundary with a restricted filesystem view. Not complete isolation.", tag: "verified" },
-    { mech: "Read-only runtime root", note: "The root filesystem is mounted read-only and verified by composefs.", tag: "verified" },
-    { mech: "Atomic update + rollback", note: "New images are staged and booted; the previous image stays bootable.", tag: "verified" },
+    { mech: "MAC address randomized", note: "Per-connection randomization at the NetworkManager layer. Does not hide you from anything above link level.", tag: "configured" },
+    { mech: "DNS-over-TLS · Quad9", note: "System resolver policy requires TLS to Quad9. This does not prove query success or cover applications using their own DNS.", tag: "configured" },
+    { mech: "Hostname masked", note: "A generic hostname is advertised on the network instead of your machine name.", tag: "configured" },
+    { mech: "IPv6 privacy addresses", note: "Temporary addresses rather than ones derived from the interface identifier.", tag: "configured" },
+    { mech: "Firefox in bubblewrap", note: "A real containment boundary with a restricted filesystem view. Not complete isolation.", tag: "configured" },
+    { mech: "Read-only runtime root", note: "System image files are read-only at runtime. Writable state remains; composefs alone does not establish verified boot.", tag: "configured" },
+    { mech: "Atomic update + rollback", note: "New system deployments are staged for boot. An available previous deployment can be selected; successful recovery still needs testing. Personal files are not rolled back.", tag: "configured" },
     { mech: "arka-pulse prediction", note: "Early warning models and thresholds are still being calibrated against real failures.", tag: "experimental" },
     { mech: "Bare-metal hardware support", note: "Testing has begun on a small set of machines. Wi-Fi, GPU and suspend vary.", tag: "experimental" },
     { mech: "Graphical first-run setup", note: "Being developed and validated. Expect terminal steps in the current preview.", tag: "experimental" },

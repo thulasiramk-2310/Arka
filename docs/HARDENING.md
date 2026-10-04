@@ -159,3 +159,46 @@ tests are excluded by default and must be reported separately.
 VM cleanup removed the previous Linux build machine and local firmware images.
 Image-level verification needs a freshly created, isolated build/test environment
 and disposable image files. It must never use a physical host disk as a target.
+
+## 2026-10-05 work-item verification
+
+- arkad exposes read-only `LastCheck`, Unix seconds of the last completed
+  reconcile. Completed failures also advance it; cancellation does not. The
+  tray polls every 30 seconds, requires age <90 seconds, and uses a neutral
+  unknown icon when the timestamp is missing, zero, future or expired.
+- `arka-update::status::parse_status` parses bootc v1 JSON without commands or
+  UI changes. It preserves unknown version metadata, distinguishes staged
+  downloads from restart-ready updates, handles queued rollback, and rejects
+  malformed/non-bootc input. Rollback availability is not boot-success proof.
+- Firefox explicitly selects the mounted PulseAudio compatibility socket and
+  exposes that socket rather than its entire runtime directory. A read-only
+  `pactl info` connection succeeded through the real wrapper with a temporary
+  home on the development Linux host. This does not verify audible playback
+  in the Nokia image.
+- Capsule configures the user Flathub remote before installation, preserves
+  command failures, displays launch failures, waits asynchronously, and queries
+  Flatpak before marking an app installed. Regression tests use fake commands;
+  a real install on the rebuilt image is still a release check.
+- Local validation: all 13 shell crates built under `cargo test --workspace`
+  (40 tests passed), 9 daemon tests passed using an isolated test bus, 7 browser
+  wrapper tests passed, and 16 setup-helper tests passed. ShellCheck 0.11.0
+  passed on all four requested shell helpers. Existing dashboard GTK
+  deprecation warnings remain in the UI owned by the parallel work.
+- CI now tests every shell crate, including OOBE, and checks all four shell
+  helpers. Local results do not claim a hosted CI run or validate an image.
+- README, website and documentation now explain that “Configured” means a
+  setting is in place. DP1 screenshots are flagged as outdated, especially
+  privacy-score and inferred DNS-coverage panels.
+
+The original Nokia USB-boot crash logs/photos were not located. The historical
+field notes report missing browser audio sockets, an absent Flathub remote and
+backup-GPT placement after flashing a smaller raw image to a larger stick.
+Those observations do not establish the cause of a kernel or desktop crash.
+The USB documentation adds `sgdisk -e` followed by verification, for an explicitly
+selected external test stick only. No physical disks were attached to test guests or modified
+for these checks.
+
+Upstream references: [bootc status schema](https://github.com/bootc-dev/bootc/blob/main/crates/lib/src/spec.rs),
+[bootc rollback behavior](https://bootc.dev/bootc/man/bootc-rollback.8.html),
+[PulseAudio client server selection](https://wiki.freedesktop.org/www/Software/PulseAudio/FAQ/),
+[sgdisk options](https://www.rodsbooks.com/gdisk/sgdisk.html).

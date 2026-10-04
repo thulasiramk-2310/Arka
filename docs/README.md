@@ -43,3 +43,12 @@ appears repeatedly is a candidate. Only candidates that survive real use — and
 get a decision recorded — become merged facts in `DP2.md` and ship. This is how
 the project stays focused: **release scope is shaped by experience, not by
 speculation.**
+
+## Reading status and historical evidence
+
+“Configured” means the relevant setting was found in place at the recorded
+check. It does not mean “you are protected,” anonymous, or immune to attack.
+Missing/stale checks are unknown; source tests do not validate a booted image.
+DP1 screenshots are historical and outdated for the Fedora 44 candidate,
+especially the dashboard score and inferred DNS-coverage report. See
+[release validation](RELEASE-VALIDATION.md) and the [threat model](THREAT-MODEL.md).
