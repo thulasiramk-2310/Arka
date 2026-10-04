@@ -14,7 +14,7 @@ import unittest
 
 
 MOCK_COMMAND = r'''#!/usr/bin/python3
-import json, os
+import json, os, subprocess
 from pathlib import Path
 import sys
 name = Path(sys.argv[0]).name
@@ -33,6 +33,10 @@ if name == 'useradd':
         accounts.write(sys.argv[-1] + '\n')
 if name == 'chpasswd':
     (root / 'password-input').write_text(sys.stdin.read())
+if name == 'runuser':
+    assert sys.argv[1] == '-u' and sys.argv[3] == '--'
+    assert sys.argv[2] in (root / 'accounts').read_text().splitlines()
+    sys.exit(subprocess.run(sys.argv[4:], check=False).returncode)
 '''
 
 
@@ -49,20 +53,23 @@ class ApplyTests(unittest.TestCase):
             'ARKA_OOBE_HELPER_SOURCE',
             Path(__file__).resolve().parents[1] / 'arkaos-oobe-apply',
         )).read_text()
-        for prefix in ('/run/', '/etc/', '/var/lib/'):
+        for prefix in ('/run/', '/etc/', '/var/lib/', '/home/'):
             source = source.replace(prefix, str(self.root) + prefix)
         self.helper = self.root / 'helper'
         self.helper.write_text(source)
-        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl'):
+        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser'):
             command = self.root / 'bin' / name
             command.write_text(MOCK_COMMAND)
             command.chmod(0o755)
         self.env = dict(os.environ, OOBE_TEST_ROOT=str(self.root))
         self.env['PATH'] = str(self.root / 'bin') + os.pathsep + '/usr/bin:/bin'
 
-    def run_helper(self, user='alice', autologin='1', password='test-password\n'):
+    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None):
+        args = ['bash', str(self.helper), user, autologin]
+        if look is not None:
+            args.append(look)
         return subprocess.run(
-            ['bash', str(self.helper), user, autologin], input=password,
+            args, input=password,
             text=True, capture_output=True, env=self.env, timeout=5,
         )
 
@@ -129,6 +136,37 @@ class ApplyTests(unittest.TestCase):
         result = self.run_helper(autologin='0')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(config.exists())
+
+    def test_new_look_is_written_through_the_unprivileged_account(self):
+        result = self.run_helper(look='light')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'home/alice/.config/arka-look').read_text(), 'light\n')
+        import json
+        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        writes = [call for call in calls if call[0] == 'runuser']
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][1:4], ['-u', 'alice', '--'])
+        self.assertNotIn('test-password', str(writes))
+
+    def test_legacy_caller_defaults_to_dark(self):
+        self.assertEqual(self.run_helper().returncode, 0)
+        self.assertEqual((self.root / 'home/alice/.config/arka-look').read_text(), 'dark\n')
+
+    def test_invalid_look_is_rejected_before_account_creation(self):
+        for look in ['', 'blue', '../dark', 'light\ndark']:
+            # An omitted argument defaults to dark; an explicit empty argument
+            # follows the helper's current defaulting convention too.
+            if not look:
+                continue
+            self.assertNotEqual(self.run_helper(look=look).returncode, 0)
+            self.assert_no_account_changes()
+
+    def test_failed_unprivileged_write_does_not_complete_setup(self):
+        self.env['OOBE_TEST_FAIL'] = 'runuser'
+        self.assertNotEqual(self.run_helper(look='light').returncode, 0)
+        self.assertFalse((self.root / 'var/lib/arkaos-firstboot-done').exists())
+        self.assertFalse((self.root / 'home/alice/.config/arka-look').exists())
+        self.assertTrue((self.root / 'etc/sudoers.d/95-arkaos-oobe').exists())
 
     def test_user_creation_failure_does_not_set_password_or_finish(self):
         self.env['OOBE_TEST_FAIL'] = 'useradd'

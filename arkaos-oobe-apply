@@ -8,15 +8,17 @@
 # This is the only privileged step: create the account the user just entered,
 # set autologin, switch to the graphical target, and mark first-boot done.
 #
-#   usage: arkaos-oobe-apply <username> <autologin:0|1>   (password on stdin)
+#   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark]
+#          (password on stdin; look defaults to dark, the image default)
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-    echo "arkaos-oobe-apply: expected username and autologin flag" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "arkaos-oobe-apply: expected username, autologin flag and optional look" >&2
     exit 2
 fi
 user="$1"
 autologin="$2"
+look="${3:-dark}"
 
 # Serialize account creation, including retries from the graphical and TUI paths.
 exec 9>/run/arkaos-oobe.lock
@@ -37,6 +39,11 @@ if [[ "$autologin" != "0" && "$autologin" != "1" ]]; then
     exit 2
 fi
 
+if [[ "$look" != "light" && "$look" != "dark" ]]; then
+    echo "arkaos-oobe-apply: invalid look" >&2
+    exit 2
+fi
+
 # Never reset an existing account, including root or the setup user.
 if id -u "$user" >/dev/null 2>&1; then
     echo "arkaos-oobe-apply: account already exists; choose a new username" >&2
@@ -53,6 +60,15 @@ trap 'unset pass' EXIT
 useradd -m -G wheel -s /bin/bash "$user"
 printf '%s:%s\n' "$user" "$pass" | chpasswd
 unset pass
+
+# The new account can already log in. Never follow its .config links as root.
+# Apply this user-owned preference with that account's permissions instead.
+runuser -u "$user" -- sh -c '
+    set -eu
+    umask 077
+    mkdir -p -- "$1/.config"
+    printf "%s\n" "$2" > "$1/.config/arka-look"
+' arka-setup-look "/home/$user" "$look"
 
 mkdir -p /etc/sddm.conf.d
 if [ "$autologin" = "1" ]; then

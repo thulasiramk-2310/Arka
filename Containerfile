@@ -347,6 +347,10 @@ RUN set -e; \
 # an existing build cache is not invalidated.)
 RUN systemctl mask plasma-setup.service
 
+# Monospace font the desktop config already names (kdeglobals fixed=) and the
+# setup screen types its "hello world" in.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y jetbrains-mono-fonts
+
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Copied here, a code change only reruns this block
 # instead of the themes, wallpaper, splash and initramfs above. Units and

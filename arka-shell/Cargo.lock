@@ -62,6 +62,7 @@ dependencies = [
 name = "arka-oobe"
 version = "0.1.0"
 dependencies = [
+ "arka-shell-common",
  "gtk4",
  "libadwaita",
 ]
