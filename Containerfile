@@ -17,7 +17,7 @@ RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
 
 # Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
 FROM docker.io/fedora:${FEDORA_VERSION} AS shell-builder
-RUN dnf install -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
 COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --locked --release
@@ -34,13 +34,13 @@ RUN mkdir -p /usr/lib/bootc/install && \
       > /usr/lib/bootc/install/00-defaults.toml
 
 # Phase 3a: UKI toolchain + systemd-boot EFI binary
-RUN dnf install -y systemd-ukify systemd-boot-unsigned binutils
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y systemd-ukify systemd-boot-unsigned binutils
 
 # Switch kernel-install to UKI layout
 RUN printf 'layout=uki\nuki_generator=ukify\n' > /etc/kernel/install.conf
 
 # Phase 4: bubblewrap-sandboxed Firefox
-RUN dnf install -y firefox bubblewrap
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y firefox bubblewrap
 COPY arkaos-firefox /usr/bin/firefox-sandbox
 RUN chmod 755 /usr/bin/firefox-sandbox && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
@@ -54,13 +54,12 @@ RUN chmod 755 /usr/bin/firefox-sandbox && \
 # bootc base, so its cpio unpack fails the whole transaction. It's cosmetic.
 # retries=25 + fastestmirror ride out the transient Fedora mirror hiccups that
 # otherwise fail this 1500-package transaction ("All mirrors were tried").
-RUN dnf install -y --setopt=retries=25 --setopt=fastestmirror=True \
-    --setopt=max_parallel_downloads=4 --exclude=rootfiles \
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 --setopt=fastestmirror=True \
+    --setopt=max_parallel_downloads=10 --exclude=rootfiles \
     @kde-desktop-environment sddm \
     pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
     libadwaita flatpak xdg-user-dirs brightnessctl \
-    bluez bluez-tools zram-generator-defaults && \
-    dnf clean all
+    bluez bluez-tools zram-generator-defaults
 
 # Enable SDDM (started once firstboot flips the default to graphical.target).
 # Default to the Plasma Wayland session.
@@ -71,42 +70,20 @@ RUN systemctl enable sddm.service && \
 
 
 # Install arkad
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/arkad /usr/bin/arkad
 COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
 COPY arkad/arkad.toml /etc/arkad/arkad.toml
 COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
 COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
-RUN chmod 755 /usr/bin/arkad && \
-    mkdir -p /etc/arkad && \
+RUN mkdir -p /etc/arkad && \
     systemctl enable arkad.service
 
 # Install arka-pulsed (reliability daemon; read-only org.arka.pulse, mirrors arkad)
-COPY --from=builder /arka-pulse/target/x86_64-unknown-linux-musl/release/arka-pulsed /usr/bin/arka-pulsed
 COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
 COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
 COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
 COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
-RUN chmod 755 /usr/bin/arka-pulsed && \
-    systemctl enable arka-pulsed.service
+RUN systemctl enable arka-pulsed.service
 
-# Install arka-shell binaries. arka-bar / arka-dock / arka-launcher are NOT
-# shipped: the Plasma panel, icontasks dock, and kickerdash launcher replace
-# them. Their source is archived under legacy/ (see legacy/README.md).
-COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
-COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
-COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
-COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
-COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
-COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
-COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
-COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
-COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
-COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
-COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
-RUN chmod 755 /usr/bin/arka-dashboard /usr/bin/arka-wifi \
-              /usr/bin/arka-update /usr/bin/arka-hotkeys /usr/bin/arka-capsule \
-              /usr/bin/arka-perms /usr/bin/arka-settings-gtk /usr/bin/arka-welcome \
-              /usr/bin/arka-sound /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray
 
 # Firefox managed privacy policy: Enhanced Tracking Protection (strict) with
 # cryptomining + fingerprinting blocking. Placed in Firefox's app-dir under /usr
@@ -155,10 +132,9 @@ RUN systemctl set-default multi-user.target
 # grants it seat0 (DRM+input), and its login shell launches cage + the arka-oobe
 # GTK wizard. arka-oobe runs unprivileged and creates the account only through a
 # tight NOPASSWD sudo helper. If cage can't start, it falls back to the TUI.
-RUN dnf install -y --setopt=retries=25 cage && dnf clean all
-COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 cage
 COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
-RUN chmod 755 /usr/bin/arka-oobe /usr/libexec/arkaos-oobe-apply && \
+RUN chmod 755 /usr/libexec/arkaos-oobe-apply && \
     useradd -m -s /bin/bash arkasetup && passwd -l arkasetup && \
     printf 'arkasetup ALL=(root) NOPASSWD: /usr/libexec/arkaos-oobe-apply, /usr/libexec/arkaos-firstboot\n' \
       > /etc/sudoers.d/95-arkaos-oobe && \
@@ -172,7 +148,7 @@ RUN chmod 755 /usr/bin/arka-oobe /usr/libexec/arkaos-oobe-apply && \
 # ArkaOS default wallpaper: aurora light + the boot splash's glowing triangles,
 # no text, rendered at 4K so HiDPI panels stay sharp. Users can change it.
 COPY wallpapers/make-default.sh /tmp/make-default.sh
-RUN dnf install -y -q ImageMagick && \
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q ImageMagick && \
     mkdir -p /usr/share/arka/wallpapers && \
     sh /tmp/make-default.sh /usr/share/arka/wallpapers/default.png 3840 2160 && \
     rm /tmp/make-default.sh && \
@@ -183,7 +159,7 @@ COPY desktop-files/ /usr/share/applications/
 
 # ── ArkaWM: brand KDE Plasma as ArkaOS ──────────────────────────────────────
 # Inter typeface (ArkaOS design system) + the ArkaOS Plasma color scheme.
-RUN dnf install -y rsms-inter-fonts && dnf clean all
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y rsms-inter-fonts
 COPY ArkaOS.colors /usr/share/color-schemes/ArkaOS.colors
 
 # Design-system defaults for every new user (read from /etc/skel on account
@@ -276,14 +252,13 @@ COPY arka-icons/ /usr/share/icons/Arka/
 # The KDE spin already ships power profiles (tuned-ppd — same D-Bus API as
 # power-profiles-daemon, which CONFLICTS with it) plus kio-extras and
 # ffmpegthumbs for file previews. Only the plymouth script engine is missing.
-RUN dnf install -y --setopt=retries=25 plymouth-plugin-script && \
-    dnf clean all
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 plymouth-plugin-script
 
 # ArkaCursor: white pointer with green outline, generated at build; every
 # other shape inherits from breeze_cursors. ArkaSound: soft sine-based event
 # sounds. Plymouth splash images. All need ImageMagick/xcursorgen/sox once.
 COPY plymouth-theme-arkaos/ /usr/share/plymouth/themes/arkaos/
-RUN dnf install -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
     # -- cursor ---------------------------------------------------------------
     mkdir -p /tmp/cur /usr/share/icons/ArkaCursor/cursors && \
     cd /tmp/cur && \
@@ -326,7 +301,7 @@ RUN dnf install -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
     sh make-assets.sh && \
     rm make-assets.sh && \
     rm -rf /tmp/cur && \
-    dnf remove -y -q ImageMagick xcursorgen sox && dnf clean all
+    dnf remove -y -q ImageMagick xcursorgen sox
 
 # Default cursor theme for new users.
 RUN printf '[Mouse]\ncursorTheme=ArkaCursor\n' > /etc/skel/.config/kcminputrc
@@ -353,6 +328,32 @@ RUN set -e; \
       --os-release /etc/os-release \
       --output /usr/lib/modules/${KVER}/${KVER}.efi; \
     echo "UKI built: $(ls -lh /usr/lib/modules/${KVER}/${KVER}.efi)"
+
+# Built binaries go in LAST: they change on every Rust edit, and anything after
+# a changed layer rebuilds. Copied here, a code change only reruns this block
+# instead of the themes, wallpaper, splash and initramfs above. Units and
+# configs that reference them are installed (and enabled) earlier; nothing in
+# between executes them. arka-bar / arka-dock / arka-launcher are not shipped:
+# Plasma's panel, icontasks dock and kickerdash replace them (see legacy/).
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/arkad /usr/bin/arkad
+COPY --from=builder /arka-pulse/target/x86_64-unknown-linux-musl/release/arka-pulsed /usr/bin/arka-pulsed
+COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
+COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
+COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
+COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
+COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
+COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
+COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
+COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
+COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
+COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
+COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
+COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
+      /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \
+      /usr/bin/arka-hotkeys /usr/bin/arka-capsule /usr/bin/arka-perms \
+      /usr/bin/arka-settings-gtk /usr/bin/arka-welcome /usr/bin/arka-sound \
+      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray
 
 RUN bootc container lint
 
