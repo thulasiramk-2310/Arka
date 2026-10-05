@@ -156,6 +156,8 @@ trait Arkad {
     #[zbus(property)]
     fn ipv6_privacy(&self) -> zbus::Result<bool>;
     #[zbus(property)]
+    fn firewall(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
     fn browser_sandbox(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn sandbox_status(&self) -> zbus::Result<String>;
@@ -169,6 +171,7 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
     let dns = p.dns_status().await.unwrap_or_else(|_| "Unknown".into());
     let hostname = p.hostname_privacy().await.unwrap_or(false);
     let ipv6 = p.ipv6_privacy().await.unwrap_or(false);
+    let firewall = p.firewall().await.ok()?;
     let browser = p.browser_sandbox().await.unwrap_or_else(|_| "Unknown".into());
     let sandbox = p.sandbox_status().await.unwrap_or_else(|_| "Unknown".into());
     // A slow read or an intervening reconcile must not bless an old snapshot.
@@ -182,6 +185,7 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
         dns_detail: dns,
         hostname,
         ipv6,
+        firewall,
         browser_ok,
         browser_detail: if browser_ok {
             format!("Sandboxed — {browser}")

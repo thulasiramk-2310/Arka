@@ -33,6 +33,7 @@ pub struct Enforcement {
     pub dns_ok: bool,
     pub hostname: bool,
     pub ipv6: bool,
+    pub firewall: bool,
     pub browser_detail: String,
     pub browser_ok: bool,
 }
@@ -46,7 +47,7 @@ pub struct Row {
 }
 
 impl Enforcement {
-    /// The five protection rows, in a stable order.
+    /// The six setting rows, in a stable order.
     pub fn rows(&self) -> Vec<Row> {
         vec![
             Row { name: "Hardware address", detail: if self.mac { "Randomized per network".into() } else { "Not randomized".into() }, active: self.mac },
@@ -54,12 +55,13 @@ impl Enforcement {
             Row { name: "Hostname", detail: if self.hostname { "Masked to \u{201c}arka\u{201d}".into() } else { "Not masked".into() }, active: self.hostname },
             Row { name: "IPv6", detail: if self.ipv6 { "Temporary addresses on".into() } else { "Temporary addresses off".into() }, active: self.ipv6 },
             Row { name: "Browser", detail: self.browser_detail.clone(), active: self.browser_ok },
+            Row { name: "Firewall", detail: if self.firewall { "Incoming rules configured".into() } else { "Incoming rules not confirmed".into() }, active: self.firewall },
         ]
     }
 
     /// True only when every protection is currently active.
     pub fn all_active(&self) -> bool {
-        self.mac && self.dns_ok && self.hostname && self.ipv6 && self.browser_ok
+        self.mac && self.dns_ok && self.hostname && self.ipv6 && self.browser_ok && self.firewall
     }
 
     /// Names of protections that are currently NOT active (for a critical alert).
@@ -285,16 +287,27 @@ mod tests {
             dns_ok: true,
             hostname: true,
             ipv6: true,
+            firewall: true,
             browser_detail: "Ephemeral sandbox".into(),
             browser_ok: true,
         }
     }
 
     #[test]
+    fn unconfirmed_firewall_cannot_show_a_green_tray() {
+        let mut e = enf_all_on();
+        e.firewall = false;
+        assert!(!e.all_active());
+        assert_eq!(level(&e, false), Level::Critical);
+        assert_eq!(e.down(), vec!["Firewall"]);
+        assert!(!e.rows().last().unwrap().active);
+    }
+
+    #[test]
     fn all_active_and_rows() {
         let e = enf_all_on();
         assert!(e.all_active());
-        assert_eq!(e.rows().len(), 5);
+        assert_eq!(e.rows().len(), 6);
         assert!(e.rows().iter().all(|r| r.active));
         assert!(e.down().is_empty());
     }
