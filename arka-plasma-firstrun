@@ -7,20 +7,6 @@
 # Give plasmashell a moment to be ready for the apply tools.
 sleep 3
 
-# In a VM the virtual display often defaults to 640x480; bump it to a usable
-# size by resolving the mode ID for a comfortable resolution. No-op on real
-# hardware (the output name won't match Virtual-*).
-VOUT=$(kscreen-doctor -o 2>/dev/null | grep -oE 'Virtual-[0-9]+' | head -1)
-if [ -n "$VOUT" ]; then
-    INFO=$(kscreen-doctor -o 2>/dev/null)
-    for RES in 1440x900 1600x900 1280x800 1280x720 1024x768; do
-        MID=$(printf '%s' "$INFO" | grep -oE "[0-9]+:${RES}@" | head -1 | cut -d: -f1)
-        if [ -n "$MID" ]; then
-            kscreen-doctor "output.$VOUT.mode.$MID" 2>/dev/null && { sleep 1; break; }
-        fi
-    done
-fi
-
 # Apply the look chosen in setup (written by arkaos-oobe-apply; dark when
 # absent): colours, Plasma style, icons and wallpapers. The same script backs
 # ArkaOS Settings > Appearance, so both always agree.
@@ -39,7 +25,9 @@ for _ in $(seq 1 40); do
     sleep 0.5
 done
 sleep 1
-if [ -f "$LAYOUT" ]; then
+# New desktops get the ArkaOS layout from the ArkaOS global theme; only
+# reshape a desktop that doesn't have it yet (e.g. created before that existed).
+if [ -f "$LAYOUT" ] && ! grep -q "org.kde.plasma.kickerdash" "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null; then
     dbus-send --session --type=method_call --dest=org.kde.plasmashell \
         /PlasmaShell org.kde.PlasmaShell.evaluateScript \
         string:"$(cat "$LAYOUT")" 2>/dev/null || true

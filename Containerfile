@@ -118,9 +118,7 @@ RUN systemctl set-default multi-user.target
 # GTK wizard. arka-oobe runs unprivileged and creates the account only through a
 # tight NOPASSWD sudo helper. If cage can't start, it falls back to the TUI.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 cage
-COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
-RUN chmod 755 /usr/libexec/arkaos-oobe-apply && \
-    useradd -m -s /bin/bash arkasetup && passwd -l arkasetup && \
+RUN useradd -m -s /bin/bash arkasetup && passwd -l arkasetup && \
     printf 'arkasetup ALL=(root) NOPASSWD: /usr/libexec/arkaos-oobe-apply, /usr/libexec/arkaos-firstboot\n' \
       > /etc/sudoers.d/95-arkaos-oobe && \
     mkdir -p /etc/systemd/system/getty@tty1.service.d && \
@@ -161,10 +159,8 @@ RUN mkdir -p /etc/skel/.config && \
 
 # First-login one-shot: apply the ArkaOS wallpaper + accent via the official
 # Plasma CLI tools (reliable across versions), then disable itself.
-RUN mkdir -p /etc/skel/.config/autostart /usr/share/arka
-COPY arka-layout.js /usr/share/arka/arka-layout.js
-COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
-RUN chmod 755 /usr/libexec/arka-plasma-firstrun && \
+# (arka-plasma-firstrun and arka-layout.js are installed in the late block.)
+RUN mkdir -p /etc/skel/.config/autostart /usr/share/arka && \
     printf '[Desktop Entry]\nType=Application\nName=ArkaOS Branding\nExec=/usr/libexec/arka-plasma-firstrun\nX-KDE-autostart-phase=2\nOnlyShowIn=KDE\nNoDisplay=true\n' \
       > /etc/skel/.config/autostart/arka-plasma-firstrun.desktop
 
@@ -188,11 +184,8 @@ RUN printf 'd /var/lib/sddm/.config 0755 sddm sddm -\nC /var/lib/sddm/.config/kd
 RUN printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=/usr/share/arka/wallpapers/default.png\n' \
       > /etc/skel/.config/kscreenlockerrc
 
-# Desktop wallpaper preset so the Arka wallpaper shows from the FIRST frame
-# (kills the default-Plasma → Arka flash). arka-plasma-firstrun still applies it
-# via plasma-apply-wallpaperimage as a fallback if the containment id differs.
-RUN printf '[Containments][1]\nwallpaperplugin=org.kde.image\n\n[Containments][1][Wallpaper][org.kde.image][General]\nImage=file:///usr/share/arka/wallpapers/default.png\n' \
-      > /etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc
+# (The desktop wallpaper and panel layout now come from the ArkaOS global
+# themes built in the late block, so the first frame is already ArkaOS.)
 
 # Keep expensive optional effects off by default on modest graphics hardware.
 # Users can enable them through Plasma Desktop Effects.
@@ -349,6 +342,50 @@ RUN cp -a /usr/share/icons/Arka /usr/share/icons/Arka-Light && \
 # /run/arkaos/bootc-status.json at boot, every 10 min, and when deployments change.
 COPY systemd/arka-bootc-status.service systemd/arka-bootc-status.timer systemd/arka-bootc-status.path /usr/lib/systemd/system/
 RUN systemctl enable arka-bootc-status.timer arka-bootc-status.path
+
+# ArkaOS wallpapers as real KDE wallpaper packages, and the system default
+# (plasmarc [Wallpapers] defaultWallpaperTheme): the very first frame of a new
+# desktop is ArkaOS's, instead of KDE's "Next" until a login script swaps it.
+RUN for look in Dark Light; do \
+      l=$(echo $look | tr A-Z a-z); d=/usr/share/wallpapers/ArkaOS-$look; \
+      mkdir -p $d/contents/images && \
+      ln -sf /usr/share/arka/wallpapers/default-$l.png $d/contents/images/3840x2160.png && \
+      printf '{"KPlugin":{"Id":"ArkaOS-%s","Name":"ArkaOS %s","License":"GPL-3.0-or-later","Authors":[{"Name":"ArkaOS"}]}}\n' "$look" "$look" > $d/metadata.json; \
+    done && \
+    printf '[Wallpapers]\ndefaultWallpaperTheme=ArkaOS-Dark\ndefaultFileSuffix=.png\ndefaultWidth=3840\ndefaultHeight=2160\n' > /etc/xdg/plasmarc
+
+# Setup helper and first-login script (here so editing them is a cheap rebuild).
+COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
+COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
+COPY arka-layout.js /usr/share/arka/arka-layout.js
+RUN chmod 755 /usr/libexec/arkaos-oobe-apply /usr/libexec/arka-plasma-firstrun
+
+# ArkaOS global themes ("look-and-feel"), built from Breeze's. Plasma reads a
+# new desktop's wallpaper and panel layout from the global theme, so these
+# make the very first frame ArkaOS: colours, Plasma style, icons, cursor,
+# wallpaper, top bar + dock. No splash between login and desktop. Every part
+# stays changeable in System Settings.
+RUN for v in dark light; do \
+      if [ $v = dark ]; then base=org.kde.breezedark.desktop; scheme=ArkaOS; style=breeze-dark; icons=Arka; wall=ArkaOS-Dark; \
+      else base=org.kde.breeze.desktop; scheme=ArkaOSLight; style=breeze-light; icons=Arka-Light; wall=ArkaOS-Light; fi; \
+      d=/usr/share/plasma/look-and-feel/org.arkaos.$v.desktop; \
+      cp -a /usr/share/plasma/look-and-feel/$base $d && \
+      python3 -c 'import json,sys; p=sys.argv[1]; m=json.load(open(p)); k=m["KPlugin"]; v=sys.argv[2]; \
+k.update(Id="org.arkaos."+v+".desktop", Name="ArkaOS "+v.title(), Description="The ArkaOS "+v+" look"); \
+[k.pop(x) for x in list(k) if x.startswith(("Name[","Description["))]; json.dump(m,open(p,"w"),indent=1)' $d/metadata.json $v && \
+      f=$d/contents/defaults && \
+      kwriteconfig6 --file $f --group kdeglobals --group General --key ColorScheme $scheme && \
+      kwriteconfig6 --file $f --group kdeglobals --group Icons --key Theme $icons && \
+      kwriteconfig6 --file $f --group plasmarc --group Theme --key name $style && \
+      kwriteconfig6 --file $f --group Wallpaper --key Image $wall && \
+      kwriteconfig6 --file $f --group kcminputrc --group Mouse --key cursorTheme ArkaCursor && \
+      kwriteconfig6 --file $f --group ksplashrc --group KSplash --key Theme None && \
+      kwriteconfig6 --file $f --group ksplashrc --group KSplash --key Engine none && \
+      cp /usr/share/arka/arka-layout.js $d/contents/layouts/org.kde.plasma.desktop-layout.js || exit 1; \
+    done && \
+    kwriteconfig6 --file /etc/skel/.config/kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop && \
+    kwriteconfig6 --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop && \
+    printf '[KSplash]\nEngine=none\nTheme=None\n' > /etc/skel/.config/ksplashrc
 
 # Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
 COPY arka-apply-look /usr/libexec/arka-apply-look

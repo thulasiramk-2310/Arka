@@ -17,6 +17,10 @@ set -u
 LOOK=${1:-}
 case "$LOOK" in light|dark) ;; *) echo "usage: arka-apply-look light|dark" >&2; exit 2 ;; esac
 
+# Remember the current Plasma style and icons: the panel only needs restarting
+# when one of these actually changes (a pre-seeded first login changes neither).
+before="$(kreadconfig6 --file plasmarc --group Theme --key name 2>/dev/null)|$(kreadconfig6 --file kdeglobals --group Icons --key Theme 2>/dev/null)"
+
 mkdir -p "$HOME/.config"
 printf '%s\n' "$LOOK" > "$HOME/.config/arka-look"
 
@@ -35,12 +39,12 @@ if [ "$LOOK" = light ]; then
     plasma-apply-colorscheme ArkaOSLight >/dev/null 2>&1 || true
     plasma-apply-desktoptheme breeze-light >/dev/null 2>&1 || true
     set_icons Arka-Light
-    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
+    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.light.desktop
 else
     plasma-apply-colorscheme ArkaOS >/dev/null 2>&1 || true
     plasma-apply-desktoptheme breeze-dark >/dev/null 2>&1 || true
     set_icons Arka
-    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
+    kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop
 fi
 
 # The ArkaOS accent stays green in both looks (changeable in System Settings).
@@ -52,6 +56,10 @@ kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group o
 [ -f "$DESK_WALL" ] && plasma-apply-wallpaperimage "$DESK_WALL" >/dev/null 2>&1
 
 # The panel keeps the old Plasma style's icon colours until it restarts (seen
-# in the VM: tray icons stayed light-on-light). Restart it once; about 2 s.
-systemctl --user restart plasma-plasmashell.service >/dev/null 2>&1 || true
+# in the VM: tray icons stayed light-on-light). Restart it once (about 2 s),
+# and only if the style or icons really changed.
+after="$(kreadconfig6 --file plasmarc --group Theme --key name 2>/dev/null)|$(kreadconfig6 --file kdeglobals --group Icons --key Theme 2>/dev/null)"
+if [ "$before" != "$after" ]; then
+    systemctl --user restart plasma-plasmashell.service >/dev/null 2>&1 || true
+fi
 exit 0

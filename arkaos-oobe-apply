@@ -63,11 +63,38 @@ unset pass
 
 # The new account can already log in. Never follow its .config links as root.
 # Apply this user-owned preference with that account's permissions instead.
-runuser -u "$user" -- sh -c '
+# Besides recording the look, pre-write its colours, Plasma style, icons and
+# wallpaper so the very first desktop frame already matches (no dark-to-light
+# or KDE-to-ArkaOS flash while the first-login script catches up).
+runuser -u "$user" -- bash -c '
     set -eu
     umask 077
-    mkdir -p -- "$1/.config"
-    printf "%s\n" "$2" > "$1/.config/arka-look"
+    home=$1 look=$2
+    mkdir -p -- "$home/.config"
+    printf "%s\n" "$look" > "$home/.config/arka-look"
+    command -v kwriteconfig6 >/dev/null || exit 0
+    if [ "$look" = light ]; then
+        scheme=ArkaOSLight style=breeze-light icons=Arka-Light laf=org.arkaos.light.desktop wall=ArkaOS-Light
+    else
+        scheme=ArkaOS style=breeze-dark icons=Arka laf=org.arkaos.dark.desktop wall=ArkaOS-Dark
+    fi
+    kg=$home/.config/kdeglobals
+    colors=/usr/share/color-schemes/$scheme.colors
+    if [ -r "$colors" ]; then
+        groups=()
+        while IFS= read -r line; do
+            case "$line" in
+                "["*"]") inner=${line#[}; inner=${inner%]}; IFS="]" read -ra parts <<< "${inner//][/]}"; groups=()
+                         for g in "${parts[@]}"; do groups+=(--group "$g"); done ;;
+                *=*) [ ${#groups[@]} -gt 0 ] && kwriteconfig6 --file "$kg" "${groups[@]}" --key "${line%%=*}" "${line#*=}" ;;
+            esac
+        done < "$colors"
+    fi
+    kwriteconfig6 --file "$kg" --group General --key ColorScheme "$scheme"
+    kwriteconfig6 --file "$kg" --group Icons --key Theme "$icons"
+    kwriteconfig6 --file "$kg" --group KDE --key LookAndFeelPackage "$laf"
+    kwriteconfig6 --file "$home/.config/plasmarc" --group Theme --key name "$style"
+    kwriteconfig6 --file "$home/.config/plasmarc" --group Wallpapers --key defaultWallpaperTheme "$wall"
 ' arka-setup-look "/home/$user" "$look"
 
 mkdir -p /etc/sddm.conf.d
