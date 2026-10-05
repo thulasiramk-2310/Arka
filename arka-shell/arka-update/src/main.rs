@@ -186,7 +186,8 @@ fn show_status(
     };
     match res {
         Ok(u) => {
-            vals[0].set_text(&ver(&u.installed));
+            // ArkaOS's own version first; the image's version label is Fedora's base.
+            vals[0].set_text(&format!("{} (Fedora base {})", current_version(), ver(&u.installed)));
             vals[1].set_text(&match &u.staged {
                 Some(d) if d.download_only => format!("{} (downloaded, not yet applied)", ver(d)),
                 Some(d) => format!("{} (ready)", ver(d)),

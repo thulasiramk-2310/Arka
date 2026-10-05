@@ -248,7 +248,15 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
                 let ok = gtk4::gio::spawn_blocking(move || {
                     Command::new("/usr/libexec/arka-apply-look").arg(look).status().map(|s| s.success()).unwrap_or(false)
                 }).await.unwrap_or(false);
-                if !ok { wp.set_subtitle("Couldn't switch the look. Try System Settings > Colors & Themes."); }
+                if !ok {
+                    wp.set_subtitle("Couldn't switch the look. Try System Settings > Colors & Themes.");
+                    return;
+                }
+                // Show the wallpaper that is now in use (unless the user picked their own).
+                let custom = std::fs::read_to_string(gtk4::glib::user_config_dir().join("arkaos").join("wallpaper")).unwrap_or_default();
+                if custom.is_empty() || custom.starts_with("/usr/share/arka/wallpapers/default") {
+                    wp.set_subtitle(&format!("/usr/share/arka/wallpapers/default-{look}.png"));
+                }
             });
         });
     }
