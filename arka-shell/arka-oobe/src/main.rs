@@ -92,6 +92,21 @@ struct Privacy {
     sandbox: Reading,
 }
 
+fn fresh_privacy_check(last: u64, now: u64) -> bool {
+    last != 0 && now.checked_sub(last).is_some_and(|age| age < 90)
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    #[test]
+    fn reject_missing_future_and_stale_checks() {
+        assert!(super::fresh_privacy_check(100, 189));
+        for (last, now) in [(0, 100), (101, 100), (100, 190), (100, 1000)] {
+            assert!(!super::fresh_privacy_check(last, now));
+        }
+    }
+}
+
 async fn read_privacy() -> Option<Privacy> {
     let bus = gio::bus_get_future(gio::BusType::System).await.ok()?;
     let reply = bus
@@ -108,6 +123,9 @@ async fn read_privacy() -> Option<Privacy> {
         .await
         .ok()?;
     let dict = glib::VariantDict::new(Some(&reply.child_value(0)));
+    let last = dict.lookup::<u64>("LastCheck").ok().flatten()?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    if !fresh_privacy_check(last, now) { return None; }
     let s = |k: &str| dict.lookup::<String>(k).ok().flatten();
     let b = |k: &str| dict.lookup::<bool>(k).ok().flatten();
     // Same health rules arkad itself uses (arkad/src/state.rs).
@@ -705,8 +723,8 @@ fn build_ui(app: &adw::Application) {
         }
     };
 
-    // Poll arkad for up to ~10s while any row is still undecided. `gen` cancels
-    // a poll when the page is left or re-checked.
+    // Keep checks fresh while this page is visible. `gen` cancels an old poll.
+    // Unavailable data gets a short initialization grace period.
     let gen = Rc::new(Cell::new(0u32));
     let check_privacy: Rc<dyn Fn()> = {
         let (render, gen, cur) = (render_privacy.clone(), gen.clone(), cur.clone());
@@ -717,8 +735,10 @@ fn build_ui(app: &adw::Application) {
             let (render, gen, cur) = (render.clone(), gen.clone(), cur.clone());
             glib::spawn_future_local(async move {
                 const TRIES: u32 = 5;
-                for attempt in 1..=TRIES {
-                    let last = attempt == TRIES;
+                let mut attempt = 0u32;
+                loop {
+                    attempt = attempt.saturating_add(1);
+                    let last = attempt >= TRIES;
                     let p = read_privacy().await;
                     if gen.get() != my || ORDER[cur.get()] != "privacy" {
                         return;
@@ -734,9 +754,6 @@ fn build_ui(app: &adw::Application) {
                         None => [to_row(None); 5],
                     };
                     render(states, p.is_some());
-                    if !states.contains(&Row::Checking) {
-                        return;
-                    }
                     glib::timeout_future(Duration::from_secs(2)).await;
                 }
             });

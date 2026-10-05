@@ -625,8 +625,9 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 5], fresh: &gtk4::Label
         tech.set_text("Service: org.arka.arkad on the system D-Bus — not reachable");
         return;
     }
-    let age = now_secs().saturating_sub(s.last_check);
-    let stale = s.last_check == 0 || age > STALE_SECS;
+    let now = now_secs();
+    let age = now.saturating_sub(s.last_check);
+    let stale = s.last_check == 0 || s.last_check > now || age >= STALE_SECS;
     let b = |v: bool| if v { Row::Configured } else { Row::Attention };
     let dns = match &s.dns_status {
         DnsStatus::Unknown(_) => Row::Checking,
