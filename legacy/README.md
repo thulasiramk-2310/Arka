@@ -9,6 +9,7 @@ ArkaOS desktop** and are not built into or shipped in the OS image.
 | `arka-bar` | custom top bar (a waybar replacement) | Plasma panel |
 | `arka-dock` | floating app dock | Plasma `icontasks` (floating panel) |
 | `arka-launcher` | full-screen app launcher | Plasma `kickerdash` (Application Dashboard) |
+| `hyprland-session/` | Hyprland, waybar, hyprlock and sway session configs, plus a screenshot | the KDE Plasma session |
 
 ## Why they're here and not deleted
 
