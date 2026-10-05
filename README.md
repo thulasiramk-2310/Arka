@@ -69,8 +69,27 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   user-level Flathub setup. Playback and installation still need a rebuilt-image
   test on the Nokia; source tests are not hardware confirmation.
 
+- 🎨 **Fedora 44 candidate: new setup and a Light/Dark look.** A rewritten first-boot
+  setup (choose Light or Dark, create your account, see where each privacy setting
+  stands right now, then sign in). The login screen, desktop, icons and every ArkaOS
+  app follow that choice, and Settings › Appearance switches it later. The first
+  desktop starts in the ArkaOS look, and the boot logo stays centred when the
+  display changes resolution. Tested in a VM in both looks; not yet on hardware.
+- 📊 **Privacy Dashboard without a score.** It lists each setting as *Configured*
+  or not, says how long ago it was checked, and has a page for updates and
+  going back to the previous version.
+- ⬆️ **Updates never restart the computer on their own.** They download in the
+  background; the Updates app shows the installed version, any downloaded update,
+  whether a restart is needed and whether a previous version is available. You
+  choose when to restart.
+- 🐞 **Fixes from the Nokia test:** the disk image no longer enables a serial
+  console (the cause of a crash loop there), and `scripts/flash-usb.sh` writes and
+  verifies USB sticks and repairs the GPT. In a VM, a Capsule app install from
+  Flathub completed. Neither is confirmed on the Nokia yet.
+
 Still a developer preview — no installer, one hardware data point, and known polish
-(display scaling, login theme) tracked in the field notes.
+tracked in the field notes. Open question: strict encrypted DNS currently leaves no
+name resolution on networks that block it (some hotels and captive portals).
 
 ---
 
@@ -174,8 +193,10 @@ arka-icons/              icon theme          plymouth-theme-arkaos/   boot splas
 sddm-theme-arkaos/       login theme         desktop-files/           launcher entries
 arkaos-firefox           sandbox wrapper     arkaos-firstboot         welcome wizard
 arka-plasma-firstrun     first-login branding one-shot
+arka-apply-look          Light/Dark switch (first login + Settings)
+systemd/                 update-status publisher for unprivileged apps
 docs/                    architecture · building · testing · installation · release notes
-scripts/                 QA harnesses (boot-loop reliability)
+scripts/                 QA harnesses, make-disk.sh, flash-usb.sh
 ```
 
 ## Documentation
