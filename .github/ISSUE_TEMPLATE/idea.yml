@@ -1,0 +1,13 @@
+name: Idea
+description: Suggest a change or a new feature.
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like ArkaOS to do?

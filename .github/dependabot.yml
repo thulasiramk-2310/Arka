@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /arkad
+    schedule: { interval: weekly }
+  - package-ecosystem: cargo
+    directory: /arka-shell
+    schedule: { interval: weekly }
+  - package-ecosystem: cargo
+    directory: /arka-pulse
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: cargo
+    directory: /arka-agent
+    schedule: { interval: weekly }

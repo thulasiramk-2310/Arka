@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in ArkaOS doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Security problem? Please report it privately instead: see SECURITY.md."
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did you run ArkaOS?
+      options: [Virtual machine, Real computer (USB), Real computer (installed)]
+    validations: { required: true }
+  - type: input
+    id: hardware
+    attributes:
+      label: Computer or VM
+      description: Make and model, or the VM software and settings.
+      placeholder: "Nokia PureBook X14 / QEMU 9.2 with KVM"
+  - type: input
+    id: version
+    attributes:
+      label: ArkaOS version
+      description: Output of `cat /usr/lib/arkaos-release`
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "For example `journalctl -b -p warning` or `journalctl -u arkad -b`. Check them for personal information first."
+      render: text
