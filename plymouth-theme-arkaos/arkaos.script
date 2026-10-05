@@ -10,42 +10,48 @@
 Window.SetBackgroundTopColor(0.027, 0.031, 0.055);
 Window.SetBackgroundBottomColor(0.020, 0.024, 0.035);
 
-sw = Window.GetWidth();
-sh = Window.GetHeight();
-f = Math.Clamp(sh / 1080, 0.6, 2.4);   // 1.0 at 1080p
-k = f / 2;                              // assets are 2x
+// Screen geometry. The display often changes size during boot (firmware
+// framebuffer -> real GPU driver at native resolution), so everything is laid
+// out by layout() and re-laid out whenever the size changes; computing it once
+// left the logo off-centre on the new, larger screen.
+global.sw = 0;
+global.sh = 0;
 
-fun load(name) {
-    img = Image(name);
-    return img.Scale(Math.Int(img.GetWidth() * k), Math.Int(img.GetHeight() * k));
+fun geometry() {
+    global.wx = Window.GetX();
+    global.wy = Window.GetY();
+    global.sw = Window.GetWidth();
+    global.sh = Window.GetHeight();
+    global.f = Math.Clamp(global.sh / 1080, 0.6, 2.4);   // 1.0 at 1080p
+    global.k = global.f / 2;                             // assets are 2x
+    global.cy = global.sh / 2 - 40 * global.f;
+}
+
+fun scaled(img) {
+    return img.Scale(Math.Int(img.GetWidth() * global.k), Math.Int(img.GetHeight() * global.k));
 }
 
 fun place(sprite, img, cy) {
-    sprite.SetX(Math.Int(sw / 2 - img.GetWidth() / 2));
-    sprite.SetY(Math.Int(cy - img.GetHeight() / 2));
+    sprite.SetX(Math.Int(global.wx + global.sw / 2 - img.GetWidth() / 2));
+    sprite.SetY(Math.Int(global.wy + cy - img.GetHeight() / 2));
 }
 
 // Text scales with the screen too ("Sans N" is a Pango font description).
 fun label(text, size, r, g, b) {
-    return Image.Text(text, r, g, b, 1, "Sans " + Math.Int(size * f));
+    return Image.Text(text, r, g, b, 1, "Sans " + Math.Int(size * global.f));
 }
 
 mode = Plymouth.GetMode();
-cy = sh / 2 - 40 * f;
 
-// --- logo -------------------------------------------------------------------
-tri1.image = load("tri1.png");
-tri2.image = load("tri2.png");
-tri3.image = load("tri3.png");
-mark.image = load("wordmark.png");
-tri1.sprite = Sprite(tri1.image);
-tri2.sprite = Sprite(tri2.image);
-tri3.sprite = Sprite(tri3.image);
-mark.sprite = Sprite(mark.image);
-place(tri1.sprite, tri1.image, cy);
-place(tri2.sprite, tri2.image, cy);
-place(tri3.sprite, tri3.image, cy);
-place(mark.sprite, mark.image, cy + 150 * f);
+// --- logo (sources kept unscaled; layout() scales them for the screen) -------
+tri1.src = Image("tri1.png");
+tri2.src = Image("tri2.png");
+tri3.src = Image("tri3.png");
+mark.src = Image("wordmark.png");
+tri1.sprite = Sprite();
+tri2.sprite = Sprite();
+tri3.sprite = Sprite();
+mark.sprite = Sprite();
 tri1.sprite.SetOpacity(0);
 tri2.sprite.SetOpacity(0);
 tri3.sprite.SetOpacity(0);
@@ -58,35 +64,20 @@ if (mode == "reboot") status.text = "Restarting";
 if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade")
     status.text = "Installing updates. Don't turn off your computer.";
 status.sprite = Sprite();
-if (status.text != "") {
-    status.image = label(status.text, 20, 0.85, 0.88, 0.92);
-    status.sprite.SetImage(status.image);
-    place(status.sprite, status.image, cy + 230 * f);
-}
 
 // --- activity indicator / real progress bar ----------------------------------
-bar.w = Math.Int(260 * f);
-bar.h = Math.Max(2, Math.Int(3 * f));
-bar.x = Math.Int(sw / 2 - bar.w / 2);
-bar.y = Math.Int(sh * 0.82);
-bar.back = Sprite(Image("barback.png").Scale(bar.w, bar.h));
-bar.back.SetX(bar.x);
-bar.back.SetY(bar.y);
+bar.backsrc = Image("barback.png");
+bar.back = Sprite();
 bar.back.SetOpacity(0);
-
-seg.w = Math.Int(bar.w * 0.3);
-seg.image = Image("seg.png").Scale(seg.w, bar.h);
-seg.sprite = Sprite(seg.image);
-seg.sprite.SetY(bar.y);
+seg.src = Image("seg.png");
+seg.sprite = Sprite();
 seg.sprite.SetZ(2);
 seg.sprite.SetOpacity(0);
-
 fill.image = Image("bar.png");
 fill.sprite = Sprite();
-fill.sprite.SetX(bar.x);
-fill.sprite.SetY(bar.y);
 fill.sprite.SetZ(3);
 global.updating = 0;   // 1 once a real system-update progress arrives
+global.progress = 0;
 
 // --- boot messages (e.g. a disk check), one line under the bar ---------------
 msg.sprite = Sprite();
@@ -94,7 +85,7 @@ msg.sprite.SetZ(4);
 fun message_callback(text) {
     global.msg.image = label(text, 17, 0.70, 0.73, 0.78);
     msg.sprite.SetImage(global.msg.image);
-    place(msg.sprite, global.msg.image, bar.y + 34 * f);
+    place(msg.sprite, global.msg.image, global.bar.y - global.wy + 34 * global.f);
 }
 Plymouth.SetMessageFunction(message_callback);
 
@@ -103,6 +94,50 @@ fun hide_message_callback(text) {
 }
 Plymouth.SetHideMessageFunction(hide_message_callback);
 
+// --- layout: (re)scale and position everything for the current screen -------
+fun layout() {
+    geometry();
+    global.tri1.image = scaled(tri1.src);
+    global.tri2.image = scaled(tri2.src);
+    global.tri3.image = scaled(tri3.src);
+    global.mark.image = scaled(mark.src);
+    tri1.sprite.SetImage(tri1.image);
+    tri2.sprite.SetImage(tri2.image);
+    tri3.sprite.SetImage(tri3.image);
+    mark.sprite.SetImage(mark.image);
+    place(tri1.sprite, tri1.image, global.cy);
+    place(tri2.sprite, tri2.image, global.cy);
+    place(tri3.sprite, tri3.image, global.cy);
+    place(mark.sprite, mark.image, global.cy + 150 * global.f);
+    if (status.text != "") {
+        global.status.image = label(status.text, 20, 0.85, 0.88, 0.92);
+        status.sprite.SetImage(status.image);
+        place(status.sprite, status.image, global.cy + 230 * global.f);
+    }
+    global.bar.w = Math.Int(260 * global.f);
+    global.bar.h = Math.Max(2, Math.Int(3 * global.f));
+    global.bar.x = Math.Int(global.wx + global.sw / 2 - global.bar.w / 2);
+    global.bar.y = Math.Int(global.wy + global.sh * 0.82);
+    bar.back.SetImage(bar.backsrc.Scale(global.bar.w, global.bar.h));
+    bar.back.SetX(global.bar.x);
+    bar.back.SetY(global.bar.y);
+    global.seg.w = Math.Int(global.bar.w * 0.3);
+    seg.sprite.SetImage(seg.src.Scale(global.seg.w, global.bar.h));
+    seg.sprite.SetY(global.bar.y);
+    fill.sprite.SetX(global.bar.x);
+    fill.sprite.SetY(global.bar.y);
+    if (global.updating) draw_fill();
+    global.box.image = scaled(Image("entry.png"));
+    box.sprite.SetImage(global.box.image);
+    global.promptY = global.cy + 260 * global.f;
+}
+
+fun draw_fill() {
+    w = Math.Int(global.bar.w * Math.Clamp(global.progress / 100, 0, 1));
+    if (w < 1) w = 1;
+    fill.sprite.SetImage(fill.image.Scale(w, global.bar.h));
+}
+
 // --- animation ---------------------------------------------------------------
 global.counter = 0;
 fun clamp01(v) {
@@ -110,6 +145,7 @@ fun clamp01(v) {
 }
 
 fun refresh_callback() {
+    if (Window.GetWidth() != global.sw || Window.GetHeight() != global.sh) layout();
     global.counter++;
     t = global.counter / 50.0;   // refresh runs at 50 fps
 
@@ -126,7 +162,7 @@ fun refresh_callback() {
     if (global.updating == 0) {
         // Indeterminate: a soft segment glides back and forth.
         p = (Math.Sin(t * 1.6) + 1) / 2;
-        seg.sprite.SetX(Math.Int(bar.x + p * (bar.w - seg.w)));
+        seg.sprite.SetX(Math.Int(global.bar.x + p * (global.bar.w - global.seg.w)));
         seg.sprite.SetOpacity(a);
     }
 }
@@ -135,34 +171,32 @@ Plymouth.SetRefreshFunction(refresh_callback);
 // Real progress only during system updates.
 fun system_update_callback(progress) {
     global.updating = 1;
+    global.progress = progress;
     seg.sprite.SetOpacity(0);
-    w = Math.Int(bar.w * Math.Clamp(progress / 100, 0, 1));
-    if (w < 1) w = 1;
-    fill.sprite.SetImage(fill.image.Scale(w, bar.h));
+    draw_fill();
 }
 Plymouth.SetSystemUpdateFunction(system_update_callback);
 
 // --- passphrase / question prompts -------------------------------------------
 prompt.sprite = Sprite();
 prompt.sprite.SetZ(10);
-box.image = load("entry.png");
-box.sprite = Sprite(box.image);
+box.sprite = Sprite();
 box.sprite.SetZ(10);
 box.sprite.SetOpacity(0);
 dots.sprite = Sprite();
 dots.sprite.SetZ(11);
-promptY = cy + 260 * f;
+layout();
 
 fun show_prompt(text, entry) {
     global.prompt.image = label(text, 20, 0.96, 0.97, 0.98);
     prompt.sprite.SetImage(global.prompt.image);
-    place(prompt.sprite, global.prompt.image, promptY - 52 * f);
+    place(prompt.sprite, global.prompt.image, global.promptY - 52 * global.f);
     prompt.sprite.SetOpacity(1);
-    place(box.sprite, box.image, promptY);
+    place(box.sprite, global.box.image, global.promptY);
     box.sprite.SetOpacity(1);
     global.dots.image = label(entry, 26, 0.09, 0.78, 0.52);
     dots.sprite.SetImage(global.dots.image);
-    place(dots.sprite, global.dots.image, promptY);
+    place(dots.sprite, global.dots.image, global.promptY);
     dots.sprite.SetOpacity(1);
     status.sprite.SetOpacity(0);
 }
