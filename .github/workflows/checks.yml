@@ -15,6 +15,9 @@ on:
       - "scripts/test-oobe-apply.py"
       - "arkaos-firefox"
       - "scripts/test-firefox-wrapper.py"
+      - "scripts/flash-usb.sh"
+      - "scripts/test-flash-preflight.py"
+      - "systemd/arka-bootc-status.*"
       - ".github/workflows/checks.yml"
   pull_request:
     paths:
@@ -30,6 +33,9 @@ on:
       - "scripts/test-oobe-apply.py"
       - "arkaos-firefox"
       - "scripts/test-firefox-wrapper.py"
+      - "scripts/flash-usb.sh"
+      - "scripts/test-flash-preflight.py"
+      - "systemd/arka-bootc-status.*"
       - ".github/workflows/checks.yml"
   workflow_dispatch:
 
@@ -42,11 +48,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell helpers
-        run: shellcheck arkaos-oobe-apply arka-plasma-firstrun arkaos-firefox arkaos-firstboot
+        run: shellcheck arkaos-oobe-apply arka-plasma-firstrun arkaos-firefox arkaos-firstboot scripts/flash-usb.sh
       - name: Check first-run shell syntax
         run: bash -n arkaos-oobe-apply && bash -n arkaos-firstboot && bash -n arkaos-settings
       - name: Test setup with isolated accounts and paths
         run: python3 scripts/test-oobe-apply.py
+      - name: Test USB source preflight without devices
+        run: python3 scripts/test-flash-preflight.py
       - name: Test browser sandbox launch boundary
         run: bash -n arkaos-firefox && python3 scripts/test-firefox-wrapper.py
 

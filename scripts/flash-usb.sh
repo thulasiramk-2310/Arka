@@ -5,7 +5,7 @@
 #
 # Production procedure (see docs/NOKIA-USB-DIAGNOSIS.md for why each step exists):
 #   1. refuse anything that is not a whole, removable, USB-attached disk
-#      (internal NVMe/SATA disks — and so Windows — can never be a target);
+#      (internal NVMe/SATA disks are refused; verify the target identity);
 #   2. wipe BOTH GPT copies and old signatures, so a stale backup table from a
 #      previous image can't be mistaken for the real one;
 #   3. write with direct I/O and fsync;
@@ -20,10 +20,19 @@ DEV=${2:?usage: sudo $0 IMAGE.raw /dev/sdX}
 
 die() { echo "flash-usb: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "run with sudo"
-for t in lsblk wipefs sgdisk dd sha256sum partprobe blockdev; do
+for t in lsblk wipefs sgdisk dd sha256sum partprobe blockdev realpath stat; do
     command -v "$t" >/dev/null || die "missing tool: $t"
 done
-[ -f "$IMG" ] || die "no such image: $IMG"
+IMG=$(realpath -e -- "$IMG") || die "cannot resolve image"
+if [ ! -f "$IMG" ] || [ ! -r "$IMG" ] || [ ! -s "$IMG" ]; then
+    die "image must be a readable, nonempty regular file: $IMG"
+fi
+# Validate and hash the source before any destructive operation.
+export LC_ALL=C
+[ "$(dd if="$IMG" bs=1 skip=512 count=8 status=none)" = 'EFI PART' ] || die "image has no raw GPT header"
+source_verify=$(sgdisk -v "$IMG" 2>&1) || die "cannot validate source GPT"
+[[ "$source_verify" == *"No problems found"* ]] || die "source GPT is damaged"
+img_sha=$(sha256sum "$IMG" | cut -d' ' -f1)
 [ -b "$DEV" ] || die "not a block device: $DEV"
 
 # --- 1. target must be a whole removable USB disk --------------------------------
@@ -54,8 +63,6 @@ sgdisk --zap-all "$DEV" >/dev/null
 partprobe "$DEV" 2>/dev/null || true
 
 # --- 3. write -------------------------------------------------------------------
-echo "== hashing image"
-img_sha=$(sha256sum "$IMG" | cut -d' ' -f1)
 echo "== writing image"
 dd if="$IMG" of="$DEV" bs=4M oflag=direct conv=fsync status=progress
 sync
