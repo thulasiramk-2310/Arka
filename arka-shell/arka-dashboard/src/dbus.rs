@@ -80,6 +80,10 @@ async fn worker_loop(tx: Sender<StateUpdate>) -> zbus::Result<()> {
             // Replace previous success immediately; reconnect on the next poll.
             if tx.send(StateUpdate::Full(Box::default())).is_err() { return Ok(()); }
         }
+        // Refresh even while the page stays open, including publication expiry.
+        if tx.send(StateUpdate::Updates(arka_update::status::read_published())).is_err() {
+            return Ok(());
+        }
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
     }
 }

@@ -6,4 +6,6 @@ Documentation=file:///usr/share/doc/arkaos
 
 [Service]
 Type=oneshot
+TimeoutStartSec=30s
+ExecStopPost=/bin/sh -c 'if [ "$SERVICE_RESULT" != success ]; then rm -f /run/arkaos/bootc-status.json; fi'
 ExecStart=/bin/sh -c 'mkdir -p /run/arkaos && bootc status --json --format-version=1 > /run/arkaos/bootc-status.json.tmp && chmod 0644 /run/arkaos/bootc-status.json.tmp && mv -f /run/arkaos/bootc-status.json.tmp /run/arkaos/bootc-status.json'

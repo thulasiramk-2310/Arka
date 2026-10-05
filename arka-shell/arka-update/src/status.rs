@@ -78,8 +78,20 @@ pub const PUBLISHED: &str = "/run/arkaos/bootc-status.json";
 
 /// Read the status published by arka-bootc-status.service (no privileges needed).
 pub fn read_published() -> Result<UpdateStatus, String> {
-    let json = std::fs::read_to_string(PUBLISHED)
-        .map_err(|e| format!("update status not published yet ({e})"))?;
+    read_published_at(std::path::Path::new(PUBLISHED), std::time::SystemTime::now())
+}
+
+// The publisher runs every ten minutes. Allow scheduling jitter, not an
+// indefinitely trusted snapshot after a failed publication.
+const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(720);
+fn read_published_at(path: &std::path::Path, now: std::time::SystemTime) -> Result<UpdateStatus, String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| format!("update status unavailable ({e})"))?;
+    let modified = file.metadata().and_then(|m| m.modified()).map_err(|e| e.to_string())?;
+    let age = now.duration_since(modified).map_err(|_| "update status timestamp is in the future")?;
+    if age >= MAX_AGE { return Err("update status is stale; the publisher has not refreshed it".into()); }
+    let mut json = String::new();
+    file.read_to_string(&mut json).map_err(|e| e.to_string())?;
     parse_status(&json)
 }
 
@@ -118,6 +130,17 @@ mod tests {
             "status": {"booted": entry(json!("44.1")), "staged": null, "rollback": null}})
     }
     fn parse(value: Value) -> UpdateStatus { parse_status(&value.to_string()).unwrap() }
+    #[test]
+    fn published_snapshot_expires_and_rejects_future_timestamps() {
+        let path = std::env::temp_dir().join(format!("arka-status-{}-{}.json", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::write(&path, host().to_string()).unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        assert!(read_published_at(&path, modified).is_ok());
+        assert!(read_published_at(&path, modified + MAX_AGE).is_err());
+        assert!(read_published_at(&path, modified - std::time::Duration::from_secs(1)).is_err());
+        std::fs::remove_file(&path).unwrap();
+        assert!(read_published_at(&path, modified).is_err());
+    }
     #[test]
     fn installed_version_is_metadata_not_tag_and_no_update_is_inferred() {
         let s = parse(host());

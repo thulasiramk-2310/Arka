@@ -153,6 +153,14 @@ fn build_ui(app: &adw::Application) {
         })
     };
     refresh();
+    // Also observe background updates and expire stale publications while open.
+    let periodic_refresh = refresh.clone();
+    let weak_window = window.downgrade();
+    gtk4::glib::timeout_add_local(std::time::Duration::from_secs(5), move || {
+        if weak_window.upgrade().is_none() { return gtk4::glib::ControlFlow::Break; }
+        periodic_refresh();
+        gtk4::glib::ControlFlow::Continue
+    });
 
     for (button, operation) in [
         (check_btn, Operation::Check),
@@ -226,7 +234,7 @@ fn current_version() -> String {
 
 fn run_in_terminal(operation: Operation, status: &gtk4::Label, refresh: std::rc::Rc<dyn Fn()>) {
     match std::process::Command::new("konsole")
-        .args(["-e", "sh", "-c", &operation.script()])
+        .args(["--nofork", "-e", "sh", "-c", &operation.script()])
         .spawn()
     {
         Ok(mut child) => {
