@@ -1,7 +1,8 @@
 # ArkaOS — public website
 
 `index.html` is the public landing page for ArkaOS: a single, self-contained
-file (no build step, no external JS; fonts from Google Fonts). Open it directly
+file (no build step, no requests to other sites: no web fonts, scripts or images
+from elsewhere). Screenshots live in `img/` and come from tested images. Open it directly
 or host it anywhere static.
 
 **One job:** explain ArkaOS to a first-time visitor, honestly. The copy is held

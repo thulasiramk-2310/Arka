@@ -3,581 +3,290 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ArkaOS — Privacy settings. Clear status.</title>
-<meta name="description" content="ArkaOS is a privacy-first, immutable Linux desktop in Developer Preview — enforced privacy, atomic recovery, and a system you can inspect.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<title>ArkaOS — a private, recoverable Linux desktop</title>
+<meta name="description" content="ArkaOS is a Linux desktop that sets up common privacy settings for you, shows you whether each one is in place, and lets you undo an update. Developer preview.">
+<meta property="og:title" content="ArkaOS — a private, recoverable Linux desktop">
+<meta property="og:description" content="Privacy settings set up for you, shown honestly, and updates you can undo. Developer preview.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="img/desktop-light.png">
+<meta name="color-scheme" content="light dark">
+<!-- No fonts, scripts or images from other sites: visiting this page sends
+     nothing to anyone but the host. -->
 <style>
-  html { scroll-behavior: smooth; }
-  body { margin: 0; background: #06070C; color: #EEF1F6; font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  * { box-sizing: border-box; }
-  a { color: #16C784; text-decoration: none; }
-  h1, h2, h3, h4, p, ul, li, figure { margin: 0; padding: 0; }
-  ul { list-style: none; }
-  :focus-visible { outline: 2px solid #54D6C6; outline-offset: 3px; border-radius: 2px; }
-  section[id] { scroll-margin-top: 84px; }
-  /* hover states (were style-hover in the canvas) */
-  a.nl:hover { color: #EEF1F6 !important; }
-  .btnp:hover { background: #54D6C6 !important; color: #06070C !important; }
-  .btng:hover { border-color: #54D6C6 !important; color: #54D6C6 !important; }
-  .card:hover { border-color: #16C784 !important; }
-  .card.amber:hover { border-color: #EAB94A !important; }
-  .card.cyan:hover { border-color: #54D6C6 !important; }
-  .doc:hover { border-color: #16C784 !important; }
-  @keyframes arkaPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-  @keyframes arkaIgnite { 0% { box-shadow: 0 0 0 1px rgba(22,199,132,0), 0 0 0 rgba(22,199,132,0); } 35% { box-shadow: 0 0 0 1px rgba(22,199,132,.55), 0 0 26px rgba(22,199,132,.28); } 100% { box-shadow: 0 0 0 1px rgba(22,199,132,.28), 0 0 0 rgba(22,199,132,0); } }
-  @keyframes arkaDot { 0% { box-shadow: 0 0 0 0 rgba(22,199,132,.55); } 70%, 100% { box-shadow: 0 0 0 6px rgba(22,199,132,0); } }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
+:root {
+  --bg: #ffffff; --bg-2: #f5f6f8; --ink: #111317; --ink-2: #4a505b; --line: #e3e6eb;
+  --accent: #0e8a5f; --warn: #a35a00; --pill-bg: #111317; --pill-fg: #ffffff;
+  --serif: "Noto Serif", "Source Serif Pro", Georgia, serif;
+  --sans: Inter, "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", "Noto Sans Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --bg-2: #181b20; --ink: #eef0f3; --ink-2: #a8afba; --line: #2a2e35;
+    --accent: #3ad19a; --warn: #f0b860; --pill-bg: #eef0f3; --pill-fg: #111317;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --bg-2: #181b20; --ink: #eef0f3; --ink-2: #a8afba; --line: #2a2e35;
+  --accent: #3ad19a; --warn: #f0b860; --pill-bg: #eef0f3; --pill-fg: #111317;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.skip { position: absolute; left: -999px; } .skip:focus { left: 16px; top: 12px; background: var(--bg); padding: 8px 12px; z-index: 9; }
 
-  /* ── "what ArkaOS is" multi-scene walkthrough ── */
-  #filmStage .stage { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 42%, #0b1220, #06070C 62%); }
-  #filmStage .scn { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity .8s ease; padding: 5%; }
-  #filmStage .scn.on { opacity: 1; }
-  #filmStage .aw { width: min(92%, 780px); text-align: center; position: relative; }
-  #filmStage .alab { font-family: 'JetBrains Mono', monospace; font-size: clamp(9px,1.2vw,12px); letter-spacing: .3em; text-transform: uppercase; color: #8B93A3; }
-  #filmStage .rise { opacity: 0; transform: translateY(12px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
-  #filmStage .scn.on .rise { opacity: 1; transform: none; }
-  #filmStage .scn.on .r2 { transition-delay: .3s; } #filmStage .scn.on .r3 { transition-delay: .6s; } #filmStage .scn.on .r4 { transition-delay: .9s; }
-  #filmStage .spark { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%,-50%) scale(.2); background: radial-gradient(circle, #fff, #F6ECCB 45%, rgba(246,236,203,0) 72%); box-shadow: 0 0 50px 16px rgba(246,236,203,.5), 0 0 140px 50px rgba(234,185,74,.22); }
-  #filmStage .scn.on .spark { animation: arkaSpark 3.4s ease forwards; }
-  @keyframes arkaSpark { 0% { transform: translate(-50%,-50%) scale(.15); opacity: 0; } 20% { opacity: 1; transform: translate(-50%,-50%) scale(1); } 100% { transform: translate(-50%,-50%) scale(3.6); opacity: .9; } }
-  #filmStage .ring { position: absolute; left: 50%; top: 50%; width: 34%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%,-50%) scale(.4); opacity: 0; border: 2px solid transparent; }
-  #filmStage .scn.on .ring { animation: arkaRing 3.4s ease forwards; }
-  @keyframes arkaRing { 40% { opacity: 0; } 70% { opacity: 1; border-color: rgba(246,236,203,.7); transform: translate(-50%,-50%) scale(1); } 100% { opacity: .85; border-color: rgba(22,199,132,.75); box-shadow: 0 0 40px rgba(22,199,132,.3) inset; transform: translate(-50%,-50%) scale(1.05); } }
-  #filmStage .alayers { display: flex; flex-direction: column; gap: 8px; width: min(72%,430px); margin: 16px auto 0; }
-  #filmStage .aly { border: 1px solid #1C2230; border-radius: 11px; padding: 10px 14px; text-align: left; display: flex; justify-content: space-between; gap: 10px; font-size: clamp(12px,1.5vw,15px); color: #EEF1F6; }
-  #filmStage .aly .m { font-family: 'JetBrains Mono', monospace; font-size: clamp(8px,1vw,11px); color: #8B93A3; }
-  #filmStage .aly.top { border-color: rgba(22,199,132,.5); background: linear-gradient(180deg, rgba(22,199,132,.12), transparent); color: #54D6C6; }
-  #filmStage .asys { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 16px; }
-  #filmStage .asys.two { grid-template-columns: 1fr 1fr; }
-  #filmStage .asys .c { border: 1px solid #1C2230; border-radius: 12px; padding: 12px; text-align: left; background: #0E1119; }
-  #filmStage .asys .k { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
-  #filmStage .asys .k.g { color: #16C784; } #filmStage .asys .k.b { color: #54D6C6; } #filmStage .asys .k.a { color: #EAB94A; }
-  #filmStage .asys .h { font-weight: 700; font-size: clamp(13px,1.6vw,16px); margin-top: 3px; color: #EEF1F6; }
-  #filmStage .atel { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; font-size: clamp(10px,1.3vw,13px); }
-  #filmStage .atel span { border: 1px solid #1C2230; border-radius: 8px; padding: 5px 10px; background: #0E1119; color: #8B93A3; }
-  #filmStage .atel b { color: #16C784; }
-  #filmStage .apipe { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
-  #filmStage .apipe span { font-family: 'JetBrains Mono', monospace; font-size: clamp(8px,1vw,11px); letter-spacing: .1em; border: 1px solid #1C2230; border-radius: 7px; padding: 5px 8px; color: #8B93A3; opacity: .4; transition: all .4s; }
-  #filmStage .apipe span.on2 { opacity: 1; color: #16C784; border-color: rgba(22,199,132,.5); background: rgba(22,199,132,.08); }
-  #filmStage .aalert { margin: 12px auto 0; width: min(92%,400px); border: 1px solid rgba(234,185,74,.4); background: linear-gradient(180deg, rgba(234,185,74,.1), transparent); border-radius: 11px; padding: 10px 13px; text-align: left; display: flex; gap: 10px; opacity: 0; transform: translateY(6px); }
-  #filmStage .scn.on .aalert { opacity: 1; transform: none; transition: all .6s ease 2.2s; }
-  #filmStage .aalert .t { font-weight: 600; font-size: 13px; color: #EEF1F6; }
-  #filmStage .aalert .e { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #EAB94A; }
-  #filmStage .aalert .dot { width: 8px; height: 8px; border-radius: 50%; background: #EAB94A; margin-top: 4px; flex: 0 0 auto; }
-  #filmStage .abrand { font-weight: 900; letter-spacing: .1em; font-size: clamp(26px,5vw,58px); color: #16C784; text-shadow: 0 0 50px rgba(22,199,132,.35); }
-  #filmStage .atag { font-size: clamp(12px,1.6vw,17px); margin-top: 8px; color: #EEF1F6; }
-  #filmStage .apil { font-family: 'JetBrains Mono', monospace; font-size: clamp(9px,1.1vw,12px); letter-spacing: .22em; text-transform: uppercase; color: #8B93A3; margin-top: 8px; }
-  #filmStage .aprog { position: absolute; left: 0; top: 0; height: 2px; width: 0; background: linear-gradient(90deg,#16C784,#54D6C6); z-index: 4; }
-  #filmStage .poster { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; cursor: pointer; background: radial-gradient(circle at 50% 50%, rgba(6,7,12,.55), rgba(6,7,12,.9)); }
-  #filmStage.playing .poster { display: none; }
+header.site { border-bottom: 1px solid var(--line); }
+header.site .wrap { display: flex; align-items: center; gap: 24px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; }
+nav.main { margin-left: auto; display: flex; gap: 22px; font-size: 15px; }
+nav.main a { text-decoration: none; color: var(--ink-2); }
+nav.main a:hover { color: var(--ink); }
+.theme { background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font: 13px var(--sans); cursor: pointer; }
+
+h1, h2 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.08; }
+h2 { font-size: clamp(28px, 3.6vw, 38px); line-height: 1.15; }
+h3 { font-size: 18px; margin: 0 0 6px; }
+p { margin: 0; }
+.lead { font-size: 19px; color: var(--ink-2); max-width: 640px; }
+.note { font-size: 14px; color: var(--ink-2); }
+section { padding: 88px 0; border-bottom: 1px solid var(--line); }
+
+.hero { padding-top: 72px; padding-bottom: 56px; }
+.hero .lead { margin-top: 18px; }
+.ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; align-items: center; }
+.pill { display: inline-block; background: var(--pill-bg); color: var(--pill-fg); border-radius: 999px; padding: 11px 22px; font-weight: 600; text-decoration: none; }
+.pill.quiet { background: none; color: var(--ink); border: 1px solid var(--line); }
+.tag { display: inline-block; font: 12px var(--mono); color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; margin-bottom: 20px; }
+.shot { margin: 48px 0 0; }
+.shot img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); }
+.shot figcaption { margin-top: 10px; }
+
+.three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 44px; }
+.three p { color: var(--ink-2); font-size: 16px; }
+@media (max-width: 820px) { .three { grid-template-columns: 1fr; gap: 28px; } nav.main a.hide-s { display: none; } }
+
+.rows { margin-top: 36px; border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 16px; padding: 16px 2px; border-bottom: 1px solid var(--line); }
+.row b { font-weight: 600; } .row span { color: var(--ink-2); font-size: 15px; display: block; }
+.state { font-size: 14px; font-weight: 600; white-space: nowrap; align-self: start; }
+.state.ok { color: var(--accent); } .state.test { color: var(--warn); }
+
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 44px; }
+.pair figure { margin: 0; } .pair img { width: 100%; border: 1px solid var(--line); border-radius: 10px; display: block; }
+.pair figcaption { margin-top: 8px; }
+@media (max-width: 820px) { .pair { grid-template-columns: 1fr; } }
+
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 40px; }
+.cols h3 { font-size: 15px; letter-spacing: .02em; }
+.cols ul { margin: 10px 0 0; padding: 0 0 0 18px; color: var(--ink-2); font-size: 15px; }
+.cols li { margin: 6px 0; }
+@media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+
+.try { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 40px; border-top: 1px solid var(--line); }
+.try > div { padding: 24px 24px 24px 0; }
+.try p { color: var(--ink-2); font-size: 15px; margin-top: 6px; }
+.try a { display: inline-block; margin-top: 12px; font-weight: 600; }
+@media (max-width: 820px) { .try { grid-template-columns: 1fr; } }
+pre { font: 13px/1.5 var(--mono); background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 12px 0 0; }
+
+footer.site { padding: 40px 0 56px; color: var(--ink-2); font-size: 14px; }
+footer.site .wrap { display: flex; gap: 24px; flex-wrap: wrap; }
+footer.site .end { margin-left: auto; }
 </style>
 </head>
 <body>
-<div style="min-height:100vh;background:#06070C;overflow-x:hidden">
+<a class="skip" href="#main">Skip to content</a>
 
-  <header style="position:sticky;top:0;z-index:40;background:rgba(6,7,12,.88);backdrop-filter:blur(10px);border-bottom:1px solid #1C2230">
-    <nav aria-label="Primary" style="max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:28px">
-      <a href="#top" style="display:flex;align-items:center;gap:10px;color:#EEF1F6">
-        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 21H2L12 2.5Z" fill="none" stroke="#16C784" stroke-width="1.6"/><path d="M12 10.5 16.8 19H7.2L12 10.5Z" fill="#16C784"/></svg>
-        <span style="font-size:15px;font-weight:600;letter-spacing:.2px">ArkaOS</span>
-      </a>
-      <div style="display:flex;gap:22px;flex:1;font-size:13.5px;color:#8B93A3;flex-wrap:wrap">
-        <a class="nl" href="#architecture" style="color:#8B93A3">Architecture</a>
-        <a class="nl" href="#features" style="color:#8B93A3">Features</a>
-        <a class="nl" href="#status" style="color:#8B93A3">Status</a>
-        <a class="nl" href="docs/" style="color:#8B93A3">Docs</a>
-        <a class="nl" href="https://github.com/thulasiramk-2310/Arka" rel="noopener" style="color:#8B93A3">GitHub</a>
-      </div>
-      <a class="btnp" href="#try" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#16C784;padding:9px 16px;border-radius:6px;font-weight:700;white-space:nowrap">Try ArkaOS</a>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="ArkaOS home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#16c784" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#16c784"/></svg>
+      ArkaOS
+    </a>
+    <nav class="main" aria-label="Main">
+      <a href="#tour">Tour</a>
+      <a href="#what" class="hide-s">What it is</a>
+      <a href="#privacy" class="hide-s">Privacy</a>
+      <a href="#honest" class="hide-s">What we can show</a>
+      <a href="#try">Try it</a>
+      <a href="docs/">Docs</a>
     </nav>
-  </header>
+    <button class="theme" type="button" id="theme" aria-label="Switch between light and dark">Dark</button>
+  </div>
+</header>
 
-  <section id="top" style="position:relative;max-width:1200px;margin:0 auto;padding:84px 24px 72px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:56px;align-items:center">
-    <div style="position:absolute;inset:0;background-image:linear-gradient(#0E1119 1px,transparent 1px),linear-gradient(90deg,#0E1119 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(circle at 30% 20%,#000,transparent 70%);mask-image:radial-gradient(circle at 30% 20%,#000,transparent 70%);pointer-events:none"></div>
-    <div style="position:relative;min-width:0">
-      <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.18em;color:#EAB94A;margin-bottom:22px">DEVELOPER PREVIEW · ARKAOS</p>
-      <h1 style="font-size:clamp(38px,5.4vw,62px);line-height:1.04;font-weight:700;letter-spacing:-.025em;text-wrap:pretty">Privacy settings.<br><span style="color:#16C784">Clear status.</span></h1>
-      <p style="margin-top:22px;font-size:17px;line-height:1.6;color:#8B93A3;max-width:52ch;text-wrap:pretty">ArkaOS is an immutable Linux desktop designed around privacy, recoverability, and clear system state. Built on proven Linux infrastructure instead of reinventing it.</p>
-      <div style="display:flex;gap:12px;margin-top:32px;flex-wrap:wrap">
-        <a class="btnp" href="#try" style="font-size:14px;font-weight:600;color:#06070C;background:#16C784;padding:13px 22px;border-radius:7px">Try ArkaOS</a>
-        <a class="btng" href="#film" style="font-size:14px;font-weight:500;color:#EEF1F6;border:1px solid #1C2230;padding:13px 22px;border-radius:7px">See how it works</a>
-      </div>
-      <p style="margin-top:30px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">// Linux kernel · Fedora bootc · KDE Plasma</p>
-      <p style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#EAB94A;display:inline-block"></span>Developer Preview — not production ready. Expect gaps.</p>
+<main id="main">
+  <div class="wrap hero">
+    <span class="tag">Developer preview — not ready for everyday use</span>
+    <h1>A Linux desktop that sets up your privacy, and shows you where it stands.</h1>
+    <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system so a bad update can be undone. It's built on Fedora and KDE Plasma.</p>
+    <div class="ctas">
+      <a class="pill" href="#try">Try it in a virtual machine</a>
+      <a class="pill quiet" href="#honest">What we can and can't show</a>
     </div>
-
-    <figure style="position:relative;min-width:0;background:#0E1119;border:1px solid #1C2230;border-radius:14px;padding:22px;box-shadow:0 0 0 1px rgba(22,199,132,.06),0 24px 60px -30px rgba(22,199,132,.25)">
-      <figcaption style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:1px solid #1C2230;font-family:'JetBrains Mono',monospace;font-size:12.5px;flex-wrap:wrap">
-        <span style="color:#EEF1F6">arkad · privacy daemon</span>
-        <span style="color:#16C784;display:flex;align-items:center;gap:7px"><span style="width:7px;height:7px;border-radius:50%;background:#16C784;display:inline-block;animation:arkaPulse 2.4s ease-in-out infinite"></span>example configuration</span>
-      </figcaption>
-      <ul id="daemonRows" style="display:flex;flex-direction:column;gap:2px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px"></ul>
-      <p style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3">re-checked every 60s</p>
-      <p style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8B93A3;line-height:1.5">Illustrative configuration states. Configured means a checked setting is in place, not that you are protected. This is not live status from your machine.</p>
+    <figure class="shot">
+      <img src="img/desktop-light.png" width="1440" height="900" alt="The ArkaOS desktop in its light look: a slim top bar with the date and system tray, a small dock at the bottom, and a pale wallpaper with the ArkaOS triangle drawn in thin lines.">
+      <figcaption class="note">The ArkaOS desktop in the light look, from a test in a virtual machine. You choose light or dark during setup.</figcaption>
     </figure>
-  </section>
+  </div>
 
-  <section aria-label="Pillars" style="border-top:1px solid #1C2230;border-bottom:1px solid #1C2230;background:#080A11">
-    <div style="max-width:1200px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
-      <div style="padding:34px 28px 34px 0;border-right:1px solid #1C2230">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.18em;color:#16C784">PRIVACY</p>
-        <p style="margin-top:10px;font-size:14.5px;color:#8B93A3;line-height:1.55">Concrete local privacy enforcement, applied at boot.</p>
-      </div>
-      <div style="padding:34px 28px;border-right:1px solid #1C2230">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.18em;color:#54D6C6">RELIABILITY</p>
-        <p style="margin-top:10px;font-size:14.5px;color:#8B93A3;line-height:1.55">System monitoring and early warning through arka-pulse.</p>
-      </div>
-      <div style="padding:34px 0 34px 28px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.18em;color:#EAB94A">RECOVERY</p>
-        <p style="margin-top:10px;font-size:14.5px;color:#8B93A3;line-height:1.55">Immutable images, atomic updates and rollback.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="film" style="max-width:1200px;margin:0 auto;padding:88px 24px">
-    <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">See what ArkaOS is.</h2>
-    <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">A short walkthrough — the idea, the Linux it stands on, and the three systems that make it ArkaOS.</p>
-
-    <div id="filmStage" class="player" style="margin-top:34px;position:relative;aspect-ratio:16/9;border:1px solid #1C2230;border-radius:14px;overflow:hidden;background:#06070C">
-      <div class="stage">
-        <div class="aprog" id="aprog"></div>
-
-        <div class="scn" data-s="spark"><span class="spark"></span><span class="ring"></span><div class="aw"><p class="alab" style="position:absolute;left:0;right:0;bottom:-32%">Arka · a ray of light</p></div></div>
-
-        <div class="scn" data-s="stack"><div class="aw"><p class="alab rise">One image, top to bottom</p><div class="alayers">
-          <div class="aly top rise r4"><span>ArkaOS</span><span class="m">privacy · reliability · desktop</span></div>
-          <div class="aly rise r3"><span>Fedora bootc</span><span class="m">immutable · composefs · atomic</span></div>
-          <div class="aly rise r2"><span>Linux</span><span class="m">the foundation</span></div>
-        </div></div></div>
-
-        <div class="scn" data-s="sys"><div class="aw"><p class="alab rise">Three systems, one OS</p><div class="asys">
-          <div class="c rise r2"><div class="k g">Privacy</div><div class="h">arkad</div></div>
-          <div class="c rise r3"><div class="k b">Reliability</div><div class="h">arka-pulse</div></div>
-          <div class="c rise r4"><div class="k a">Recovery</div><div class="h">rollback</div></div>
-        </div></div></div>
-
-        <div class="scn" data-s="priv"><div class="aw"><p class="alab rise">Privacy · enforced at boot</p><div class="asys two rise r2">
-          <div class="c"><div class="k g">Network identity</div><div class="h" style="font-size:14px">MAC randomized</div></div>
-          <div class="c"><div class="k g">Name resolution</div><div class="h" style="font-size:14px">DNS over TLS</div></div>
-          <div class="c"><div class="k g">Hostname</div><div class="h" style="font-size:14px">masked</div></div>
-          <div class="c"><div class="k g">Browser</div><div class="h" style="font-size:14px">bubblewrap sandbox</div></div>
-        </div></div></div>
-
-        <div class="scn" data-s="rel"><div class="aw"><p class="alab rise">Reliability · arka-pulse</p>
-          <div class="atel rise r2"><span>CPU <b>27%</b></span><span>MEM <b>38%</b></span><span>TEMP <b>51°C</b></span></div>
-          <div class="apipe" id="apipe"><span>MONITOR</span><span>DETECT</span><span>PREDICT</span><span>EXPLAIN</span><span>VERIFY</span></div>
-          <div class="aalert"><span class="dot"></span><div><div class="t">Potential instability detected</div><div class="e">estimated · recommends, does not act</div></div></div>
-        </div></div>
-
-        <div class="scn" data-s="end"><div class="aw"><div class="abrand rise">ARKAOS</div><div class="atag rise r2">Built on Linux. Designed for people.</div><div class="apil rise r3">Privacy · Reliability · Recovery</div></div></div>
-
-        <div class="actrl" style="position:absolute;bottom:12px;right:12px;z-index:5"><button type="button" id="areplay" style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:rgba(6,7,12,.75);border:1px solid #1C2230;color:#8B93A3;border-radius:999px;padding:6px 12px">replay</button></div>
-      </div>
-      <div class="poster" id="poster" role="button" tabindex="0" aria-label="Play the ArkaOS walkthrough">
-        <div style="width:66px;height:66px;border-radius:50%;border:1px solid rgba(22,199,132,.5);display:flex;align-items:center;justify-content:center;background:rgba(22,199,132,.08)">
-          <svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true"><path d="M3 2.2 19.5 12 3 21.8V2.2Z" fill="#16C784"/></svg>
-        </div>
-        <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">what ArkaOS is · 30-second walkthrough</p>
-      </div>
-    </div>
-    <p style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;line-height:1.6">A 30-second walkthrough of what ArkaOS is. Plays once; static when reduced motion is on. The layer-by-layer detail is under <a href="#architecture">Architecture</a>.</p>
-  </section>
-
-  <section id="features" style="max-width:1200px;margin:0 auto;padding:16px 24px 88px">
-    <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">Why ArkaOS?</h2>
-    <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px">
-
-      <article class="card" style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#16C784;letter-spacing:.14em">01</p>
-        <h3 style="margin-top:14px;font-size:20px;font-weight:600">Private by default</h3>
-        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">Privacy settings you would normally configure by hand are applied by <code style="font-family:'JetBrains Mono',monospace;color:#EEF1F6">arkad</code> on every boot, and re-checked while the system runs.</p>
-        <ul style="margin-top:18px;display:flex;flex-direction:column;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">
-          <li>MAC randomization</li><li>DNS-over-TLS</li><li>masked hostname</li><li>IPv6 privacy addresses</li>
-        </ul>
-      </article>
-
-      <article class="card amber" style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EAB94A;letter-spacing:.14em">02</p>
-        <h3 style="margin-top:14px;font-size:20px;font-weight:600">Recoverable by design</h3>
-        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">System updates are staged as images. A retained deployment provides a rollback option; successful boot and data preservation still need testing.</p>
-        <ul style="margin-top:18px;display:flex;flex-direction:column;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">
-          <li>read-only root</li><li>atomic updates</li><li>rollback</li><li>immutable image</li>
-        </ul>
-      </article>
-
-      <article class="card cyan" style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#54D6C6;letter-spacing:.14em">03</p>
-        <h3 style="margin-top:14px;font-size:20px;font-weight:600">Know what your system is doing</h3>
-        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty"><code style="font-family:'JetBrains Mono',monospace;color:#EEF1F6">arka-pulse</code> collects local telemetry, detects degradation and verifies state. Automated recovery actions remain experimental and constrained.</p>
-        <ul style="margin-top:18px;display:flex;flex-direction:column;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">
-          <li>system health</li><li>detection</li><li>prediction <span style="color:#54D6C6">· experimental</span></li><li>verification</li>
-        </ul>
-      </article>
-
-      <article class="card" style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#16C784;letter-spacing:.14em">04</p>
-        <h3 style="margin-top:14px;font-size:20px;font-weight:600">Built on proven Linux</h3>
-        <p style="margin-top:12px;font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">ArkaOS does not rewrite the parts of Linux that already work. Fedora bootc, composefs, systemd and KDE Plasma stay where they are.</p>
-        <p style="margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:#EEF1F6">Proven infrastructure underneath.<br>Arka-specific experience above it.</p>
-      </article>
-    </div>
-  </section>
-
-  <section id="architecture" style="border-top:1px solid #1C2230;background:#080A11">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px">
-      <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">How ArkaOS is put together.</h2>
-      <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">Seven layers, from your hands to the hardware. Select a layer to read what it is responsible for.</p>
-      <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start">
-        <ul id="archList" style="display:flex;flex-direction:column;gap:6px;min-width:0"></ul>
-        <div style="position:sticky;top:90px;background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;min-width:0">
-          <p id="archKicker" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#8B93A3">LAYER 04 / 07</p>
-          <h3 id="archName" style="margin-top:12px;font-size:22px;font-weight:600">arkad + arka-pulse</h3>
-          <p id="archBody" style="margin-top:14px;font-size:14.5px;line-height:1.65;color:#8B93A3;text-wrap:pretty"></p>
-          <ul id="archChips" style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px"></ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="prove" style="border-top:1px solid #1C2230">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px">
-      <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">What we prove — and what we don't.</h2>
-      <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">We don't ask you to trust claims we cannot demonstrate. Each item below sits in exactly one column.</p>
-      <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
-
-        <div style="background:#0E1119;border:1px solid #1C2230;border-top:2px solid #16C784;border-radius:10px;padding:26px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#16C784">CONFIGURED / RECORDED TESTS</p>
-          <p style="margin-top:8px;font-size:13px;color:#8B93A3">Settings and mechanisms recorded in earlier images; the Fedora 44 candidate needs fresh release validation.</p>
-          <ul style="margin-top:20px;display:flex;flex-direction:column;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.5;color:#EEF1F6">
-            <li>MAC address randomized</li>
-            <li>DNS-over-TLS to Quad9</li>
-            <li>hostname masked</li>
-            <li>IPv6 privacy addresses enabled</li>
-            <li>Firefox runs inside a bubblewrap sandbox</li>
-            <li>read-only runtime root</li>
-            <li>atomic update + rollback to previous image</li>
-            <li>KDE Plasma session on the bootc image</li>
-          </ul>
-        </div>
-
-        <div style="background:#0E1119;border:1px solid #1C2230;border-top:2px solid #54D6C6;border-radius:10px;padding:26px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#54D6C6">EXPERIMENTAL</p>
-          <p style="margin-top:8px;font-size:13px;color:#8B93A3">Being tested or validated right now.</p>
-          <ul style="margin-top:20px;display:flex;flex-direction:column;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.5;color:#EEF1F6">
-            <li>arka-pulse prediction models</li>
-            <li>constrained recovery actions</li>
-            <li>real-hardware testing across machines</li>
-            <li>graphical first-run setup</li>
-            <li>display and scaling behaviour</li>
-            <li>reliability thresholds and calibration</li>
-          </ul>
-        </div>
-
-        <div style="background:#0E1119;border:1px solid #1C2230;border-top:2px solid #2A3244;border-radius:10px;padding:26px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#8B93A3">NOT YET</p>
-          <p style="margin-top:8px;font-size:13px;color:#8B93A3">Known gaps. Do not assume these.</p>
-          <ul style="margin-top:20px;display:flex;flex-direction:column;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.5;color:#8B93A3">
-            <li>full-disk encryption by default</li>
-            <li>measured boot coverage end to end</li>
-            <li>a graphical installer</li>
-            <li>autonomous recovery without supervision</li>
-            <li>broad hardware compatibility guarantees</li>
-            <li>network-level anonymity of any kind</li>
-          </ul>
-        </div>
-      </div>
-      <p style="margin-top:22px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3;line-height:1.7">ArkaOS reduces what your local machine leaks by default. It does not make you anonymous, untrackable, or immune to attack.</p>
-    </div>
-  </section>
-
-  <section id="try" style="border-top:1px solid #1C2230;background:#080A11">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px">
-      <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">Try ArkaOS.</h2>
-      <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:62ch;line-height:1.6;text-wrap:pretty">There is no installer ISO yet. Three routes work today — a VM is the one we recommend.</p>
-      <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px">
-
-        <article style="background:#0E1119;border:1px solid #16C784;border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:14px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">RECOMMENDED</p>
-          <h3 style="font-size:20px;font-weight:600">Run in a VM</h3>
-          <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">QEMU / KVM</p>
-          <p style="font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">Boot the preview image in a virtual machine. Nothing touches your disk, and rollback testing is safe.</p>
-          <a class="nl" href="docs/#getting-started" style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#16C784">Try in a VM →</a>
-        </article>
-
-        <article style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:14px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#EAB94A">PREVIEW TESTING</p>
-          <h3 style="font-size:20px;font-weight:600">Boot from USB</h3>
-          <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">bare metal · limited hardware</p>
-          <p style="font-size:14.5px;line-height:1.6;color:#8B93A3;text-wrap:pretty">For development testing only. Real-hardware testing has begun, but compatibility is not guaranteed — Wi-Fi, GPU and suspend may not work on your machine.</p>
-          <a class="nl" href="docs/#getting-started" style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#EEF1F6">USB guide →</a>
-        </article>
-
-        <article style="background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:14px;min-width:0">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#54D6C6">FOR CONTRIBUTORS</p>
-          <h3 style="font-size:20px;font-weight:600">Build from source</h3>
-          <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">podman · bootc image builder</p>
-          <pre style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#EEF1F6;background:#06070C;border:1px solid #1C2230;border-radius:7px;padding:14px;overflow-x:auto;margin:0">podman build -t arkaos:dev .
-bootc-image-builder \
-  --type qcow2 arkaos:dev</pre>
-          <a class="nl" href="docs/#getting-started" style="margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#EEF1F6">Build guide →</a>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <section id="preview" style="border-top:1px solid #1C2230">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:center">
-      <div style="min-width:0">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#EAB94A">DESIGN PREVIEW — NOT THE SHIPPING DESKTOP</p>
-        <h2 style="margin-top:16px;font-size:clamp(26px,3vw,36px);font-weight:700;letter-spacing:-.02em">Where the desktop experience is heading.</h2>
-        <p style="margin-top:14px;font-size:15.5px;line-height:1.65;color:#8B93A3;text-wrap:pretty">Today ArkaOS ships a KDE Plasma session. The concept work beside this explores an Arka-specific desktop layer on top of it. It is a design exploration — not a screenshot of the current system, and not a promise about what ships.</p>
-        <ul style="margin-top:20px;display:flex;flex-direction:column;gap:10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8B93A3">
-          <li>ships today → KDE Plasma, unmodified session</li>
-          <li>exploration → Arka panels, privacy surfacing</li>
-          <li>not planned for preview → ArkaWM</li>
-        </ul>
-      </div>
-      <figure style="min-width:0;margin:0">
-        <div style="position:relative;aspect-ratio:16/10;background:radial-gradient(120% 90% at 50% 38%,#0c1424,#06070C 72%);border:1px solid #1C2230;border-radius:12px;overflow:hidden;display:grid;place-content:center;text-align:center;gap:10px">
-          <svg width="46" height="46" viewBox="0 0 24 24" style="margin:0 auto" aria-hidden="true"><path d="M12 2.5 22 21H2L12 2.5Z" fill="none" stroke="#16C784" stroke-width="1.4"/><path d="M12 10.5 16.8 19H7.2L12 10.5Z" fill="#16C784" opacity=".5"/></svg>
-          <span style="font-weight:800;letter-spacing:.16em;font-size:clamp(18px,3vw,30px);color:#16C784;text-shadow:0 0 30px rgba(22,199,132,.35)">ARKAOS</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#8B93A3;text-transform:uppercase">design preview</span>
-        </div>
-        <figcaption style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3;line-height:1.6">Concept of the ArkaOS desktop exploration. Labelled a design preview wherever it appears — not a screenshot of the current OS.</figcaption>
+  <section id="tour">
+    <div class="wrap">
+      <h2>See it in a minute</h2>
+      <p class="lead" style="margin-top:14px">From switching it on to the Privacy dashboard: setup, choosing light or dark, and your desktop. Recorded in a virtual machine; nothing is sped up except waiting.</p>
+      <figure class="shot">
+        <video controls preload="none" playsinline width="1440" height="900" poster="img/desktop-light.png" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
+          <source src="media/arkaos-tour.mp4" type="video/mp4">
+          A short recording of ArkaOS setup and desktop. Your browser can't play it here; the screenshots below show the same screens.
+        </video>
+        <figcaption class="note">No captions are spoken; on-screen labels say what each step is.</figcaption>
       </figure>
     </div>
   </section>
 
-  <section id="status" style="border-top:1px solid #1C2230;background:#080A11">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px">
-      <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">Project status.</h2>
-      <p style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#EAB94A">DEVELOPER PREVIEW · updated continuously</p>
-      <div style="margin-top:34px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
-        <div style="min-width:0;padding:26px;border:1px solid #1C2230;border-radius:10px;background:#0E1119">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#16C784">WORKS TODAY</p>
-          <ul style="margin-top:18px;display:flex;flex-direction:column;gap:11px;font-size:14px;line-height:1.5;color:#EEF1F6">
-            <li>Immutable Fedora bootc image with read-only root</li>
-            <li>Atomic updates with rollback to the previous image</li>
-            <li>KDE Plasma desktop session</li>
-            <li>arkad applying and re-checking privacy state</li>
-            <li>Firefox launched inside a bubblewrap sandbox</li>
-            <li>arka-pulse local telemetry and detection</li>
-          </ul>
-        </div>
-        <div style="min-width:0;padding:26px;border:1px solid #1C2230;border-radius:10px;background:#0E1119">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#54D6C6">BEING VALIDATED</p>
-          <ul style="margin-top:18px;display:flex;flex-direction:column;gap:11px;font-size:14px;line-height:1.5;color:#EEF1F6">
-            <li>Broader bare-metal hardware validation</li>
-            <li>Reliability calibration for arka-pulse</li>
-            <li>Display and scaling refinement</li>
-            <li>Graphical first-run setup</li>
-            <li>Additional privacy UX in the desktop</li>
-          </ul>
-        </div>
-        <div style="min-width:0;padding:26px;border:1px solid #1C2230;border-radius:10px;background:#0E1119">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#8B93A3">PLANNED NEXT</p>
-          <ul style="margin-top:18px;display:flex;flex-direction:column;gap:11px;font-size:14px;line-height:1.5;color:#8B93A3">
-            <li>Full-disk encryption by default</li>
-            <li>Stronger measured-boot coverage</li>
-            <li>Installer evolution beyond manual routes</li>
-            <li>ArkaWM exploration</li>
-            <li>Agentic system interfaces (research)</li>
-          </ul>
-          <p style="margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3">None of the above exists yet.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="docs" style="border-top:1px solid #1C2230">
-    <div style="max-width:1200px;margin:0 auto;padding:88px 24px">
-      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+  <section id="what">
+    <div class="wrap">
+      <h2>What it is</h2>
+      <div class="three">
         <div>
-          <h2 style="font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.02em">Documentation.</h2>
-          <p style="margin-top:14px;font-size:16.5px;color:#8B93A3;max-width:56ch;line-height:1.6;text-wrap:pretty">Five places to start. Deeper technical detail lives inside the docs, not on this page.</p>
+          <h3>Privacy settings, already on</h3>
+          <p>Settings you'd normally look up and change by hand are set when the system starts, and checked again while it runs. If one stops being in place, ArkaOS says so.</p>
         </div>
-        <a class="btnp" href="docs/" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#16C784;padding:11px 18px;border-radius:6px;font-weight:700">Open the docs →</a>
+        <div>
+          <h3>Updates you can undo</h3>
+          <p>A new version is prepared next to the one you're using and takes over only when you restart. The previous version is kept, so you can go back to it. Nothing restarts without asking.</p>
+        </div>
+        <div>
+          <h3>Plain answers, no score</h3>
+          <p>The Privacy dashboard lists each setting as <em>Configured</em> or <em>Needs attention</em> and when it was last checked. It never gives you a percentage or says you're "protected".</p>
+        </div>
       </div>
-      <div id="docLinks" style="margin-top:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px"></div>
     </div>
   </section>
 
-  <footer style="border-top:1px solid #1C2230;background:#080A11">
-    <div style="max-width:1200px;margin:0 auto;padding:48px 24px;display:flex;justify-content:space-between;gap:28px;flex-wrap:wrap;align-items:flex-start">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <span style="display:flex;align-items:center;gap:10px">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 21H2L12 2.5Z" fill="none" stroke="#16C784" stroke-width="1.6"/><path d="M12 10.5 16.8 19H7.2L12 10.5Z" fill="#16C784"/></svg>
-          <span style="font-size:14px;font-weight:600">ArkaOS</span>
-        </span>
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;line-height:1.7">An independent, privacy-first immutable Linux desktop.<br>Developer Preview. Not affiliated with Fedora or the KDE project.</p>
+  <section id="privacy">
+    <div class="wrap">
+      <h2>The privacy settings</h2>
+      <p class="lead" style="margin-top:14px">What each one does, in plain words, and how far we've tested it.</p>
+      <div class="rows">
+        <div class="row"><div><b>Encrypted DNS</b><span>Website-name lookups are sent encrypted (to Quad9). On a network that blocks this, you can allow unencrypted lookups on that network only, and the dashboard says so (this option is new and still being tested).</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Private network address</b><span>Uses a random hardware (MAC) address on networks, so networks see a different device ID.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Generic device name</b><span>Calls the computer "arka" on networks instead of a name that identifies you.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Temporary IPv6 addresses</b><span>Uses IPv6 addresses that change over time.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Sandboxed browser</b><span>Firefox runs in a sandbox that can see your Downloads folder but not the rest of your files.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Firewall</b><span>Rejects connections other computers try to open to this one.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Kernel hardening</b><span>Stricter memory and kernel settings that make some attacks harder.</span></div><div class="state ok">Tested in a VM</div></div>
       </div>
-      <div style="display:flex;gap:44px;flex-wrap:wrap;font-size:13.5px">
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#8B93A3">PROJECT</span>
-          <a class="nl" href="#architecture" style="color:#EEF1F6">Architecture</a>
-          <a class="nl" href="#status" style="color:#EEF1F6">Status</a>
-          <a class="nl" href="#prove" style="color:#EEF1F6">What we prove</a>
+      <p class="note" style="margin-top:14px">"Configured" means a checked setting is in place. It doesn't mean you can't be tracked: websites, accounts and apps can still identify you.</p>
+      <div class="pair">
+        <figure>
+          <img src="img/setup-privacy-light.png" width="1440" height="810" alt="The last step of ArkaOS setup, titled Your privacy settings, listing six settings including the firewall, each marked Configured, with the note Checked just now.">
+          <figcaption class="note">Setup shows where each setting stands before you start.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/dashboard-light.png" width="1440" height="900" alt="The ArkaOS Privacy dashboard listing six settings, each marked Configured, with the note Checked 44 seconds ago.">
+          <figcaption class="note">The Privacy dashboard, any time afterwards.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="honest">
+    <div class="wrap">
+      <h2>What we can show, and what we can't</h2>
+      <p class="lead" style="margin-top:14px">Every item sits in exactly one column. We move something left only after testing it.</p>
+      <div class="cols">
+        <div>
+          <h3>Tested</h3>
+          <ul>
+            <li>The privacy settings above marked "Tested in a VM"</li>
+            <li>Setup with a light or dark look, then your desktop</li>
+            <li>Read-only system files at runtime</li>
+            <li>Booting from USB on one laptop (an earlier version)</li>
+          </ul>
         </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#8B93A3">START</span>
-          <a class="nl" href="docs/" style="color:#EEF1F6">Docs</a>
-          <a class="nl" href="#try" style="color:#EEF1F6">Try ArkaOS</a>
-          <a class="nl" href="https://github.com/thulasiramk-2310/Arka" rel="noopener" style="color:#EEF1F6">GitHub</a>
+        <div>
+          <h3>Being tested</h3>
+          <ul>
+            <li>Updates that wait for your restart, and going back to the previous version, on this version (tested on earlier ones)</li>
+            <li>Going back automatically if an update fails its start-up checks (the checks run; the automatic going back hasn't been tested yet)</li>
+            <li>More real laptops</li>
+            <li>arka-pulse, which watches system health locally. Its predictions are estimates and it takes no action on its own.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Not yet</h3>
+          <ul>
+            <li>An installer and disk encryption</li>
+            <li>Secure Boot with ArkaOS's own keys</li>
+            <li>Support for a wide range of hardware</li>
+            <li>Anonymity of any kind. ArkaOS doesn't hide who you are online.</li>
+          </ul>
         </div>
       </div>
     </div>
-  </footer>
-</div>
+  </section>
+
+  <section id="try">
+    <div class="wrap">
+      <h2>Try it</h2>
+      <p class="lead" style="margin-top:14px">There's no installer yet. A virtual machine is the safest way to look around.</p>
+      <div class="try">
+        <div>
+          <h3>In a virtual machine</h3>
+          <p>Recommended. Nothing touches your computer's disk.</p>
+          <a href="docs/#getting-started">Getting started →</a>
+        </div>
+        <div>
+          <h3>From a USB stick</h3>
+          <p>For testing only. It has run on one laptop so far; Wi-Fi, graphics or sleep may not work on yours.</p>
+          <a href="docs/#getting-started">USB notes →</a>
+        </div>
+        <div>
+          <h3>Build it yourself</h3>
+          <p>The whole system is one container image.</p>
+<pre>podman build -t arkaos:dev .</pre>
+          <a href="https://github.com/thulasiramk-2310/Arka/blob/master/docs/BUILDING.md">Build guide →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="docs/">Documentation</a>
+    <a href="https://github.com/thulasiramk-2310/Arka">Source code</a>
+    <span>GPL-3.0</span>
+    <span class="end">Built on Fedora, bootc and KDE Plasma.</span>
+  </div>
+</footer>
 
 <script>
+// Light/Dark: follows the system until the visitor chooses; the choice is
+// kept only in this browser.
 (function () {
-  var MONO = "'JetBrains Mono',monospace";
-
-  // ── hero daemon rows ──
-  var daemon = [
-    { label: "MAC address", value: "randomized" },
-    { label: "DNS", value: "DoT · Quad9" },
-    { label: "Hostname", value: "masked" },
-    { label: "IPv6", value: "privacy addresses" },
-    { label: "Browser", value: "bubblewrap sandbox" }
-  ];
-  var dr = document.getElementById("daemonRows");
-  daemon.forEach(function (r) {
-    var li = document.createElement("li");
-    li.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid rgba(28,34,48,.6)";
-    li.innerHTML = '<span style="color:#8B93A3">' + r.label + '</span>' +
-      '<span style="color:#16C784;display:flex;align-items:center;gap:8px"><svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 6.4 4.4 9.3 10.5 3" fill="none" stroke="#16C784" stroke-width="1.7"/></svg>' + r.value + '</span>';
-    dr.appendChild(li);
-  });
-
-  // ── doc links ──
-  var docs = [
-    { num: "01", title: "What is ArkaOS?", blurb: "The premise, the scope, and what it is not.", href: "docs/#what-is-arkaos" },
-    { num: "02", title: "Getting Started", blurb: "VM, USB and build-from-source routes.", href: "docs/#getting-started" },
-    { num: "03", title: "What We Prove / What We Don't", blurb: "Verified, experimental, and known gaps.", href: "docs/#prove" },
-    { num: "04", title: "How ArkaOS Works", blurb: "The stack, arkad, arka-pulse, updates.", href: "docs/#how-it-works" },
-    { num: "05", title: "Project Status", blurb: "What works today and what is next.", href: "docs/#status" }
-  ];
-  var dl = document.getElementById("docLinks");
-  docs.forEach(function (d) {
-    var a = document.createElement("a");
-    a.className = "doc";
-    a.href = d.href;
-    a.style.cssText = "display:flex;flex-direction:column;gap:10px;padding:22px;background:#0E1119;border:1px solid #1C2230;border-radius:10px;color:#EEF1F6;min-width:0";
-    a.innerHTML = '<span style="font-family:' + MONO + ';font-size:11px;color:#8B93A3;letter-spacing:.14em">' + d.num + '</span>' +
-      '<span style="font-size:16px;font-weight:600">' + d.title + '</span>' +
-      '<span style="font-size:13.5px;line-height:1.55;color:#8B93A3">' + d.blurb + '</span>';
-    dl.appendChild(a);
-  });
-
-  // ── architecture selector ──
-  var ARCH = [
-    { name: "You", meta: "the person at the machine", tag: "", color: "#EEF1F6", body: "Everything below exists to make one thing possible: using a normal desktop without having to configure privacy by hand or fear an update.", chips: ["no mandatory account", "no telemetry sent off-device"] },
-    { name: "ArkaOS Desktop", meta: "KDE Plasma session", tag: "ships today", color: "#16C784", body: "ArkaOS ships an unmodified KDE Plasma session. Arka-specific desktop surfaces are a design exploration, and are labelled as such wherever they are shown.", chips: ["KDE Plasma", "Wayland", "first-run setup · experimental"] },
-    { name: "Applications + Sandbox", meta: "bubblewrap", tag: "ships today", color: "#16C784", body: "Firefox runs inside a bubblewrap sandbox with a restricted view of the filesystem. That is a real containment boundary, not complete isolation — a sandboxed browser can still be exploited.", chips: ["bubblewrap", "Firefox", "Flatpak apps"] },
-    { name: "arkad + arka-pulse", meta: "Arka system services", tag: "the Arka layer", color: "#54D6C6", body: "arkad applies and re-checks privacy state. arka-pulse watches system health locally: telemetry, detection, prediction and verification. Automated recovery remains constrained and experimental.", chips: ["MAC randomization", "DoT · Quad9", "masked hostname", "IPv6 privacy addresses", "prediction · experimental"] },
-    { name: "Fedora bootc + composefs", meta: "immutable image foundation", tag: "upstream", color: "#EAB94A", body: "System files arrive as a bootc image and are read-only at runtime. Composefs alone does not prove image authenticity. Updates are staged atomically; a retained deployment enables rollback, which still needs boot testing.", chips: ["read-only root", "atomic updates", "rollback", "ostree"] },
-    { name: "Linux kernel", meta: "upstream Fedora kernel", tag: "upstream", color: "#8B93A3", body: "ArkaOS does not fork the kernel. Hardware support, security fixes and drivers come from the same place every other Fedora system gets them.", chips: ["upstream drivers", "systemd", "SELinux"] },
-    { name: "Hardware", meta: "x86_64 · UEFI", tag: "in validation", color: "#8B93A3", body: "Real-hardware testing has begun on a small set of machines. Wi-Fi, GPU and suspend behaviour vary, and broad hardware compatibility is not something we can promise yet.", chips: ["UEFI boot", "measured boot · partial", "no compatibility guarantee"] }
-  ];
-  var archList = document.getElementById("archList");
-  var sel = 3;
-  var buttons = [];
-  ARCH.forEach(function (l, i) {
-    var li = document.createElement("li");
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.setAttribute("aria-pressed", i === sel ? "true" : "false");
-    btn.innerHTML =
-      '<span class="bar" style="width:3px;align-self:stretch;min-height:30px;border-radius:2px;background:' + l.color + ';flex:0 0 auto"></span>' +
-      '<span style="display:flex;flex-direction:column;gap:5px;min-width:0;text-align:left">' +
-        '<span style="font-size:14.5px;font-weight:600;color:#EEF1F6">' + l.name + '</span>' +
-        '<span style="font-family:' + MONO + ';font-size:11.5px;color:#8B93A3">' + l.meta + '</span>' +
-      '</span>' +
-      '<span class="tag" style="font-family:' + MONO + ';font-size:10.5px;letter-spacing:.1em;color:' + l.color + ';margin-left:auto;white-space:nowrap">' + l.tag + '</span>';
-    btn.addEventListener("click", function () { sel = i; render(); });
-    buttons.push(btn);
-    li.appendChild(btn);
-    archList.appendChild(li);
-  });
-  var aK = document.getElementById("archKicker"), aN = document.getElementById("archName"),
-      aB = document.getElementById("archBody"), aC = document.getElementById("archChips");
-  function render() {
-    ARCH.forEach(function (l, i) {
-      var on = i === sel;
-      buttons[i].style.cssText = "width:100%;display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;background:" +
-        (on ? "#0E1119" : "transparent") + ";border:1px solid " + (on ? l.color : "#1C2230") +
-        ";border-radius:10px;font:inherit;text-align:left;transition:border-color .2s ease,background .2s ease";
-      buttons[i].setAttribute("aria-pressed", on ? "true" : "false");
-      buttons[i].querySelector(".bar").style.opacity = on ? "1" : ".3";
-      buttons[i].querySelector(".tag").style.opacity = on ? "1" : ".7";
-    });
-    var a = ARCH[sel];
-    aK.textContent = "LAYER " + String(sel + 1).padStart(2, "0") + " / 07";
-    aN.textContent = a.name;
-    aB.textContent = a.body;
-    aC.innerHTML = "";
-    a.chips.forEach(function (c) {
-      var li = document.createElement("li");
-      li.style.cssText = "font-family:" + MONO + ";font-size:11.5px;color:#8B93A3;border:1px solid #1C2230;border-radius:5px;padding:6px 10px";
-      li.textContent = c;
-      aC.appendChild(li);
-    });
+  var root = document.documentElement, btn = document.getElementById('theme');
+  function current() {
+    var t = root.getAttribute('data-theme');
+    if (t) return t;
+    return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
-  render();
-
-  // ── "what ArkaOS is" walkthrough (multi-scene) ──
-  var player = document.getElementById("filmStage"),
-      aprog = document.getElementById("aprog"),
-      poster = document.getElementById("poster"),
-      areplay = document.getElementById("areplay");
-  var scns = [].slice.call(player.querySelectorAll(".scn"));
-  var pipe = [].slice.call(document.querySelectorAll("#apipe span"));
-  // [sceneIndex, at-ms]
-  var cues = [[0, 0], [1, 4200], [2, 8600], [3, 13000], [4, 17600], [5, 23800]];
-  var TOTAL = 27800;
-  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var timers = [], raf = 0, started = false;
-
-  function clr() { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); }
-  function show(i) { scns.forEach(function (s, k) { s.classList.toggle("on", k === i); }); }
-  function pipeRun() { pipe.forEach(function (p, k) { timers.push(setTimeout(function () { p.classList.add("on2"); }, 300 + k * 430)); }); }
-
-  function play() {
-    clr();
-    player.classList.add("playing");
-    if (reduced) { // static: hold the final logo frame, whole pipeline lit
-      show(5);
-      pipe.forEach(function (p) { p.classList.add("on2"); });
-      aprog.style.width = "100%";
-      return;
-    }
-    pipe.forEach(function (p) { p.classList.remove("on2"); });
-    var t0 = performance.now();
-    cues.forEach(function (c) {
-      timers.push(setTimeout(function () { show(c[0]); if (c[0] === 4) pipeRun(); }, c[1]));
-    });
-    (function tickBar() {
-      var p = Math.min((performance.now() - t0) / TOTAL, 1);
-      aprog.style.width = p * 100 + "%";
-      if (p < 1) raf = requestAnimationFrame(tickBar);
-    })();
-  }
-
-  function start() { if (started) return; started = true; play(); }
-  poster.addEventListener("click", start);
-  poster.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } });
-  areplay.addEventListener("click", function () { started = true; play(); });
-
-  // autoplay once when the film scrolls into view, from the visible poster
-  if ("IntersectionObserver" in window && !reduced) {
-    var io = new IntersectionObserver(function (en) {
-      en.forEach(function (x) { if (x.isIntersecting) { start(); io.disconnect(); } });
-    }, { threshold: 0.5 });
-    io.observe(player);
-  }
+  function show() { btn.textContent = current() === 'dark' ? 'Light' : 'Dark'; }
+  try { var saved = localStorage.getItem('arka-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  show();
+  btn.addEventListener('click', function () {
+    var next = current() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('arka-theme', next); } catch (e) {}
+    show();
+  });
 })();
 </script>
 </body>
