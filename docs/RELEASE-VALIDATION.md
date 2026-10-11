@@ -149,7 +149,8 @@ Fresh QEMU install of the fixed image (good digest prefix `5f81fe81`):
 1. Broken update (`3db1e1a5`, failing required check + marker) staged. At
    shutdown the journal shows "Setting rollback trigger for deployment" and
    "Rollback trigger set successfully".
-2. Unattended: three failed boots ("Boot counter is 2/1, rebooting", then
+2. Unattended: four failed boots, the first attempt plus three retries
+   (corrected after an independent re-run; "Boot counter is 2/1, rebooting", then
    "Boot counter exhausted and next-deployment-id is set - initiating
    rollback", "Rollback successful"), then the good digest `5f81fe81` booted
    with no marker, `boot_success=1`, no failed units ("FALLBACK BOOT DETECTED").
@@ -163,6 +164,36 @@ Fresh QEMU install of the fixed image (good digest prefix `5f81fe81`):
 Limits: a VM, not hardware. Updates are served by a minimal test registry
 (one new layer on the installed image). A kernel that fails before userspace
 relies on the stock GRUB counter rule, which this test did not exercise.
+
+### Early-boot failures and boot count, verified 2026-10-11
+
+The run above left one gap: an update that fails before userspace never runs
+greenboot. Reproduced with an update whose kernel arguments point `init=` at a
+missing file: it stopped at the initramfs emergency prompt and waited there
+indefinitely (`kernel.panic=0`, emergency shell enabled).
+
+Fix: `kernel/20-arkaos-recovery.toml` adds `panic=10 rd.shell=0
+rd.emergency=reboot`, and `arka-arm-boot-counter` (a second `ExecStop` in the
+trigger drop-in) sets `boot_counter=GREENBOOT_MAX_BOOT_ATTEMPTS` (3) and
+`boot_success=0` once greenboot has recorded the staged update, so GRUB's
+greenboot rule counts boots of the new version from its first boot.
+
+Fresh QEMU install of the fixed image (good digest prefix `fcb7555e`):
+
+- A. Failing required check: "Armed boot counter (3 boots)" at shutdown; three
+  failed boots ("Boot counter is 2", "is 1", then "exhausted ... initiating
+  rollback"); the good digest booted with no marker and no failed units.
+- B. Update that cannot reach userspace: back on `fcb7555e` about 30 s after the
+  restart, unattended; greenboot logged the GRUB fallback and made it permanent
+  ("Rollback to previous deployment completed successfully"). The failed boots
+  end before the journal is written, so they are not counted individually.
+- C. Healthy update (`15e1cda6`): counter armed, cleared on its first boot, still
+  booted after a second restart.
+- D. `bootc rollback` by hand returned to `fcb7555e`.
+- Two test files and a 50 MB file kept their hashes throughout.
+
+Trade-off: with `rd.shell=0` the initramfs emergency shell is unavailable; a
+user who needs it can remove the option from the GRUB entry for one boot.
 
 The report-only section above is kept as history; its mitigation is no
 longer in the image. The bar set for automatic recovery (shutdown trigger

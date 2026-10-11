@@ -94,15 +94,17 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
 - 🛡️ **Kernel hardening.** Stricter kernel boot options (memory wiping,
   lockdown in integrity mode, and others) and runtime settings. User namespaces stay
   on, because Firefox's sandbox and Flatpak need them.
-- 🩹 **Automatic rollback after a bad update (greenboot, with one fix).** After
-  you restart into a new version, start-up checks run; if they fail, the computer
-  restarts to retry and after three failed boots goes back to the previous version
-  on its own. Stock greenboot 0.16.4 never recorded which version to go back to,
-  because the unit that records it was not stopped at shutdown; ArkaOS adds a
-  drop-in that fixes it. Tested in a VM on 2026-10-11: a deliberately broken
-  update was rolled back with nobody touching it, a healthy update stayed across
-  restarts, `sudo bootc rollback` still works by hand, and the test files in
-  `/home` and `/var` were unchanged. Not yet tested on real hardware.
+- 🩹 **Automatic rollback after a bad update (greenboot, with two fixes).**
+  After you restart into a new version, start-up checks run. If the version fails
+  them, or fails before the desktop even starts, the computer restarts and, after
+  three failed boots, goes back to the previous version on its own. ArkaOS fixes
+  stock greenboot 0.16.4, which never recorded which version to go back to, and
+  arms GRUB's boot counter when an update is staged, so a kernel or early-boot
+  failure also falls back instead of waiting at a recovery screen. Tested in a VM
+  on 2026-10-11: a broken update went back after three failed boots, an update
+  that could not start went back within about 30 seconds, a healthy update stayed
+  across restarts, `sudo bootc rollback` still works by hand, and the test files
+  in `/home` and `/var` were unchanged. Not yet tested on real hardware.
 - 🎯 **App icons:** one family, a distinct colour per app; Firefox and the file
   manager keep their own icons.
 - 🐞 **Fixes from the Nokia test:** the disk image no longer enables a serial
