@@ -22,6 +22,8 @@ trait Arkad {
     #[zbus(property)]
     fn ipv6_privacy(&self) -> zbus::Result<bool>;
     #[zbus(property)]
+    fn firewall(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
     fn sandbox_status(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn browser_sandbox(&self) -> zbus::Result<String>;
@@ -99,6 +101,8 @@ async fn fetch_full(
         mac_randomization: proxy.mac_randomization().await?,
         hostname_privacy:  proxy.hostname_privacy().await?,
         ipv6_privacy:      proxy.ipv6_privacy().await?,
+        // Older arkad builds have no firewall check: show it as not configured.
+        firewall:          proxy.firewall().await.unwrap_or(false),
         sandbox_status:    SandboxStatus::from(proxy.sandbox_status().await?),
         browser_sandbox:   BrowserSandbox::from(proxy.browser_sandbox().await?),
         last_check:        proxy.last_check().await.unwrap_or(0),

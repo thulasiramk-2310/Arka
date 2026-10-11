@@ -37,6 +37,7 @@ pub struct DashboardState {
     pub mac_randomization: bool,
     pub hostname_privacy: bool,
     pub ipv6_privacy: bool,
+    pub firewall: bool,
     pub sandbox_status: SandboxStatus,
     pub browser_sandbox: BrowserSandbox,
     /// Unix seconds of arkad's last completed check (0 = never/unknown).
@@ -52,6 +53,7 @@ impl Default for DashboardState {
             mac_randomization: false,
             hostname_privacy: false,
             ipv6_privacy: false,
+            firewall: false,
             sandbox_status: SandboxStatus::Unknown("…".into()),
             browser_sandbox: BrowserSandbox::Unknown("…".into()),
             last_check: 0,
