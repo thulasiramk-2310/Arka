@@ -1,0 +1,9 @@
+# ArkaOS recovery boot options: a failure that stops the boot before the
+# desktop must end in a restart, so GRUB's boot counter can move on to the
+# previous version (see arka-arm-boot-counter). Without these, Fedora waits
+# forever at the early-boot emergency screen or a kernel panic.
+#   panic=10                 restart 10 s after a kernel panic
+#   rd.shell=0 rd.emergency=reboot
+#                            early boot (initramfs) failure: restart instead
+#                            of waiting at an emergency shell
+kargs = ["panic=10", "rd.shell=0", "rd.emergency=reboot"]

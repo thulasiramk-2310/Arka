@@ -1,0 +1,20 @@
+#!/bin/sh
+# arka-arm-boot-counter — runs at shutdown right after greenboot has recorded
+# the staged update (greenboot_next_deployment_id), and arms GRUB's boot
+# counter for it. greenboot only arms the counter after a health check fails
+# in a fully booted system; an update that never gets that far (kernel panic,
+# early-boot failure) would otherwise boot again and again. With the counter
+# armed, GRUB's greenboot rule falls back to the previous version after
+# GREENBOOT_MAX_BOOT_ATTEMPTS boots, and greenboot makes that permanent. A
+# healthy update clears the counter on its first boot.
+set -u
+grub2-editenv list 2>/dev/null | grep -q '^greenboot_next_deployment_id=' || exit 0
+max=$(sed -n 's/^GREENBOOT_MAX_BOOT_ATTEMPTS=//p' /etc/greenboot/greenboot.conf 2>/dev/null | tail -1)
+case "$max" in ''|*[!0-9]*) max=3 ;; esac
+was_ro=0
+findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro && was_ro=1
+[ $was_ro = 1 ] && mount -o remount,rw /boot
+grub2-editenv - set "boot_counter=$max" boot_success=0 &&
+    echo "Armed boot counter ($max boots) for the staged update"
+[ $was_ro = 1 ] && mount -o remount,ro /boot
+exit 0

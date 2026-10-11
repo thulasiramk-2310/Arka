@@ -31,6 +31,8 @@ FROM scratch AS files
 COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
 COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
+COPY kernel/20-arkaos-recovery.toml /usr/lib/bootc/kargs.d/20-arkaos-recovery.toml
+COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
@@ -461,7 +463,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-apply-look /usr/bin/firefox-sandbox && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/bin/firefox-sandbox && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
