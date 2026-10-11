@@ -47,6 +47,11 @@ impl ArkadIface {
     }
 
     #[zbus(property)]
+    async fn firewall(&self) -> bool {
+        self.state.read().await.firewall
+    }
+
+    #[zbus(property)]
     async fn sandbox_status(&self) -> String {
         self.state.read().await.sandbox_status.as_str().to_owned()
     }
@@ -75,7 +80,7 @@ impl ArkadIface {
         if failed.is_empty() {
             Ok(())
         } else {
-            Err(zbus::fdo::Error::Failed(format!("Protection not confirmed: {}", failed.join(", "))))
+            Err(zbus::fdo::Error::Failed(format!("Not confirmed: {}", failed.join(", "))))
         }
     }
 }

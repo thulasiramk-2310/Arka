@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ArkaOS default zone: reject connections other computers try to open to
+     this one. Replies to this computer's own connections are still allowed
+     (connection tracking); DHCPv6 replies are allowed so IPv6 keeps working.
+     Change it in the firewall settings; arkad only sets it as the default. -->
+<zone target="%%REJECT%%">
+  <short>ArkaOS</short>
+  <description>Rejects incoming connections that this computer did not ask for.</description>
+  <service name="dhcpv6-client"/>
+</zone>

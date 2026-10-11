@@ -387,6 +387,23 @@ k.update(Id="org.arkaos."+v+".desktop", Name="ArkaOS "+v.title(), Description="T
     kwriteconfig6 --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop && \
     printf '[KSplash]\nEngine=none\nTheme=None\n' > /etc/skel/.config/ksplashrc
 
+# Firewall on by default: the ArkaOS zone rejects unsolicited incoming
+# connections (Fedora KDE's default zone allows ports 1025-65535). arkad
+# checks it and the Privacy dashboard shows it.
+# greenboot: health checks after each boot; if an update keeps failing them,
+# the computer goes back to the previous version on its own.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q \
+      firewalld greenboot greenboot-default-health-checks && \
+    systemctl enable firewalld.service && \
+    for u in $(rpm -ql greenboot | grep -E '^/usr/lib/systemd/system/[^/]+\.service$' | xargs -n1 basename); do \
+      systemctl enable "$u" && echo "greenboot: enabled $u"; \
+    done
+COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
+RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
+    grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf
+
+
+
 # Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
 COPY arka-apply-look /usr/libexec/arka-apply-look
 

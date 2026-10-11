@@ -17,7 +17,7 @@ pub async fn reconcile(enforcers: &[Box<dyn AsyncEnforcer>], state: &SharedState
         observe(e.as_ref(), state).await;
         let healthy = state.read().await.control_healthy(e.name());
         if was_healthy && !healthy {
-            crate::log::log_event(e.name(), "drift", "Protection could not be confirmed; retrying");
+            crate::log::log_event(e.name(), "drift", "Setting could not be confirmed; trying again");
         }
         if force || !healthy {
             let applied = tokio::time::timeout(Duration::from_secs(15), e.enforce()).await;
@@ -30,7 +30,7 @@ pub async fn reconcile(enforcers: &[Box<dyn AsyncEnforcer>], state: &SharedState
             if !apply_ok || !verified {
                 failed.push(e.name().to_owned());
             } else if !healthy {
-                crate::log::log_event(e.name(), "recovered", "Protection verified after enforcement");
+                crate::log::log_event(e.name(), "recovered", "Setting confirmed after applying it again");
             }
         }
         // A slow control must not starve the service watchdog between controls.

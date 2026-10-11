@@ -1,6 +1,7 @@
 pub mod dns;
 pub mod hostname;
 pub mod ipv6;
+pub mod firewall;
 pub mod mac;
 pub mod sandbox;
 

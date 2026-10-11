@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(enforcers::dns::DnsEnforcer::new(&cfg)),
         Box::new(enforcers::hostname::HostnameEnforcer::new(&cfg)),
         Box::new(enforcers::ipv6::Ipv6Enforcer::new(&cfg)),
+        Box::new(enforcers::firewall::FirewallEnforcer::new(&cfg)),
         Box::new(enforcers::sandbox::SandboxEnforcer),
     ]);
 
@@ -39,8 +40,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let enforcement_lock = Arc::new(tokio::sync::Mutex::new(()));
     let failed = reconcile::reconcile(&enforcers, &shared, true).await;
-    let initial_score = shared.read().await.privacy_score;
-    log::log_event("system", "ready", &format!("Privacy score: {initial_score}/100; {} controls unconfirmed", failed.len()));
+    // Plain counts only: ArkaOS never presents privacy as a score.
+    log::log_event("system", "ready", &match failed.len() {
+        0 => "Startup check finished: every setting confirmed".to_string(),
+        1 => "Startup check finished: 1 setting not confirmed".to_string(),
+        n => format!("Startup check finished: {n} settings not confirmed"),
+    });
 
     // Register D-Bus service
     let _conn = zbus::connection::Builder::system()?
@@ -59,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // systemd would kill us on schedule (WatchdogSec) forever.
     let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Ready]);
 
-    info!(score = initial_score, "arkad ready");
+    info!(unconfirmed = failed.len(), "arkad ready");
 
     // Fixed, bounded retry cadence avoids spinning on small machines. Each
     // control is checked independently; healthy controls are not reapplied.
