@@ -6,6 +6,8 @@
 
 <p align="center"><em>A desktop operating system that makes secure computing simple, intuitive, and accessible.</em></p>
 
+<p align="center"><strong><a href="https://thulasiramk-2310.github.io/Arka/">Website</a></strong> · <a href="https://thulasiramk-2310.github.io/Arka/#tour">One-minute tour video</a> · <a href="https://thulasiramk-2310.github.io/Arka/docs/">Docs</a></p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0--dp1-16c784?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/status-Developer%20Preview%201-16c784?style=flat-square" alt="status"/>
@@ -82,14 +84,29 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   background; the Updates app shows the installed version, any downloaded update,
   whether a restart is needed and whether a previous version is available. You
   choose when to restart.
+- 🧱 **Firewall on by default.** An ArkaOS firewall zone rejects connections
+  other computers try to open to this one. arkad checks the zone's actual rules
+  and policies, not just its name, and setup, the dashboard and the tray show it.
+- 🌐 **Encrypted DNS with an honest exception.** On a network that blocks encrypted
+  DNS (some hotels and sign-in pages), the dashboard notices that names aren't
+  resolving and offers to allow unencrypted DNS **on that network only**. It then
+  shows *Off on this network*, and other networks stay strict.
+- 🛡️ **Kernel hardening.** Stricter kernel boot options (memory wiping,
+  lockdown in integrity mode, and others) and runtime settings. User namespaces stay
+  on, because Firefox's sandbox and Flatpak need them.
+- 🩹 **Boot health checks (greenboot).** After each boot, health checks run and
+  mark the boot as good. Going back automatically after an update that fails them
+  is set up but **not yet tested**.
+- 🎯 **App icons:** one family, a distinct colour per app; Firefox and the file
+  manager keep their own icons.
 - 🐞 **Fixes from the Nokia test:** the disk image no longer enables a serial
   console (the cause of a crash loop there), and `scripts/flash-usb.sh` writes and
   verifies USB sticks and repairs the GPT. In a VM, a Capsule app install from
   Flathub completed. Neither is confirmed on the Nokia yet.
 
-Still a developer preview — no installer, one hardware data point, and known polish
-tracked in the field notes. Open question: strict encrypted DNS currently leaves no
-name resolution on networks that block it (some hotels and captive portals).
+Everything above was tested in a VM on 2026-10-11 unless it says otherwise. Still a
+developer preview: no installer or disk encryption yet, one hardware data point,
+and known polish tracked in the field notes.
 
 ---
 
@@ -115,7 +132,9 @@ microphone recording. Session D-Bus is hidden. Earlier isolation checks are
 recorded in [PHASE4-SANDBOX.md](PHASE4-SANDBOX.md); each release still needs testing.
 
 **Periodic configuration checks:** arkad attempts MAC randomization, strict
-DNS-over-TLS policy, a generic hostname and IPv6 temporary-address settings.
+DNS-over-TLS policy, a generic hostname, IPv6 temporary-address settings and the
+ArkaOS firewall zone. A per-network DNS exception is shown as such, never as
+encrypted.
 Checks can fail; configured DNS policy does not prove that every app uses it.
 The tray requires a completed check less than three 30-second polls old.
 OS rollback selects another system deployment; it does not restore older
@@ -145,10 +164,21 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 
 ## Screenshots
 
-**Historical DP1 screenshots — outdated for the Fedora 44 candidate.** Desktop,
-setup and theme work is changing. The dashboard score and report's DNS coverage
-shown below are obsolete indicators, not evidence of current protection or
-measured traffic. Replacement screenshots must come from a tested image.
+Fedora 44 candidate, light look, from a VM test of a built image:
+
+<p align="center">
+  <img src="website/img/desktop-light.png" width="100%" alt="The ArkaOS desktop in its light look: slim top bar, small dock, and a pale wallpaper with the ArkaOS triangle in thin lines"/>
+</p>
+<p align="center">
+  <img src="website/img/setup-privacy-light.png" width="49%" alt="The last step of setup, Your privacy settings, listing six settings including the firewall, each marked Configured"/>
+  <img src="website/img/dashboard-light.png" width="49%" alt="The Privacy dashboard listing six settings, each marked Configured, with when they were last checked"/>
+</p>
+
+<details>
+<summary><strong>Historical DP1 screenshots (outdated)</strong></summary>
+
+The dashboard score and report's DNS coverage shown below are obsolete
+indicators, not evidence of current protection or measured traffic.
 
 <p align="center">
   <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
@@ -176,6 +206,8 @@ measured traffic. Replacement screenshots must come from a tested image.
 <p align="center"><em>Live DP1 captures (2026-07-11): desktop, KDE lock screen, first-boot
 wizard, full-screen launcher, Privacy Dashboard, Privacy Report, Capsule, and Settings.</em></p>
 
+</details>
+
 ## Roadmap
 
 <p align="center">
@@ -195,6 +227,8 @@ arkaos-firefox           sandbox wrapper     arkaos-firstboot         welcome wi
 arka-plasma-firstrun     first-login branding one-shot
 arka-apply-look          Light/Dark switch (first login + Settings)
 systemd/                 update-status publisher for unprivileged apps
+firewalld/               the ArkaOS firewall zone
+kernel/                  kernel hardening (boot options + runtime settings)
 docs/                    architecture · building · testing · installation · release notes
 scripts/                 QA harnesses, make-disk.sh, flash-usb.sh
 ```
