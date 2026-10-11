@@ -1,0 +1,31 @@
+#!/bin/sh
+# arka-stale-trigger-check — runs before greenboot's boot check
+# (greenboot-healthcheck.service ExecStartPre). If applying an update failed at
+# shutdown (/boot full, power cut), the computer boots its unchanged, healthy
+# default version, but greenboot still holds the update's id and would take
+# this for a GRUB fallback and roll back to an even older version
+# (fedora-iot/greenboot-rs#219). Tell the cases apart:
+#   booted == recorded update            -> the update booted: leave it
+#   booted != update, booted is default  -> update never applied: clear it
+#   booted != update, not the default    -> real GRUB fallback: leave it
+# Any doubt (missing tools, unreadable status): do nothing.
+set -u
+log() { echo "$1" | systemd-cat -t arka-stale-trigger -p "${2:-info}" 2>/dev/null || echo "$1" >&2; }
+id=$(grub2-editenv list 2>/dev/null | sed -n 's/^greenboot_next_deployment_id=//p')
+[ -n "$id" ] || exit 0
+state=$(bootc status --json 2>/dev/null | python3 -c '
+import json, sys
+s = json.load(sys.stdin)["status"]
+print(((s.get("booted") or {}).get("image") or {}).get("imageDigest", ""),
+      "queued" if s.get("rollbackQueued") else "default")' 2>/dev/null) || exit 0
+booted=${state% *}; where=${state#* }
+[ -n "$booted" ] || exit 0
+[ "$booted" = "$id" ] && exit 0
+[ "$where" = default ] || exit 0
+was_ro=0
+findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro && was_ro=1
+[ $was_ro = 1 ] && mount -o remount,rw /boot
+grub2-editenv - unset greenboot_next_deployment_id fallback boot_counter &&
+    log "The staged update was never applied; cleared its rollback state so this healthy version is kept" warning
+[ $was_ro = 1 ] && mount -o remount,ro /boot
+exit 0
