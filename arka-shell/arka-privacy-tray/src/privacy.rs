@@ -21,6 +21,12 @@ pub fn dns_active(value: &str) -> bool {
     DnsStatus::from(value).is_encrypted()
 }
 
+/// The user allowed unencrypted DNS on the current network (arkad reports
+/// ForcedPlaintext only for an explicit per-network exception).
+pub fn dns_user_off(value: &str) -> bool {
+    DnsStatus::from(value) == DnsStatus::ForcedPlaintext
+}
+
 pub fn browser_active(mode: &str, sandbox: &str) -> bool {
     BrowserSandbox::from(mode).is_isolated() && SandboxStatus::from(sandbox).is_active()
 }
@@ -31,6 +37,8 @@ pub struct Enforcement {
     pub mac: bool,
     pub dns_detail: String,
     pub dns_ok: bool,
+    /// DNS is unencrypted because the user chose that for this network.
+    pub dns_user_off: bool,
     pub hostname: bool,
     pub ipv6: bool,
     pub firewall: bool,
@@ -51,7 +59,15 @@ impl Enforcement {
     pub fn rows(&self) -> Vec<Row> {
         vec![
             Row { name: "Hardware address", detail: if self.mac { "Randomized per network".into() } else { "Not randomized".into() }, active: self.mac },
-            Row { name: "DNS", detail: self.dns_detail.clone(), active: self.dns_ok },
+            Row {
+                name: "DNS",
+                detail: if self.dns_user_off {
+                    "Unencrypted on this network (your choice)".into()
+                } else {
+                    self.dns_detail.clone()
+                },
+                active: self.dns_ok,
+            },
             Row { name: "Hostname", detail: if self.hostname { "Masked to \u{201c}arka\u{201d}".into() } else { "Not masked".into() }, active: self.hostname },
             Row { name: "IPv6", detail: if self.ipv6 { "Temporary addresses on".into() } else { "Temporary addresses off".into() }, active: self.ipv6 },
             Row { name: "Browser", detail: self.browser_detail.clone(), active: self.browser_ok },
@@ -64,9 +80,14 @@ impl Enforcement {
         self.mac && self.dns_ok && self.hostname && self.ipv6 && self.browser_ok && self.firewall
     }
 
-    /// Names of protections that are currently NOT active (for a critical alert).
+    /// Settings that are NOT in place and that the user didn't choose to turn
+    /// off (for a critical alert).
     pub fn down(&self) -> Vec<&'static str> {
-        self.rows().into_iter().filter(|r| !r.active).map(|r| r.name).collect()
+        self.rows()
+            .into_iter()
+            .filter(|r| !r.active && !(r.name == "DNS" && self.dns_user_off))
+            .map(|r| r.name)
+            .collect()
     }
 }
 
@@ -93,7 +114,7 @@ impl Level {
         match self {
             Level::Ok => format!("Configured — {drifts_today} drift{} today", plural(drifts_today)),
             Level::Warn => format!("Configured after recent drift — {drifts_today} drift{} today", plural(drifts_today)),
-            Level::Critical => "Attention — a protection is not active".to_string(),
+            Level::Critical => "Needs attention — a privacy setting isn't in place".to_string(),
         }
     }
 }
@@ -111,9 +132,10 @@ fn plural(n: usize) -> &'static str { if n == 1 { "" } else { "s" } }
 /// Decide the tray level from live enforcement plus whether a drift happened
 /// recently. A protection currently down always wins (critical).
 pub fn level(enf: &Enforcement, recent_drift: bool) -> Level {
-    if !enf.all_active() {
+    if !enf.down().is_empty() {
         Level::Critical
-    } else if recent_drift {
+    } else if !enf.all_active() || recent_drift {
+        // Something is off by the user's own choice, or a drift was corrected.
         Level::Warn
     } else {
         Level::Ok
@@ -207,8 +229,8 @@ impl Notifier {
         let is_down = !down.is_empty();
         let critical = if is_down && !self.was_down && self.rate_ok(now) {
             Some(Notification {
-                summary: "Privacy protection not active".to_string(),
-                body: format!("Not active: {}. arkad will try to re-apply it.", down.join(", ")),
+                summary: "A privacy setting isn't in place".to_string(),
+                body: format!("Not in place: {}. arkad will try to apply it again.", down.join(", ")),
                 critical: true,
             })
         } else {
@@ -266,7 +288,7 @@ mod tests {
 
     #[test]
     fn failed_daemon_values_raise_attention() {
-        for dns in ["Plaintext", "ForcedPlaintext", "Degraded", "Error", "Initializing", "Unknown", "", "future-state"] {
+        for dns in ["Plaintext", "Degraded", "Error", "Initializing", "Unknown", "", "future-state"] {
             let mut e = enf_all_on();
             e.dns_ok = dns_active(dns);
             assert_eq!(level(&e, false), Level::Critical, "{dns}");
@@ -280,11 +302,38 @@ mod tests {
         assert!(browser_active("Ephemeral", "Active"));
     }
 
+    #[test]
+    fn a_dns_exception_the_user_chose_is_shown_but_never_alarms() {
+        let mut e = enf_all_on();
+        e.dns_ok = dns_active("ForcedPlaintext");
+        e.dns_user_off = dns_user_off("ForcedPlaintext");
+        assert!(!e.dns_ok && e.dns_user_off);
+        assert!(!e.all_active(), "never claims everything is in place");
+        assert!(e.down().is_empty(), "a user choice isn't a failure");
+        assert_eq!(level(&e, false), Level::Warn);
+        let mut n = Notifier::new(60, 0);
+        assert!(n.evaluate(&[], &e, 1000).is_none(), "no alarm for the user's own choice");
+        assert!(e.rows().iter().any(|r| r.name == "DNS" && r.detail.contains("your choice")));
+    }
+
+    #[test]
+    fn alerts_never_promise_protection() {
+        let mut e = enf_all_on();
+        e.mac = false;
+        let n = Notifier::new(60, 0).evaluate(&[], &e, 1000).unwrap();
+        let text = format!("{} {}", n.summary, n.body).to_lowercase();
+        assert!(!text.contains("protect"), "{text}");
+        for l in [Level::Ok, Level::Warn, Level::Critical] {
+            assert!(!l.header(0).to_lowercase().contains("protect"));
+        }
+    }
+
     fn enf_all_on() -> Enforcement {
         Enforcement {
             mac: true,
             dns_detail: "Quad9 (DoT)".into(),
             dns_ok: true,
+            dns_user_off: false,
             hostname: true,
             ipv6: true,
             firewall: true,

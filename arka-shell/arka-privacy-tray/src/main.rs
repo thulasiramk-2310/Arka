@@ -13,7 +13,7 @@
 
 mod privacy;
 
-use privacy::{browser_active, check_is_fresh, dns_active, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
+use privacy::{browser_active, check_is_fresh, dns_active, dns_user_off, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
 
 use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Tray, TrayMethods};
@@ -52,6 +52,9 @@ impl ArkaTray {
     fn header(&self) -> String {
         if !self.arkad_up {
             return "Status unknown — no fresh privacy check".to_string();
+        }
+        if self.level == Level::Warn && self.enf.dns_user_off {
+            return "DNS isn't encrypted on this network — you allowed it".to_string();
         }
         self.level.header(self.drifts_today)
     }
@@ -178,10 +181,12 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
     if p.last_check().await.ok()? != last_check
         || !check_is_fresh(Some(last_check), now(), POLL_SECS) { return None; }
     let dns_ok = dns_active(&dns);
+    let dns_off_by_choice = dns_user_off(&dns);
     let browser_ok = browser_active(&browser, &sandbox);
     Some(Enforcement {
         mac,
         dns_ok,
+        dns_user_off: dns_off_by_choice,
         dns_detail: dns,
         hostname,
         ipv6,
