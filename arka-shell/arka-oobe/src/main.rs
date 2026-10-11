@@ -90,6 +90,7 @@ struct Privacy {
     hostname: Reading,
     ipv6: Reading,
     sandbox: Reading,
+    firewall: Reading,
 }
 
 fn fresh_privacy_check(last: u64, now: u64) -> bool {
@@ -137,7 +138,7 @@ async fn read_privacy() -> Option<Privacy> {
         (Some(SandboxStatus::Unknown(_)), _) | (_, Some(BrowserSandbox::Unknown(_))) | (None, _) | (_, None) => None,
         (Some(st), Some(br)) => Some(st.is_active() && br.is_isolated()),
     };
-    Some(Privacy { dns, mac: b("MacRandomization"), hostname: b("HostnamePrivacy"), ipv6: b("Ipv6Privacy"), sandbox })
+    Some(Privacy { dns, mac: b("MacRandomization"), hostname: b("HostnamePrivacy"), ipv6: b("Ipv6Privacy"), sandbox, firewall: b("Firewall") })
 }
 
 // ── look ──────────────────────────────────────────────────────────────────────
@@ -661,18 +662,19 @@ fn build_ui(app: &adw::Application) {
     enum Row { Checking, Configured, Attention, Unavailable }
     let render_privacy = {
         let (rows, note, recheck) = (priv_rows.clone(), priv_note.clone(), recheck.clone());
-        move |states: [Row; 5], answered: bool| {
+        move |states: [Row; 6], answered: bool| {
             while let Some(c) = rows.first_child() {
                 rows.remove(&c);
             }
             // Each line says what the setting does; only the status column says
             // whether it is in place. "Configured" is not a promise of protection.
-            let items: [(&str, &str); 5] = [
+            let items: [(&str, &str); 6] = [
                 ("Encrypted DNS", "Requires system DNS lookups to be encrypted."),
                 ("Private network address", "Uses a random hardware address on network connections."),
                 ("Generic device name", "Uses the generic network name \"arka\" instead of yours."),
                 ("Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time."),
                 ("Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder."),
+                ("Firewall", "Rejects connections other computers try to open to this one."),
             ];
             for ((t, s), st) in items.into_iter().zip(states) {
                 let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);
@@ -731,7 +733,7 @@ fn build_ui(app: &adw::Application) {
         Rc::new(move || {
             let my = gen.get().wrapping_add(1);
             gen.set(my);
-            render([Row::Checking; 5], false);
+            render([Row::Checking; 6], false);
             let (render, gen, cur) = (render.clone(), gen.clone(), cur.clone());
             glib::spawn_future_local(async move {
                 const TRIES: u32 = 5;
@@ -750,8 +752,8 @@ fn build_ui(app: &adw::Application) {
                         None => Row::Checking,
                     };
                     let states = match &p {
-                        Some(p) => [to_row(p.dns), to_row(p.mac), to_row(p.hostname), to_row(p.ipv6), to_row(p.sandbox)],
-                        None => [to_row(None); 5],
+                        Some(p) => [to_row(p.dns), to_row(p.mac), to_row(p.hostname), to_row(p.ipv6), to_row(p.sandbox), to_row(p.firewall)],
+                        None => [to_row(None); 6],
                     };
                     render(states, p.is_some());
                     glib::timeout_future(Duration::from_secs(2)).await;
