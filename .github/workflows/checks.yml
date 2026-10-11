@@ -46,7 +46,7 @@ jobs:
   setup:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check shell helpers
         run: shellcheck arkaos-oobe-apply arka-plasma-firstrun arkaos-firefox arkaos-firstboot scripts/flash-usb.sh
       - name: Check first-run shell syntax
@@ -61,7 +61,7 @@ jobs:
   rust:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select stable Rust
         run: rustup default stable
       - name: Test privacy enforcement
@@ -77,7 +77,7 @@ jobs:
   desktop:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select stable Rust
         run: rustup default stable
       - name: Install desktop build dependencies
