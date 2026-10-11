@@ -34,6 +34,7 @@ COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
 COPY kernel/20-arkaos-recovery.toml /usr/lib/bootc/kargs.d/20-arkaos-recovery.toml
 COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
+COPY tmpfiles/arkaos-arkasetup.conf /usr/lib/tmpfiles.d/arkaos-arkasetup.conf
 COPY systemd/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf /usr/lib/systemd/system/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
@@ -477,6 +478,8 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
            /usr/share/sddm/themes/arkaos-light/metadata.desktop && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox && \
+    mkdir -p /usr/share/arkaos/arkasetup && \
+    cp -a /var/home/arkasetup/.bash_profile /var/home/arkasetup/.hushlogin /usr/share/arkaos/arkasetup/ && \
     systemctl enable arkad.service arka-pulsed.service
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
