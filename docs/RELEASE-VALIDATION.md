@@ -195,6 +195,36 @@ Fresh QEMU install of the fixed image (good digest prefix `fcb7555e`):
 Trade-off: with `rd.shell=0` the initramfs emergency shell is unavailable; a
 user who needs it can remove the option from the GRUB entry for one boot.
 
+### Installer ISO with disk encryption, VM-tested 2026-10-12
+
+`scripts/make-iso.sh` builds an Anaconda ISO (bootc-image-builder
+`anaconda-iso`) with `installer/config.toml`. Problems found and fixed during
+the VM runs, each confirmed in a fresh install afterwards:
+
+- Anaconda set `graphical.target`, so ArkaOS setup never ran and the login
+  screen had no account: kickstart `skipx` keeps the console default.
+- Anaconda's default btrfs layout mounted an empty `/home` subvolume over
+  bootc's `/var/home`, hiding the setup account's home: `autopart
+  --type=plain --fstype=xfs --nohome`, plus a tmpfiles rule that recreates the
+  home at boot whatever the layout.
+- The fstab line for `/` made `systemd-remount-fs` fail ("overlay: No changes
+  allowed in reconfigure"; `/` is composefs): removed in `%post`.
+- Anaconda added `ssh` to the ArkaOS firewall zone and arkad reported the
+  firewall as needing attention: `firewall --use-system-defaults`.
+
+Final run (QEMU, empty 40 GB disk): install with the default encryption,
+LUKS2 + XFS root, no failed units, all ArkaOS kernel arguments present
+(`rd.luks.uuid` added by Anaconda), ArkaOS setup with all six settings
+Configured, then the desktop. A broken update rolled back automatically to the
+exact installed digest (`8d5d82f4`); each of the four boots needed the
+passphrase. Test-file hashes unchanged.
+
+Open: Fedora branding in the installer; the passphrase is asked twice (once at
+start, again after choosing the disk); the unlock prompt names the disk
+`luks-<uuid>`; updates track `localhost/arkaos:dev` until a public registry
+exists; the 6.7 GB ISO exceeds GitHub's 2 GB release-asset limit; no hardware
+test.
+
 ### Failed finalize no longer downgrades a healthy system, verified 2026-10-11
 
 [fedora-iot/greenboot-rs#219](https://github.com/fedora-iot/greenboot-rs/issues/219):

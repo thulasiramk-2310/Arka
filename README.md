@@ -116,9 +116,21 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   verifies USB sticks and repairs the GPT. In a VM, a Capsule app install from
   Flathub completed. Neither is confirmed on the Nokia yet.
 
-Everything above was tested in a VM on 2026-10-11 unless it says otherwise. Still a
-developer preview: no installer or disk encryption yet, one hardware data point,
-and known polish tracked in the field notes.
+- 💿 **Installer ISO with disk encryption (first version).** `scripts/make-iso.sh`
+  builds an installer from the image using Fedora's installer (Anaconda), set up
+  in `installer/config.toml`: you pick the disk, nothing is written before
+  "Begin Installation", and the disk is encrypted (LUKS2) by default. ArkaOS setup
+  creates your account on first boot. Tested in a VM on 2026-10-12: install,
+  unlocking at boot, setup with all six settings configured, the desktop, and
+  automatic rollback after a broken update. Known limits: the installer still
+  shows Fedora's branding, it asks for the passphrase twice, the unlock prompt
+  shows the disk's internal name, every restart of an encrypted computer
+  (including rollback retries) needs the passphrase, and the ISO (6.7 GB) is
+  not published yet. Not tested on real hardware.
+
+Everything above was tested in a VM on 2026-10-11 or 2026-10-12 unless it says
+otherwise. Still a developer preview: the installer is new and VM-tested only, one
+hardware data point, and known polish tracked in the field notes.
 
 ---
 
