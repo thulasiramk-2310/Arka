@@ -1,0 +1,37 @@
+# bootc-image-builder config for the ArkaOS installer ISO (--type anaconda-iso).
+#
+# "graphical" makes Anaconda interactive: without it the ISO installs to the
+# first disk it finds without asking, which could erase another OS. The person
+# installing picks the disk; nothing is written before "Begin Installation".
+#
+# autopart: plain XFS partitions, no separate /home, encrypted by default
+# (LUKS2; Anaconda asks for the passphrase, and "Encrypt my data" can be
+# unticked). Anaconda's own default (btrfs with a /home subvolume) mounts an
+# empty volume over bootc's /var/home.
+#
+# firewall --use-system-defaults: keep the image's firewall. Without it
+# Anaconda adds ssh to the default (ArkaOS) zone, and arkad then reports the
+# firewall as needing attention.
+#
+# skipx: keep the image's console default target, so ArkaOS setup runs on
+# first boot; setup switches to the graphical login when it's done.
+#
+# %post: bootc mounts / as a read-only composefs overlay, which cannot be
+# reconfigured; a "/" line in fstab only makes systemd-remount-fs fail.
+#
+# No account is created here: the Users module is turned off and ArkaOS setup
+# (arka-oobe) creates the account on first boot, as on the disk images.
+[customizations.installer.kickstart]
+contents = """
+graphical
+skipx
+firewall --use-system-defaults
+autopart --type=plain --fstype=xfs --nohome --encrypted
+
+%post
+awk '$1 ~ /^#/ || $2 != "/"' /etc/fstab > /etc/fstab.arkaos && mv /etc/fstab.arkaos /etc/fstab
+%end
+"""
+
+[customizations.installer.modules]
+disable = ["org.fedoraproject.Anaconda.Modules.Users"]
