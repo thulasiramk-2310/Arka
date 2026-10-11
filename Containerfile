@@ -22,6 +22,46 @@ COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --locked --release
 
+# Staging stages for the small, often-edited files and the built binaries,
+# laid out at their final paths. Each COPY into the 11 GB bootc image costs
+# about a minute and a half (the layer diff walks the whole image), so the
+# final stage takes each tree in ONE step instead of ~35. COPY into an empty
+# stage is near-instant.
+FROM scratch AS files
+COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
+COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
+COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
+COPY arka-health-report /usr/libexec/arka-health-report
+COPY systemd/arka-health-report.service /usr/lib/systemd/system/arka-health-report.service
+COPY arka-apply-look /usr/libexec/arka-apply-look
+COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
+COPY arkaos-firefox /usr/bin/firefox-sandbox
+COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
+COPY arkad/arkad.toml /etc/arkad/arkad.toml
+COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
+COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
+COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
+COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
+COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
+COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
+COPY firefox-policies.json /usr/lib64/firefox/distribution/policies.json
+
+FROM scratch AS bins
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/arkad /usr/bin/arkad
+COPY --from=builder /arka-pulse/target/x86_64-unknown-linux-musl/release/arka-pulsed /usr/bin/arka-pulsed
+COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
+COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
+COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
+COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
+COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
+COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
+COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
+COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
+COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
+COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
+COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
+COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+
 # Stage 3: bootc image
 FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
 
@@ -409,95 +449,49 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
     systemctl disable greenboot-set-rollback-trigger.service greenboot-healthcheck.service && \
     test ! -e /etc/systemd/system/ostree-finalize-staged.service.requires/greenboot-set-rollback-trigger.service && \
     rm -f /usr/lib/bootupd/grub2-static/configs.d/08_greenboot.cfg
-COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
+# Small files and binaries: one COPY each from the staging stages above.
+# Keep each file's purpose next to its line in the "files" stage; what the
+# RUN below does with them:
+#  - firewall: ArkaOS zone (rejects unsolicited incoming connections; Fedora
+#    KDE's default zone allows ports 1025-65535) made the default. arkad checks
+#    it and the Privacy dashboard shows it.
+#  - kernel hardening: boot options via bootc kargs.d, runtime via sysctl.d.
+#  - arka-health-report: report-only boot health checks (replaces greenboot's
+#    automatic handling, see above).
+#  - updates download in the background but never restart the computer on
+#    their own: Fedora's bootc-fetch-apply-updates timer runs `bootc upgrade
+#    --apply`, which reboots. Keep the timer, drop --apply; the Updates app
+#    shows "Restart needed" and the user picks the moment.
+#  - light login screen: the same SDDM theme with look=light and the light
+#    wallpaper; arkaos-oobe-apply selects it when the user picks Light.
+#  - Firefox runs through the bubblewrap sandbox wrapper.
+#  - arkad and arka-pulsed (read-only org.arka.pulse, mirrors arkad) enabled.
+COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
-    grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf
-
-# Kernel hardening: boot options via bootc kargs.d, runtime settings via sysctl.d.
-COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
-COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
-
-# Report-only boot health checks (replaces greenboot's automatic handling).
-COPY arka-health-report /usr/libexec/arka-health-report
-COPY systemd/arka-health-report.service /usr/lib/systemd/system/arka-health-report.service
-RUN chmod 755 /usr/libexec/arka-health-report && systemctl enable arka-health-report.service
-
-# Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
-COPY arka-apply-look /usr/libexec/arka-apply-look
-
-# Updates download in the background but never restart the computer on their
-# own: Fedora's bootc-fetch-apply-updates timer runs `bootc upgrade --apply`,
-# which reboots. Keep the timer, drop --apply; the Updates app shows "Restart
-# needed" and the user picks the moment.
-RUN mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
+    grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
+    chmod 755 /usr/libexec/arka-health-report /usr/libexec/arka-apply-look /usr/bin/firefox-sandbox && \
+    mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
-      > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf
-
-# Light login screen: the same theme with look=light and the light wallpaper.
-# arkaos-oobe-apply selects it when the user picks Light in setup.
-RUN cp -a /usr/share/sddm/themes/arkaos /usr/share/sddm/themes/arkaos-light && \
+      > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
+    cp -a /usr/share/sddm/themes/arkaos /usr/share/sddm/themes/arkaos-light && \
     sed -i -e 's/^look=.*/look=light/' \
            -e 's|^background=.*|background=/usr/share/arka/wallpapers/default-light.png|' \
            /usr/share/sddm/themes/arkaos-light/theme.conf && \
     sed -i -e 's/^Name=.*/Name=ArkaOS Light/' -e 's/^Theme-Id=.*/Theme-Id=arkaos-light/' \
-           /usr/share/sddm/themes/arkaos-light/metadata.desktop
-
-# arkad's polkit action (admin auth for EnforceAll). Placed late: a new file
-# early in this stage would invalidate the cached package layers below it.
-COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
-
-# Small, often-edited files live here, AFTER every package install: changing
-# one of them must only rerun these cheap steps, never the 1500-package KDE
-# install (moving them here cost one full rebuild; keeping them early cost one
-# per edit).
-# bubblewrap-sandboxed Firefox wrapper (firefox itself is installed above)
-COPY arkaos-firefox /usr/bin/firefox-sandbox
-RUN chmod 755 /usr/bin/firefox-sandbox && \
+           /usr/share/sddm/themes/arkaos-light/metadata.desktop && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
-    ln -sf firefox-sandbox /usr/bin/firefox
-
-# Install arkad
-COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
-COPY arkad/arkad.toml /etc/arkad/arkad.toml
-COPY arkad/org.arka.arkad.conf /etc/dbus-1/system.d/org.arka.arkad.conf
-COPY arkad/org.arka.arkad.service /usr/share/dbus-1/system-services/org.arka.arkad.service
-RUN mkdir -p /etc/arkad && \
-    systemctl enable arkad.service
-
-# Install arka-pulsed (reliability daemon; read-only org.arka.pulse, mirrors arkad)
-COPY arka-pulse/arka-pulsed.service /usr/lib/systemd/system/arka-pulsed.service
-COPY arka-pulse/org.arka.pulse.conf /etc/dbus-1/system.d/org.arka.pulse.conf
-COPY arka-pulse/org.arka.pulse.service /usr/share/dbus-1/system-services/org.arka.pulse.service
-COPY docs/RELIABILITY-ARKA-PULSE.md /usr/share/doc/arkaos/RELIABILITY-ARKA-PULSE.md
-RUN systemctl enable arka-pulsed.service
-
-# Firefox managed privacy policy (see the comment near the KDE install).
-COPY firefox-policies.json /usr/lib64/firefox/distribution/policies.json
+    ln -sf firefox-sandbox /usr/bin/firefox && \
+    systemctl enable arka-health-report.service arkad.service arka-pulsed.service
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
-# a changed layer rebuilds. Copied here, a code change only reruns this block
-# instead of the themes, wallpaper, splash and initramfs above. Units and
-# configs that reference them are installed (and enabled) earlier; nothing in
-# between executes them. arka-bar / arka-dock / arka-launcher are not shipped:
-# Plasma's panel, icontasks dock and kickerdash replace them (see legacy/).
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/arkad /usr/bin/arkad
-COPY --from=builder /arka-pulse/target/x86_64-unknown-linux-musl/release/arka-pulsed /usr/bin/arka-pulsed
-COPY --from=shell-builder /build/target/release/arka-dashboard /usr/bin/arka-dashboard
-COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wifi
-COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
-COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
-COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
-COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
-COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
-COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome
-COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-sound
-COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
-COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
-COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+# a changed layer rebuilds. Units and configs that reference them are installed
+# (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
+# arka-launcher are not shipped: Plasma's panel, icontasks dock and kickerdash
+# replace them (see legacy/).
+COPY --from=bins / /
 RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \
       /usr/bin/arka-hotkeys /usr/bin/arka-capsule /usr/bin/arka-perms \
       /usr/bin/arka-settings-gtk /usr/bin/arka-welcome /usr/bin/arka-sound \
-      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray
-
-RUN bootc container lint
+      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray && \
+    bootc container lint
