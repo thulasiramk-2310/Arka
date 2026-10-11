@@ -311,7 +311,7 @@ $ bootc rollback         # return to the previous image</pre>
 
   // ── status columns ──
   var STATUS = [
-    { head: "WORKS TODAY", color: "#16C784", items: ["Immutable bootc image, read-only root", "Atomic updates with rollback", "KDE Plasma session", "arkad privacy enforcement", "Firefox in a bubblewrap sandbox", "arka-pulse telemetry and detection"] },
+    { head: "WORKS TODAY", color: "#16C784", items: ["Immutable bootc image, read-only root", "Atomic updates (previous image kept on disk)", "KDE Plasma session", "arkad privacy enforcement", "Firefox in a bubblewrap sandbox", "arka-pulse telemetry and detection"] },
     { head: "BEING VALIDATED", color: "#54D6C6", items: ["Broader bare-metal validation", "Reliability calibration", "Display and scaling refinement", "Graphical first-run UX", "Additional privacy UX"] },
     { head: "PLANNED NEXT", color: "#2A3244", accent: "#8B93A3", items: ["Full-disk encryption by default", "Stronger measured-boot coverage", "Installer evolution", "ArkaWM exploration", "Agentic system interfaces (research)"] }
   ];
@@ -329,7 +329,7 @@ $ bootc rollback         # return to the previous image</pre>
   var FAQS = [
     { q: "Does ArkaOS make me anonymous?", a: "No. It reduces what your machine leaks by default — randomized MAC address, masked hostname, encrypted DNS, IPv6 privacy addresses. Your IP address is still visible to the sites you visit, and nothing here is a substitute for anonymity tooling." },
     { q: "Can I use it as my daily driver?", a: "Not yet. This is a Developer Preview: there is no graphical installer, hardware support is still being validated, and full-disk encryption is not on by default. Run it in a VM, or on a machine you can afford to reinstall." },
-    { q: "What happens if an update breaks my system?", a: "You reboot into the previous image. Updates are atomic — a new image is staged and booted rather than applied in place — and the image you came from stays on disk. bootc rollback returns to it." },
+    { q: "What happens if an update breaks my system?", a: "You reboot into the previous image. Updates are atomic — a new image is staged and booted rather than applied in place — and the image you came from stays on disk; bootc rollback selects it for the next boot. Tested on 11 October 2026 with a deliberately broken update: it was not switched back automatically, and a boot-counter setting then kept choosing the broken version even after bootc rollback. That setting is being switched off; until a fixed image passes the same test, treat going back as unverified. Files in /home and /var were not changed." },
     { q: "Is arka-pulse self-healing?", a: "No. It collects local telemetry, detects degradation, and is being validated for prediction and verification. Recovery actions are constrained and experimental. It recommends; you act." },
     { q: "Why Fedora bootc instead of building your own base?", a: "Because the parts underneath already work. Kernel, drivers, composefs, systemd and KDE Plasma come from upstream, and ArkaOS spends its effort on the privacy and reliability layers above them." },
     { q: "Is my data sent anywhere?", a: "arka-pulse telemetry stays on the device. ArkaOS has no account system and collects no usage analytics. DNS queries go to Quad9 over TLS, which means Quad9 sees your resolution requests instead of your ISP." }

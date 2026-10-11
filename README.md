@@ -30,8 +30,8 @@ It isn't trying to replace Linux — it builds on Linux's strengths while removi
 unnecessary complexity and making powerful privacy and security features
 available by default.
 
-The OS ships as a single immutable image: updates are atomic, rollback is built
-in, and the root filesystem is read-only at runtime. A system daemon —
+The OS ships as a single immutable image: updates are atomic, the previous version is kept,
+and the root filesystem is read-only at runtime. A system daemon —
 [`arkad`](arkad/) — periodically checks configured privacy settings, retries failures, and logs
 selected enforcement events. A successful check describes those settings, not
 every application or network connection.
@@ -94,9 +94,13 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
 - 🛡️ **Kernel hardening.** Stricter kernel boot options (memory wiping,
   lockdown in integrity mode, and others) and runtime settings. User namespaces stay
   on, because Firefox's sandbox and Flatpak need them.
-- 🩹 **Boot health checks (greenboot).** After each boot, health checks run and
-  mark the boot as good. Going back automatically after an update that fails them
-  is set up but **not yet tested**.
+- 🩹 **Boot health checks (greenboot): automatic rollback does not work yet.**
+  Tested on 2026-10-11 with a deliberately broken update: the health checks caught
+  it on three boot attempts, but the system **did not switch back** to the
+  previous version (greenboot never recorded which version to return to). Its
+  boot-counter logic then kept selecting the broken entry, so its automatic parts
+  are being switched off until fixed. Files in `/home` and `/var` were unchanged
+  throughout.
 - 🎯 **App icons:** one family, a distinct colour per app; Firefox and the file
   manager keep their own icons.
 - 🐞 **Fixes from the Nokia test:** the disk image no longer enables a serial

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ArkaOS — a private, recoverable Linux desktop</title>
-<meta name="description" content="ArkaOS is a Linux desktop that sets up common privacy settings for you, shows you whether each one is in place, and lets you undo an update. Developer preview.">
+<meta name="description" content="ArkaOS is a Linux desktop that sets up common privacy settings for you, shows you whether each one is in place, and keeps the previous version when it updates. Developer preview.">
 <meta property="og:title" content="ArkaOS — a private, recoverable Linux desktop">
-<meta property="og:description" content="Privacy settings set up for you, shown honestly, and updates you can undo. Developer preview.">
+<meta property="og:description" content="Privacy settings set up for you, shown honestly, and updates that wait for you. Developer preview.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="img/desktop-light.png">
 <meta name="color-scheme" content="light dark">
@@ -125,7 +125,7 @@ footer.site .end { margin-left: auto; }
   <div class="wrap hero">
     <span class="tag">Developer preview — not ready for everyday use</span>
     <h1>A Linux desktop that sets up your privacy, and shows you where it stands.</h1>
-    <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system so a bad update can be undone. It's built on Fedora and KDE Plasma.</p>
+    <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system on disk when it updates. It's built on Fedora and KDE Plasma.</p>
     <div class="ctas">
       <a class="pill" href="#try">Try it in a virtual machine</a>
       <a class="pill quiet" href="#honest">What we can and can't show</a>
@@ -159,8 +159,8 @@ footer.site .end { margin-left: auto; }
           <p>Settings you'd normally look up and change by hand are set when the system starts, and checked again while it runs. If one stops being in place, ArkaOS says so.</p>
         </div>
         <div>
-          <h3>Updates you can undo</h3>
-          <p>A new version is prepared next to the one you're using and takes over only when you restart. The previous version is kept, so you can go back to it. Nothing restarts without asking.</p>
+          <h3>Updates that wait for you</h3>
+          <p>A new version is prepared next to the one you're using and takes over only when you restart. Nothing restarts without asking, and the previous version is kept on disk. Going back to it is still being tested on this version.</p>
         </div>
         <div>
           <h3>Plain answers, no score</h3>
@@ -215,7 +215,6 @@ footer.site .end { margin-left: auto; }
           <h3>Being tested</h3>
           <ul>
             <li>Updates that wait for your restart, and going back to the previous version, on this version (tested on earlier ones)</li>
-            <li>Going back automatically if an update fails its start-up checks (the checks run; the automatic going back hasn't been tested yet)</li>
             <li>More real laptops</li>
             <li>arka-pulse, which watches system health locally. Its predictions are estimates and it takes no action on its own.</li>
           </ul>
@@ -223,6 +222,7 @@ footer.site .end { margin-left: auto; }
         <div>
           <h3>Not yet</h3>
           <ul>
+            <li>Going back automatically after a bad update. Tested on 11 October 2026: the start-up checks caught the broken update, but the system didn't switch back to the previous version.</li>
             <li>An installer and disk encryption</li>
             <li>Secure Boot with ArkaOS's own keys</li>
             <li>Support for a wide range of hardware</li>
