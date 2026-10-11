@@ -91,6 +91,41 @@ Before accepting a mitigation, repeat these checks in a disposable guest:
 5. Separately test an upgrade from the old image with existing counter/fallback
    state. A fresh-image pass does not prove migration out of an existing trap.
 
+### Report-only mitigation verified 2026-10-11
+
+The image now disables `greenboot-healthcheck.service` and
+`greenboot-set-rollback-trigger.service`, removes greenboot's
+`08_greenboot.cfg` GRUB rule, and runs `arka-health-report` instead. It runs the
+same required/wanted check scripts, records the result in the journal (tag
+`arka-health`), `/run/arkaos/health.json` and `/etc/motd.d/arka-health`, clears
+a leftover `boot_counter`, and never restarts or selects a deployment.
+
+The checklist above was repeated in a disposable QEMU guest installed from the
+new image (good digest prefix `32794de3`). The broken update (prefix `5dd3aca1`)
+was the same failing check plus marker as before, served as one extra layer by
+a minimal test registry; bootc reused the 160 base layers and fetched 10.2 kB.
+
+1. Baseline: both greenboot units disabled, `arka-health-report` enabled and
+   healthy, no greenboot rule in `grub.cfg`, empty GRUB environment.
+2. The update staged and finalized; the next boot ran the broken image.
+3. Left alone for five minutes: no further boot, empty GRUB environment, no
+   failed units; the failed required check was reported in all three places.
+4. `bootc rollback` and a reboot booted digest `32794de3` without the marker;
+   a second reboot kept it. Two test files, a 50 MB random file and a
+   fingerprint of every file in the test home folder were unchanged from the
+   baseline through all boots.
+5. Migration, simulated on the same guest by inserting the original
+   `08_greenboot.cfg` after `load_env` and arming the counter: with
+   `boot_counter=2` the chosen entry booted and the counter was cleared; with
+   an exhausted counter (`-1`) GRUB forced the broken entry once, that boot
+   cleared the counter, and the next boot returned to the chosen good entry.
+
+Limits: a VM, not hardware. The migration case escaped only because the forced
+entry also contained `arka-health-report`. A system whose deployments all
+predate it stays trapped until `sudo grub2-editenv - unset boot_counter` is
+run. Upgraded systems keep the old rule in `/boot/grub2/grub.cfg` (bootc does
+not rewrite it); it is inert while no counter is set.
+
 Automatic recovery requires a separate test after the fallback-recording bug
 is diagnosed: capture the shutdown trigger journal and deployment identifiers,
 then prove unattended return to the exact good deployment after bounded failed

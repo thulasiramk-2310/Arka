@@ -94,13 +94,16 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
 - 🛡️ **Kernel hardening.** Stricter kernel boot options (memory wiping,
   lockdown in integrity mode, and others) and runtime settings. User namespaces stay
   on, because Firefox's sandbox and Flatpak need them.
-- 🩹 **Boot health checks (greenboot): automatic rollback does not work yet.**
-  Tested on 2026-10-11 with a deliberately broken update: the health checks caught
-  it on three boot attempts, but the system **did not switch back** to the
-  previous version (greenboot never recorded which version to return to). Its
-  boot-counter logic then kept selecting the broken entry, so its automatic parts
-  are being switched off until fixed. Files in `/home` and `/var` were unchanged
-  throughout.
+- 🩹 **Boot health checks, report-only. Automatic rollback is off.** In a first
+  test on 2026-10-11, greenboot caught a deliberately broken update but **did not
+  switch back** to the previous version, and its boot counter kept choosing the
+  broken entry. Its automatic parts are now switched off. The same checks run on
+  every boot and a failure is reported in the journal, `/run/arkaos/health.json`
+  and the terminal login message; nothing restarts or switches on its own. A
+  second VM test the same day verified this: the broken update was reported
+  without a restart, `sudo bootc rollback` returned to the exact previous image
+  and it stayed there after another reboot, and the test files in `/home` and
+  `/var` (plus a fingerprint of every file in the test home folder) were unchanged.
 - 🎯 **App icons:** one family, a distinct colour per app; Firefox and the file
   manager keep their own icons.
 - 🐞 **Fixes from the Nokia test:** the disk image no longer enables a serial
