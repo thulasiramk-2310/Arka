@@ -390,14 +390,25 @@ k.update(Id="org.arkaos."+v+".desktop", Name="ArkaOS "+v.title(), Description="T
 # Firewall on by default: the ArkaOS zone rejects unsolicited incoming
 # connections (Fedora KDE's default zone allows ports 1025-65535). arkad
 # checks it and the Privacy dashboard shows it.
-# greenboot: health checks after each boot; if an update keeps failing them,
-# the computer goes back to the previous version on its own.
+# greenboot: health checks after each boot. Automatic rollback is OFF until it
+# passes a real test: on 2026-10-11 a deliberately broken update was caught by
+# the checks but never switched back (no next-deployment-id recorded), and the
+# GRUB boot counter then kept selecting the broken entry, even after
+# `bootc rollback`. greenboot's own health check arms that counter and reboots
+# on a first failure (src/main.rs, v0.16.4), so its automatic parts are all
+# off: the health-check and trigger units are disabled (never masked:
+# ostree-finalize-staged.service Requires= the trigger, and masking it would
+# stop updates from applying) and its GRUB rule is not installed. The same
+# check scripts run report-only through arka-health-report (below).
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q \
       firewalld greenboot greenboot-default-health-checks && \
     systemctl enable firewalld.service && \
     for u in $(rpm -ql greenboot | grep -E '^/usr/lib/systemd/system/[^/]+\.service$' | xargs -n1 basename); do \
       systemctl enable "$u" && echo "greenboot: enabled $u"; \
-    done
+    done && \
+    systemctl disable greenboot-set-rollback-trigger.service greenboot-healthcheck.service && \
+    test ! -e /etc/systemd/system/ostree-finalize-staged.service.requires/greenboot-set-rollback-trigger.service && \
+    rm -f /usr/lib/bootupd/grub2-static/configs.d/08_greenboot.cfg
 COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf
@@ -405,6 +416,11 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
 # Kernel hardening: boot options via bootc kargs.d, runtime settings via sysctl.d.
 COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
 COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
+
+# Report-only boot health checks (replaces greenboot's automatic handling).
+COPY arka-health-report /usr/libexec/arka-health-report
+COPY systemd/arka-health-report.service /usr/lib/systemd/system/arka-health-report.service
+RUN chmod 755 /usr/libexec/arka-health-report && systemctl enable arka-health-report.service
 
 # Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
 COPY arka-apply-look /usr/libexec/arka-apply-look

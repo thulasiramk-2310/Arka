@@ -1,0 +1,14 @@
+[Unit]
+Description=ArkaOS boot health checks (report only, never reboots)
+Documentation=file:///usr/share/doc/arkaos
+After=multi-user.target
+# Same check scripts as greenboot, but nothing here restarts the computer,
+# arms a boot counter or selects a boot entry.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/arka-health-report
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
