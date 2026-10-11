@@ -160,7 +160,7 @@ footer.site .end { margin-left: auto; }
         </div>
         <div>
           <h3>Updates that wait for you</h3>
-          <p>A new version is prepared next to the one you're using and takes over only when you restart. Nothing restarts without asking, and the previous version is kept on disk. If a new version fails its start-up checks, ArkaOS tells you, and one command plus a restart takes you back.</p>
+          <p>A new version is prepared next to the one you're using and takes over only when you restart. Updates never restart your computer on their own, and the previous version is kept on disk. If a new version fails its start-up checks, ArkaOS tries it up to three times and then goes back to the previous version by itself.</p>
         </div>
         <div>
           <h3>Plain answers, no score</h3>
@@ -208,7 +208,7 @@ footer.site .end { margin-left: auto; }
             <li>The privacy settings above marked "Tested in a VM"</li>
             <li>Setup with a light or dark look, then your desktop</li>
             <li>Read-only system files at runtime</li>
-            <li>Going back to the previous version after a broken update, with one command (in a VM, 11 October 2026)</li>
+            <li>Going back to the previous version on its own after a broken update, keeping a good update, and going back by hand with one command (in a VM, 11 October 2026)</li>
             <li>Booting from USB on one laptop (an earlier version)</li>
           </ul>
         </div>
@@ -223,7 +223,6 @@ footer.site .end { margin-left: auto; }
         <div>
           <h3>Not yet</h3>
           <ul>
-            <li>Going back automatically after a bad update. It's switched off: in our 11 October 2026 test the system didn't switch back on its own, so ArkaOS now reports a failed start-up check and leaves the choice to you.</li>
             <li>An installer and disk encryption</li>
             <li>Secure Boot with ArkaOS's own keys</li>
             <li>Support for a wide range of hardware</li>

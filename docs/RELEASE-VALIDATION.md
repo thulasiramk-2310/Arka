@@ -126,10 +126,48 @@ predate it stays trapped until `sudo grub2-editenv - unset boot_counter` is
 run. Upgraded systems keep the old rule in `/boot/grub2/grub.cfg` (bootc does
 not rewrite it); it is inert while no counter is set.
 
-Automatic recovery requires a separate test after the fallback-recording bug
-is diagnosed: capture the shutdown trigger journal and deployment identifiers,
-then prove unattended return to the exact good deployment after bounded failed
-boots. Do not label it verified from detection, restarts or source tests alone.
+### Automatic recovery fixed and verified 2026-10-11 (supersedes the report-only mitigation)
+
+Root cause, from the journal of a reproduction with stock greenboot 0.16.4:
+`greenboot-set-rollback-trigger.service` started when the update was staged but
+was never stopped at shutdown, so its `ExecStop` (`greenboot
+set-rollback-trigger`, which writes `greenboot_next_deployment_id`) never ran.
+The unit has `DefaultDependencies=no` and no shutdown conflict; the same unit
+is on upstream `main`. Related upstream report with the same symptom but a
+different cause (variable renamed between versions):
+[fedora-iot/greenboot-rs#217](https://github.com/fedora-iot/greenboot-rs/issues/217).
+
+Fix: drop-in `10-arkaos-stop-at-shutdown.conf` adds `Conflicts=final.target`
+and `Before=final.target` (as `ostree-finalize-staged.service` has); the
+upstream `After=ostree-finalize-staged.service` makes it stop first, while the
+update is still staged. The report-only `arka-health-report` was removed: it
+cleared `boot_counter`, which greenboot needs. greenboot units and its GRUB
+rule are back to stock.
+
+Fresh QEMU install of the fixed image (good digest prefix `5f81fe81`):
+
+1. Broken update (`3db1e1a5`, failing required check + marker) staged. At
+   shutdown the journal shows "Setting rollback trigger for deployment" and
+   "Rollback trigger set successfully".
+2. Unattended: three failed boots ("Boot counter is 2/1, rebooting", then
+   "Boot counter exhausted and next-deployment-id is set - initiating
+   rollback", "Rollback successful"), then the good digest `5f81fe81` booted
+   with no marker, `boot_success=1`, no failed units ("FALLBACK BOOT DETECTED").
+3. Healthy update (`4745782c`, marker only) staged: booted, checks passed,
+   still booted after a second restart, no counter left.
+4. `bootc rollback` by hand still returned to `5f81fe81`.
+5. Two test files and a 50 MB file kept their hashes throughout. A fingerprint
+   of the rest of the home folder changed only through `.bash_history`, written
+   when the test shell logged out at shutdown.
+
+Limits: a VM, not hardware. Updates are served by a minimal test registry
+(one new layer on the installed image). A kernel that fails before userspace
+relies on the stock GRUB counter rule, which this test did not exercise.
+
+The report-only section above is kept as history; its mitigation is no
+longer in the image. The bar set for automatic recovery (shutdown trigger
+journal, deployment identifiers, unattended return to the exact good deployment
+after bounded failed boots) is met by the run above.
 
 The Containerfile now defaults both the GTK builder and bootc runtime to Fedora
 44. Fedora 42 is beyond its update/support window. References:
