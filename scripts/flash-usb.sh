@@ -59,6 +59,11 @@ read -r -p "Everything on $DEV will be erased. Type the device name ($name) to c
 # --- 2. wipe old partition tables (both GPT copies) and signatures ---------------
 echo "== wiping old partition tables and signatures"
 wipefs --all --force "$DEV" >/dev/null
+# Zero the first and last MiB (primary and backup GPT) directly: sgdisk
+# refuses to zap a table whose two copies disagree ("Invalid partition data!").
+dev_mib=$((dev_bytes / 1048576))
+dd if=/dev/zero of="$DEV" bs=1M count=1 oflag=direct conv=fsync status=none
+dd if=/dev/zero of="$DEV" bs=1M count=1 seek=$((dev_mib - 1)) oflag=direct conv=fsync status=none
 sgdisk --zap-all "$DEV" >/dev/null
 partprobe "$DEV" 2>/dev/null || true
 
