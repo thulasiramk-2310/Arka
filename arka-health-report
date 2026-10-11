@@ -16,7 +16,7 @@ STATE_DIR=/run/arkaos
 OUT=$STATE_DIR/health.json
 MOTD=/etc/motd.d/arka-health
 TIMEOUT=${ARKA_HEALTH_TIMEOUT:-120}
-log() { echo "$*" | systemd-cat -t arka-health -p "${2:-info}" 2>/dev/null || echo "$*"; }
+log() { echo "$1" | systemd-cat -t arka-health -p "${2:-info}" 2>/dev/null || echo "$1" >&2; }
 
 # Leave a trap from older images: if greenboot left a boot counter armed,
 # GRUB's greenboot rule would keep choosing the second boot entry. Clear it.
@@ -38,7 +38,7 @@ run_dir() {   # run_dir <required|wanted>; prints failures, returns count
         [ -d "$dir" ] || continue
         for script in "$dir"/*; do
             [ -f "$script" ] && [ -x "$script" ] || continue
-            name=$(basename "$script")
+            name=$script
             if timeout "$TIMEOUT" "$script" >/dev/null 2>&1; then
                 log "$kind check passed: $name"
             else
