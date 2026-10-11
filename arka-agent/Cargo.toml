@@ -25,7 +25,7 @@ hex = "0.4"
 anyhow = "1"
 nix = { version = "0.29", features = ["fs"] }
 # real backend
-zbus = { version = "4", features = ["tokio"] }                         # read org.arka.arkad properties
+zbus = { version = "5", features = ["tokio"] }                         # read org.arka.arkad properties
 arka-pulse = { path = "../arka-pulse", default-features = false }      # in-process PulseEngine::health()
 arka-shell-common = { path = "../arka-shell/arka-shell-common", default-features = false }
 
