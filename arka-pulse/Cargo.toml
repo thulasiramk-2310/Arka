@@ -26,7 +26,7 @@ required-features = ["dbus"]
 # it pulls zbus + a minimal tokio, and nothing in the safety-critical core
 # depends on it. An AI explanation layer, if it ever ships, stays separate too.
 [dependencies]
-zbus = { version = "4", features = ["tokio"], optional = true }
+zbus = { version = "5", features = ["tokio"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"], optional = true }
 
 [features]
