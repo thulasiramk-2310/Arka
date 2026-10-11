@@ -402,7 +402,9 @@ COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf
 
-
+# Kernel hardening: boot options via bootc kargs.d, runtime settings via sysctl.d.
+COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
+COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
 
 # Light/Dark switcher shared by first login and ArkaOS Settings > Appearance.
 COPY arka-apply-look /usr/libexec/arka-apply-look

@@ -1,0 +1,12 @@
+# ArkaOS kernel hardening (boot options). Picked to harden memory handling and
+# kernel internals without breaking a desktop: user namespaces stay on
+# (Firefox's bubblewrap sandbox and Flatpak need them).
+#   init_on_alloc / init_on_free   zero memory when it's handed out and freed
+#   slab_nomerge, page_alloc.shuffle, randomize_kstack_offset
+#                                  make kernel memory layouts harder to exploit
+#   vsyscall=none                  remove a legacy fixed-address interface
+#   debugfs=off                    no kernel debug filesystem
+#   lockdown=integrity             block runtime kernel modification (/dev/mem,
+#                                  unsigned kexec); hibernation is unavailable
+kargs = ["init_on_alloc=1", "init_on_free=1", "slab_nomerge", "page_alloc.shuffle=1",
+         "randomize_kstack_offset=on", "vsyscall=none", "debugfs=off", "lockdown=integrity"]
