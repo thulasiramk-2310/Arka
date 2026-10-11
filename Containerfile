@@ -31,8 +31,7 @@ FROM scratch AS files
 COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
 COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
-COPY arka-health-report /usr/libexec/arka-health-report
-COPY systemd/arka-health-report.service /usr/lib/systemd/system/arka-health-report.service
+COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
 COPY arkaos-firefox /usr/bin/firefox-sandbox
@@ -430,25 +429,20 @@ k.update(Id="org.arkaos."+v+".desktop", Name="ArkaOS "+v.title(), Description="T
 # Firewall on by default: the ArkaOS zone rejects unsolicited incoming
 # connections (Fedora KDE's default zone allows ports 1025-65535). arkad
 # checks it and the Privacy dashboard shows it.
-# greenboot: health checks after each boot. Automatic rollback is OFF until it
-# passes a real test: on 2026-10-11 a deliberately broken update was caught by
-# the checks but never switched back (no next-deployment-id recorded), and the
-# GRUB boot counter then kept selecting the broken entry, even after
-# `bootc rollback`. greenboot's own health check arms that counter and reboots
-# on a first failure (src/main.rs, v0.16.4), so its automatic parts are all
-# off: the health-check and trigger units are disabled (never masked:
-# ostree-finalize-staged.service Requires= the trigger, and masking it would
-# stop updates from applying) and its GRUB rule is not installed. The same
-# check scripts run report-only through arka-health-report (below).
+# greenboot: health checks after each boot. If a new version fails them, the
+# computer restarts to retry (3 boots) and then goes back to the previous
+# version on its own. greenboot-set-rollback-trigger records that version from
+# its ExecStop during shutdown, but upstream's unit (v0.16.4 and main) has no
+# shutdown conflict, so systemd never stopped it and ExecStop never ran:
+# "Boot counter exhausted but no next-deployment-id set" (VM test 2026-10-11).
+# Our drop-in adds Conflicts/Before=final.target (files stage); with it the
+# same test rolled back unattended and a healthy update stayed.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q \
       firewalld greenboot greenboot-default-health-checks && \
     systemctl enable firewalld.service && \
     for u in $(rpm -ql greenboot | grep -E '^/usr/lib/systemd/system/[^/]+\.service$' | xargs -n1 basename); do \
       systemctl enable "$u" && echo "greenboot: enabled $u"; \
-    done && \
-    systemctl disable greenboot-set-rollback-trigger.service greenboot-healthcheck.service && \
-    test ! -e /etc/systemd/system/ostree-finalize-staged.service.requires/greenboot-set-rollback-trigger.service && \
-    rm -f /usr/lib/bootupd/grub2-static/configs.d/08_greenboot.cfg
+    done
 # Small files and binaries: one COPY each from the staging stages above.
 # Keep each file's purpose next to its line in the "files" stage; what the
 # RUN below does with them:
@@ -456,8 +450,6 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #    KDE's default zone allows ports 1025-65535) made the default. arkad checks
 #    it and the Privacy dashboard shows it.
 #  - kernel hardening: boot options via bootc kargs.d, runtime via sysctl.d.
-#  - arka-health-report: report-only boot health checks (replaces greenboot's
-#    automatic handling, see above).
 #  - updates download in the background but never restart the computer on
 #    their own: Fedora's bootc-fetch-apply-updates timer runs `bootc upgrade
 #    --apply`, which reboots. Keep the timer, drop --apply; the Updates app
@@ -469,7 +461,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-health-report /usr/libexec/arka-apply-look /usr/bin/firefox-sandbox && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/bin/firefox-sandbox && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
@@ -481,7 +473,7 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
            /usr/share/sddm/themes/arkaos-light/metadata.desktop && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox && \
-    systemctl enable arka-health-report.service arkad.service arka-pulsed.service
+    systemctl enable arkad.service arka-pulsed.service
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
