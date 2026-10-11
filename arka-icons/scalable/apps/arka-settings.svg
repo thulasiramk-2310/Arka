@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="2"/>
-<circle cx="32" cy="32" r="7" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M32 15 V21 M32 43 V49 M49 32 H43 M21 32 H15 M44 20 L40 24 M24 40 L20 44 M44 44 L40 40 M24 24 L20 20" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7b8494"/><stop offset="1" stop-color="#4c5463"/></linearGradient></defs>
+<rect x="4" y="5.5" width="56" height="56" rx="13" fill="#000" opacity=".16"/>
+<rect x="4" y="4" width="56" height="56" rx="13" fill="url(#g)"/>
+<rect x="4.5" y="4.5" width="55" height="55" rx="12.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
+<polygon points="32.00,19.80 35.12,16.31 38.12,17.22 38.78,21.86 40.63,23.37 45.30,23.11 46.78,25.88 43.97,29.62 44.20,32.00 47.69,35.12 46.78,38.12 42.14,38.78 40.63,40.63 40.89,45.30 38.12,46.78 34.38,43.97 32.00,44.20 28.88,47.69 25.88,46.78 25.22,42.14 23.37,40.63 18.70,40.89 17.22,38.12 20.03,34.38 19.80,32.00 16.31,28.88 17.22,25.88 21.86,25.22 23.37,23.37 23.11,18.70 25.88,17.22 29.62,20.03" fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/><circle cx="32" cy="32" r="5.2" fill="#5d6574"/>
 </svg>

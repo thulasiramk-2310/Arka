@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="2"/>
-<path d="M32 13 L47 22 V42 L32 51 L17 42 V22 Z" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M17 22 L32 31 L47 22 M32 31 V51" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f59a3c"/><stop offset="1" stop-color="#d9680f"/></linearGradient></defs>
+<rect x="4" y="5.5" width="56" height="56" rx="13" fill="#000" opacity=".16"/>
+<rect x="4" y="4" width="56" height="56" rx="13" fill="url(#g)"/>
+<rect x="4.5" y="4.5" width="55" height="55" rx="12.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
+<g transform="rotate(-45 32 32)"><rect x="24" y="14" width="16" height="36" rx="8" fill="#ffffff"/><path d="M24 32 H40 V42 A8 8 0 0 1 24 42 Z" fill="#fde3c8"/><path d="M24 32 H40" stroke="#d9680f" stroke-width="2"/></g>
 </svg>

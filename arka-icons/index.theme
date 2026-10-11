@@ -1,6 +1,6 @@
 [Icon Theme]
 Name=Arka
-Comment=ArkaOS icon theme — dark surfaces, green line glyphs
+Comment=ArkaOS app icons — one family, a distinct colour per app
 Inherits=breeze-dark
 Directories=scalable/apps
 
