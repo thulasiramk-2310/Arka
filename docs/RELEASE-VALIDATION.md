@@ -195,6 +195,31 @@ Fresh QEMU install of the fixed image (good digest prefix `fcb7555e`):
 Trade-off: with `rd.shell=0` the initramfs emergency shell is unavailable; a
 user who needs it can remove the option from the GRUB entry for one boot.
 
+### Failed finalize no longer downgrades a healthy system, verified 2026-10-11
+
+[fedora-iot/greenboot-rs#219](https://github.com/fedora-iot/greenboot-rs/issues/219):
+if `ostree admin finalize-staged` fails after the trigger ran, the host boots
+its unchanged default, and greenboot reads the stale
+`greenboot_next_deployment_id` as a GRUB fallback and rolls back. Fix:
+`arka-stale-trigger-check` (`ExecStartPre=-` on `greenboot-healthcheck`) clears
+the trigger, `fallback` and `boot_counter` when the booted digest differs from
+the recorded one and the booted deployment is the default
+(`rollbackQueued` false). A real GRUB fallback boots the non-default entry and
+is left to greenboot.
+
+Fresh QEMU install, base `96100ff3`, healthy update `b21b456f` installed, then
+finalize forced to fail with an `ExecStop=/usr/bin/false` override:
+
+- With the check: "The staged update was never applied; cleared its rollback
+  state"; `b21b456f` stayed booted across two restarts.
+- Check disabled (`ExecStartPre=` reset): greenboot logged "Rollback to
+  previous deployment completed successfully" and the next boot was the older
+  `96100ff3`, reproducing #219.
+- Regressions with the check: a failing required check still rolled back after
+  three failed boots; an update that cannot reach userspace still fell back and
+  was made permanent. The check logged nothing in either case.
+- Test-file hashes unchanged throughout.
+
 The report-only section above is kept as history; its mitigation is no
 longer in the image. The bar set for automatic recovery (shutdown trigger
 journal, deployment identifiers, unattended return to the exact good deployment
