@@ -190,10 +190,10 @@ last re-check          14s ago</pre>
         </ul>
 
         <h3 id="updates" style="margin-top:44px;font-size:21px;font-weight:600;color:#EAB94A">Updates &amp; rollback</h3>
-        <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The OS is delivered as a container-native image. An update fetches a new image and stages it; you boot into it. The previous image remains on disk and bootable, so recovery is a reboot rather than a repair session.</p>
+        <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The OS is delivered as a container-native image. An update fetches a new image and stages it for the next boot. Recovery failed the VM test on 11 October 2026: greenboot detected a deliberately broken update but did not return to the previous deployment, and its boot-counter logic interfered with manual rollback. A mitigation is being prepared; neither automatic recovery nor manual rollback on a corrected image is verified. The two test files in /home and /var retained their recorded fingerprints.</p>
         <pre style="margin-top:18px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.9;color:#EEF1F6;overflow-x:auto">$ bootc upgrade          # stage the next image
 $ systemctl reboot       # boot into it
-$ bootc rollback         # return to the previous image</pre>
+$ bootc rollback         # select an available previous deployment; recovery is not verified</pre>
       </section>
 
       <section id="status" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
@@ -279,6 +279,7 @@ $ bootc rollback         # return to the previous image</pre>
   // ── proof table ──
   var TAGS = {
     configured: { label: "● configured", color: "#16C784" },
+    failed: { label: "● failed test", color: "#EAB94A" },
     experimental: { label: "◐ experimental", color: "#54D6C6" },
     "not yet": { label: "○ not yet", color: "#8B93A3" }
   };
@@ -289,7 +290,7 @@ $ bootc rollback         # return to the previous image</pre>
     { mech: "IPv6 privacy addresses", note: "Temporary addresses rather than ones derived from the interface identifier.", tag: "configured" },
     { mech: "Firefox in bubblewrap", note: "A real containment boundary with a restricted filesystem view. Not complete isolation.", tag: "configured" },
     { mech: "Read-only runtime root", note: "System image files are read-only at runtime. Writable state remains; composefs alone does not establish verified boot.", tag: "configured" },
-    { mech: "Atomic update + rollback", note: "New system deployments are staged for boot. An available previous deployment can be selected; successful recovery still needs testing. Personal files are not rolled back.", tag: "configured" },
+    { mech: "Atomic update + rollback", note: "Update staging worked, but automatic recovery failed its 11 October 2026 VM test and the boot counter interfered with manual rollback. Recovery on a corrected image is not verified. Personal files are not rolled back.", tag: "failed" },
     { mech: "arka-pulse prediction", note: "Early warning models and thresholds are still being calibrated against real failures.", tag: "experimental" },
     { mech: "Bare-metal hardware support", note: "Testing has begun on a small set of machines. Wi-Fi, GPU and suspend vary.", tag: "experimental" },
     { mech: "Graphical first-run setup", note: "Being developed and validated. Expect terminal steps in the current preview.", tag: "experimental" },
@@ -329,7 +330,7 @@ $ bootc rollback         # return to the previous image</pre>
   var FAQS = [
     { q: "Does ArkaOS make me anonymous?", a: "No. It reduces what your machine leaks by default — randomized MAC address, masked hostname, encrypted DNS, IPv6 privacy addresses. Your IP address is still visible to the sites you visit, and nothing here is a substitute for anonymity tooling." },
     { q: "Can I use it as my daily driver?", a: "Not yet. This is a Developer Preview: there is no graphical installer, hardware support is still being validated, and full-disk encryption is not on by default. Run it in a VM, or on a machine you can afford to reinstall." },
-    { q: "What happens if an update breaks my system?", a: "You reboot into the previous image. Updates are atomic — a new image is staged and booted rather than applied in place — and the image you came from stays on disk; bootc rollback selects it for the next boot. Tested on 11 October 2026 with a deliberately broken update: it was not switched back automatically, and a boot-counter setting then kept choosing the broken version even after bootc rollback. That setting is being switched off; until a fixed image passes the same test, treat going back as unverified. Files in /home and /var were not changed." },
+    { q: "What happens if an update breaks my system?", a: "Recovery failed the VM test on 11 October 2026. Updates are atomic — a new image is staged and booted rather than applied in place — and the image you came from stays on disk; bootc rollback selects it for the next boot. Tested on 11 October 2026 with a deliberately broken update: it was not switched back automatically, and a boot-counter setting then kept choosing the broken version even after bootc rollback. That setting is being switched off; until a fixed image passes the same test, treat going back as unverified. Files in /home and /var were not changed." },
     { q: "Is arka-pulse self-healing?", a: "No. It collects local telemetry, detects degradation, and is being validated for prediction and verification. Recovery actions are constrained and experimental. It recommends; you act." },
     { q: "Why Fedora bootc instead of building your own base?", a: "Because the parts underneath already work. Kernel, drivers, composefs, systemd and KDE Plasma come from upstream, and ArkaOS spends its effort on the privacy and reliability layers above them." },
     { q: "Is my data sent anywhere?", a: "arka-pulse telemetry stays on the device. ArkaOS has no account system and collects no usage analytics. DNS queries go to Quad9 over TLS, which means Quad9 sees your resolution requests instead of your ISP." }

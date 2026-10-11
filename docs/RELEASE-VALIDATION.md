@@ -52,6 +52,50 @@ Behavior references: [WirePlumber wpctl](https://pipewire.pages.freedesktop.org/
 
 ## Candidate baseline and migration
 
+### Recovery failure reported 2026-10-11
+
+The failed-update VM test supersedes the earlier untested recovery status.
+The healthy baseline was `arkaos:dev`, digest prefix `cf305fb9`, with
+`boot_success=1`. A deliberately broken `arkaos:rollback-test` update was
+downloaded and booted. Required health checks detected failure on three boot
+attempts and initiated restarts, but recovery never selected the good image.
+The reported journal message was:
+
+> Boot counter exhausted but no next-deployment-id set - manual intervention required
+
+The broken deployment remained booted and its test marker remained present.
+Manual `bootc rollback` attempts also returned to that deployment while the
+GRUB counter logic remained involved. Two test files, one in home and one in
+`/var`, retained their recorded fingerprint `51d5d3446abfa29b`. This is evidence
+for those files, not proof that all persistent data is unaffected.
+
+**Disabling the rollback-trigger unit alone is insufficient.** The built image
+log records greenboot 0.16.4. Its upstream `health_check()` failure path can
+create a missing boot counter and reboot independently of that unit. See
+[the versioned implementation](https://github.com/fedora-iot/greenboot-rs/blob/v0.16.4/src/main.rs).
+The reporting-only mitigation must prevent the health-check path from setting
+counters, rebooting or selecting deployments as well as preventing the shutdown
+trigger. Preserve health-check failure reporting and update finalization.
+
+Before accepting a mitigation, repeat these checks in a disposable guest:
+
+1. Record exact image digests, installed greenboot version, effective unit
+   definitions, boot entries and GRUB environment before staging the update.
+2. Stage a deliberately failing required health check. Verify update
+   finalization still completes and the broken deployment actually boots.
+3. Leave it unattended: the failed check must be reported without an automatic
+   restart, counter rearming or deployment selection.
+4. Select the retained good deployment with `bootc rollback`, reboot, and
+   verify its exact digest and absence of the broken-image marker. Reboot again
+   to detect a persistent entry-selection trap. Compare both data fingerprints.
+5. Separately test an upgrade from the old image with existing counter/fallback
+   state. A fresh-image pass does not prove migration out of an existing trap.
+
+Automatic recovery requires a separate test after the fallback-recording bug
+is diagnosed: capture the shutdown trigger journal and deployment identifiers,
+then prove unattended return to the exact good deployment after bounded failed
+boots. Do not label it verified from detection, restarts or source tests alone.
+
 The Containerfile now defaults both the GTK builder and bootc runtime to Fedora
 44. Fedora 42 is beyond its update/support window. References:
 [Fedora 44 release announcement](https://fedoramagazine.org/announcing-fedora-linux-44/),

@@ -58,7 +58,7 @@ because those aren't what ArkaOS is built from.
 ### Bio (< 160 characters)
 
 ```
-Privacy-first, immutable desktop Linux. One bootc image — read-only composefs root, atomic rollback, and a Rust daemon that defends you by default.
+Immutable desktop Linux preview with atomic image updates and inspectable privacy settings. Recovery failed its VM test and remains under investigation.
 ```
 
 ### Topics (20)
@@ -89,7 +89,7 @@ linux-distribution
 ### Search-friendly phrases (weave into descriptions / meta, don't spam)
 
 - image-based / immutable Linux desktop
-- atomic upgrades with built-in rollback
+- atomic image upgrades; recovery currently fails its VM test
 - read-only root filesystem (composefs)
 - system-level network privacy: encrypted DNS (DoT), MAC randomization
 - per-app browser sandboxing with bubblewrap

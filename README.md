@@ -42,7 +42,7 @@ every application or network connection.
 
 | | | |
 |---|---|---|
-| ✅ Immutable rootfs (composefs) | ✅ Atomic updates + rollback | ✅ Privacy daemon (arkad) |
+| ✅ Immutable rootfs (composefs) | ✅ Atomic image updates | ✅ Privacy daemon (arkad) |
 | ✅ Privacy Dashboard + weekly report | ✅ Browser sandbox (bubblewrap) | ✅ Permission manager |
 | ✅ Branded KDE Plasma shell | ✅ Capsule app store | ✅ Boot animation (Plymouth) |
 | ✅ Custom login (SDDM) | ✅ Design System v1.0 | ✅ Icons · cursor · sounds · wallpaper |
