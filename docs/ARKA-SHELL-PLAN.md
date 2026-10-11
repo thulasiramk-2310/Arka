@@ -1,0 +1,82 @@
+# Arka Shell on KWin: plan
+
+Status: plan only. Nothing here is built yet.
+
+The desktop direction (decided 2026-10-05) is to keep KWin as the compositor and
+give ArkaOS its own shell: the panel, dock, launcher and notification look. An
+ArkaWM prototype on Smithay stays a separate research track. This document
+picks how to build the shell.
+
+## What a shell has to provide on KWin
+
+Replacing the visible parts is the easy half. Plasma's shell process
+(`plasmashell`) also runs things people only notice when they break:
+
+| Piece | Today, in plasmashell |
+|---|---|
+| Panel, dock, launcher | Plasma panel, `icontasks`, `kickerdash` |
+| Window list for the dock | Plasma task manager model (KDE window-management protocol) |
+| System tray | StatusNotifierItem host |
+| Notifications | notification server and popups |
+| Volume and brightness popups (OSD) | plasmashell OSD |
+| Desktop and wallpaper | desktop containment |
+| Accessibility, portals, screencast, multi-monitor, scaling | KWin and Qt, unchanged by either option |
+
+## Option A: an ArkaOS Plasma shell package (recommended first)
+
+Plasma loads its whole shell from a QML "shell package"; Plasma Mobile, Plasma
+Bigscreen and Plasma Nano are alternative shell packages on the same
+`plasmashell`. ArkaOS ships `org.arkaos.desktop` with its own panel, dock,
+launcher and notification views, and keeps KDE's tray host, notification
+server, OSD, task models and accessibility.
+
+- Language: QML (plus small C++ only if a model is missing).
+- Effort: about 1 to 2 weeks for panel, dock and launcher; notifications and
+  OSD styling after that.
+- Risk: low. Falls back to the stock desktop package if a file is missing.
+- Trade-off: the shell is QML, not Rust; the ArkaOS apps stay Rust/GTK.
+
+## Option B: Rust/GTK layer-shell programs instead of plasmashell
+
+Revive `legacy/arka-bar`, `arka-dock` and `arka-launcher` (about 1,400 lines,
+gtk4-layer-shell). KWin supports the layer-shell protocol, so the surfaces
+work. The rest has to be rebuilt:
+
+- the dock's window list needs `org_kde_plasma_window_management`, which KWin
+  only gives to programs that request it in their desktop file;
+- a StatusNotifierItem host for the tray;
+- a notification server and popups;
+- volume and brightness popups;
+- desktop and wallpaper.
+
+- Effort: several weeks before it reaches what Plasma gives today.
+- Risk: high; each missing piece is a regression people will notice.
+
+## Recommendation
+
+1. Build Option A: panel, dock and launcher in an `org.arkaos.desktop` shell
+   package, matching the setup app and Privacy dashboard look (light first,
+   Light/Dark choice, no glow or glass).
+2. Style notifications and OSD within the same package.
+3. Use Option B only for a piece QML cannot do well, one piece at a time.
+4. Keep the ArkaWM (Smithay) prototype as research; it replaces KWin only after
+   it matches KWin on accessibility, portals, screencast, multi-monitor,
+   scaling and XWayland.
+
+## Done means (each step, in a VM, then on hardware)
+
+- Panel, dock and launcher open, close and survive a restart, in Light and Dark.
+- Tray icons (network, sound, the Privacy tray) and notifications still work.
+- Screen reader and keyboard navigation still reach every control.
+- Two monitors and 150% scaling lay out correctly.
+- Removing the package returns the stock Plasma desktop.
+
+## Sources
+
+- KDE community wiki: [Plasma shell package](https://community.kde.org/Plasma/shellPackage),
+  [Plasma shell features](https://community.kde.org/Plasma/PlasmaShellFeatures)
+- Plasma Nano, a minimal shell package: [openSUSE package](https://build.openbuildservice.org/package/show/openSUSE:Factory/plasma6-nano)
+- KWin mailing list on the window-management interface for third-party docks:
+  [2024-01 thread](https://mail.kde.org/pipermail/kwin/2024-January/005304.html)
+- Layer shell in Plasma: [KDE task T13496](https://phabricator.kde.org/T13496),
+  [layer-shell-qt](https://packages.gentoo.org/package/kde-plasma/layer-shell-qt)
