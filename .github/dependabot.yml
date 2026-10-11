@@ -1,17 +1,23 @@
 version: 2
+# One grouped pull request per week per ecosystem, for minor and patch updates
+# only. Major versions change APIs (zbus, glib, toml, ...) and are planned and
+# VM-tested by hand instead of proposed automatically.
 updates:
   - package-ecosystem: cargo
-    directory: /arkad
+    directories: ["/arkad", "/arka-shell", "/arka-pulse", "/arka-agent"]
     schedule: { interval: weekly }
-  - package-ecosystem: cargo
-    directory: /arka-shell
-    schedule: { interval: weekly }
-  - package-ecosystem: cargo
-    directory: /arka-pulse
-    schedule: { interval: weekly }
+    groups:
+      rust:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
-  - package-ecosystem: cargo
-    directory: /arka-agent
-    schedule: { interval: weekly }
+    groups:
+      actions:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
