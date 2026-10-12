@@ -1,0 +1,12 @@
+[Unit]
+Description=Read the hardware clock as local time when Windows is installed
+After=dbus.service systemd-timedated.service
+ConditionPathExists=/sys/firmware/efi
+ConditionPathExists=!/var/lib/arkaos-rtc-checked
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/arka-rtc-mode
+
+[Install]
+WantedBy=multi-user.target

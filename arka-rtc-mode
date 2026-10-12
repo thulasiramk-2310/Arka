@@ -1,0 +1,45 @@
+#!/bin/sh
+# arka-rtc-mode — once, on first boot: if Windows is installed on this
+# computer, keep the hardware clock in local time, the way Windows does.
+#
+# Windows stores local time in the hardware clock; Linux assumes UTC. On a
+# computer with both, ArkaOS then shows the wrong time (5 hours 30 minutes off
+# in India) until the network corrects it. This only changes how ArkaOS reads
+# the clock (the LOCAL line in /etc/adjtime); it never writes to the hardware
+# clock or to Windows.
+#
+# Windows is detected from the firmware's boot entries (the "Windows Boot
+# Manager" entry), so no other disk is read or mounted. The decision is made
+# once; after that, change it in Settings or with `timedatectl set-local-rtc`.
+set -eu
+EFIVARS=${ARKA_EFIVARS:-/sys/firmware/efi/efivars}
+MARK=${ARKA_RTC_MARK:-/var/lib/arkaos-rtc-checked}
+TIMEDATECTL=${ARKA_TIMEDATECTL:-timedatectl}
+
+[ -e "$MARK" ] && exit 0
+if [ ! -d "$EFIVARS" ]; then
+    echo "arka-rtc-mode: not started through UEFI, nothing to check"
+    : > "$MARK"
+    exit 0
+fi
+
+windows=no
+for v in "$EFIVARS"/Boot[0-9A-F][0-9A-F][0-9A-F][0-9A-F]-8be4df61-93ca-11d2-aa0d-00e098032b8c; do
+    [ -r "$v" ] || continue
+    # Boot entry names are stored as UTF-16, so each letter is followed by a NUL.
+    if LC_ALL=C grep -aq 'W.i.n.d.o.w.s. .B.o.o.t. .M.a.n.a.g.e.r' "$v"; then
+        windows=yes
+        break
+    fi
+done
+
+# Read the current mode into a variable so that a failing timedatectl (the
+# time service not ready yet) stops the script before it marks the check done.
+local_rtc=$("$TIMEDATECTL" show -p LocalRTC --value)
+if [ "$windows" = yes ] && [ "$local_rtc" = no ]; then
+    "$TIMEDATECTL" set-local-rtc 1 --adjust-system-clock
+    echo "arka-rtc-mode: Windows found, hardware clock is now read as local time"
+else
+    echo "arka-rtc-mode: windows=$windows, leaving the clock mode alone"
+fi
+: > "$MARK"
