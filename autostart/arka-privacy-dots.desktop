@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Privacy Dots
+Comment=Shows which program is using the microphone, camera or screen
+Exec=/usr/bin/arka-privacy-dots
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2
+NoDisplay=true

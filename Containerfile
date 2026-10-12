@@ -17,7 +17,7 @@ RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
 
 # Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
 FROM docker.io/fedora:${FEDORA_VERSION} AS shell-builder
-RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-devel gtk4-layer-shell-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
 COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --locked --release
@@ -34,6 +34,7 @@ COPY kernel/60-arkaos-hardening.conf /usr/lib/sysctl.d/60-arkaos-hardening.conf
 COPY kernel/20-arkaos-recovery.toml /usr/lib/bootc/kargs.d/20-arkaos-recovery.toml
 COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
+COPY autostart/arka-privacy-dots.desktop /etc/xdg/autostart/arka-privacy-dots.desktop
 COPY arka-rtc-mode /usr/libexec/arka-rtc-mode
 COPY systemd/arka-rtc-mode.service /usr/lib/systemd/system/arka-rtc-mode.service
 COPY arka-dns-after-clock /usr/libexec/arka-dns-after-clock
@@ -71,6 +72,7 @@ COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-so
 COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
 COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
 COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+COPY --from=shell-builder /build/target/release/arka-privacy-dots /usr/bin/arka-privacy-dots
 
 # Stage 3: bootc image
 FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
@@ -478,6 +480,8 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #  - ArkaOS Plasma styles (arkaos-dark/-light): Breeze's colours with ArkaOS
 #    panels (24px corners, 1px border, soft shadow; plasma-style/). Plasma
 #    takes every other element from its default style.
+# Runtime library for the privacy dots overlay (a late layer: the big package layers above stay cached).
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-layer-shell
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
@@ -515,5 +519,5 @@ RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \
       /usr/bin/arka-hotkeys /usr/bin/arka-capsule /usr/bin/arka-perms \
       /usr/bin/arka-settings-gtk /usr/bin/arka-welcome /usr/bin/arka-sound \
-      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray && \
+      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray /usr/bin/arka-privacy-dots && \
     bootc container lint

@@ -1,0 +1,22 @@
+[package]
+name = "arka-privacy-dots"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arka-privacy-dots"
+path = "src/main.rs"
+
+# Privacy dots: a small always-on-top indicator that names the program using the
+# microphone, camera or screen. Read-only. The detection is in arka-sensors;
+# this crate is the window around it. `layer-shell` is off only to type-check on
+# machines without gtk4-layer-shell (the image build always has it).
+[features]
+default = ["layer-shell"]
+layer-shell = ["dep:gtk4-layer-shell"]
+
+[dependencies]
+arka-sensors = { path = "../arka-sensors" }
+gtk4 = { version = "0.9", features = ["v4_10"] }
+gtk4-layer-shell = { version = "0.4", optional = true }
+serde_json = "1"

@@ -1,0 +1,10 @@
+[package]
+name = "arka-sensors"
+version = "0.1.0"
+edition = "2021"
+
+# Who is using the microphone, camera or screen, read from a PipeWire graph
+# dump (`pw-dump`). Pure logic with no GTK or D-Bus, so it is fast to test.
+# See docs/ARKA-PRIVACY-DOTS-PLAN.md for what it can and cannot claim.
+[dependencies]
+serde_json = "1"
