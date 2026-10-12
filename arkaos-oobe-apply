@@ -74,9 +74,9 @@ runuser -u "$user" -- bash -c '
     printf "%s\n" "$look" > "$home/.config/arka-look"
     command -v kwriteconfig6 >/dev/null || exit 0
     if [ "$look" = light ]; then
-        scheme=ArkaOSLight style=breeze-light icons=Arka-Light laf=org.arkaos.light.desktop wall=ArkaOS-Light
+        scheme=ArkaOSLight style=arkaos-light icons=Arka-Light laf=org.arkaos.light.desktop wall=ArkaOS-Light
     else
-        scheme=ArkaOS style=breeze-dark icons=Arka laf=org.arkaos.dark.desktop wall=ArkaOS-Dark
+        scheme=ArkaOS style=arkaos-dark icons=Arka laf=org.arkaos.dark.desktop wall=ArkaOS-Dark
     fi
     kg=$home/.config/kdeglobals
     colors=/usr/share/color-schemes/$scheme.colors

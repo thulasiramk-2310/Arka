@@ -37,12 +37,12 @@ case "$CUSTOM" in ""|/usr/share/arka/wallpapers/default*) DESK_WALL=$WALL ;; *) 
 
 if [ "$LOOK" = light ]; then
     plasma-apply-colorscheme ArkaOSLight >/dev/null 2>&1 || true
-    plasma-apply-desktoptheme breeze-light >/dev/null 2>&1 || true
+    plasma-apply-desktoptheme arkaos-light >/dev/null 2>&1 || true
     set_icons Arka-Light
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.light.desktop
 else
     plasma-apply-colorscheme ArkaOS >/dev/null 2>&1 || true
-    plasma-apply-desktoptheme breeze-dark >/dev/null 2>&1 || true
+    plasma-apply-desktoptheme arkaos-dark >/dev/null 2>&1 || true
     set_icons Arka
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop
 fi

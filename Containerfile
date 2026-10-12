@@ -38,6 +38,8 @@ COPY tmpfiles/arkaos-arkasetup.conf /usr/lib/tmpfiles.d/arkaos-arkasetup.conf
 COPY systemd/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf /usr/lib/systemd/system/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
+COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-dark
+COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-light
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
 COPY arkaos-firefox /usr/bin/firefox-sandbox
 COPY arkad/arkad.service /usr/lib/systemd/system/arkad.service
@@ -410,8 +412,8 @@ RUN chmod 755 /usr/libexec/arkaos-oobe-apply /usr/libexec/arka-plasma-firstrun
 # wallpaper, top bar + dock. No splash between login and desktop. Every part
 # stays changeable in System Settings.
 RUN for v in dark light; do \
-      if [ $v = dark ]; then base=org.kde.breezedark.desktop; scheme=ArkaOS; style=breeze-dark; icons=Arka; wall=ArkaOS-Dark; \
-      else base=org.kde.breeze.desktop; scheme=ArkaOSLight; style=breeze-light; icons=Arka-Light; wall=ArkaOS-Light; fi; \
+      if [ $v = dark ]; then base=org.kde.breezedark.desktop; scheme=ArkaOS; style=arkaos-dark; icons=Arka; wall=ArkaOS-Dark; \
+      else base=org.kde.breeze.desktop; scheme=ArkaOSLight; style=arkaos-light; icons=Arka-Light; wall=ArkaOS-Light; fi; \
       d=/usr/share/plasma/look-and-feel/org.arkaos.$v.desktop; \
       cp -a /usr/share/plasma/look-and-feel/$base $d && \
       python3 -c 'import json,sys; p=sys.argv[1]; m=json.load(open(p)); k=m["KPlugin"]; v=sys.argv[2]; \
@@ -463,6 +465,9 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #    wallpaper; arkaos-oobe-apply selects it when the user picks Light.
 #  - Firefox runs through the bubblewrap sandbox wrapper.
 #  - arkad and arka-pulsed (read-only org.arka.pulse, mirrors arkad) enabled.
+#  - ArkaOS Plasma styles (arkaos-dark/-light): Breeze's colours with ArkaOS
+#    panels (24px corners, 1px border, soft shadow; plasma-style/). Plasma
+#    takes every other element from its default style.
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
@@ -478,6 +483,13 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
            /usr/share/sddm/themes/arkaos-light/metadata.desktop && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox && \
+    for v in dark light; do \
+      d=/usr/share/plasma/desktoptheme/arkaos-$v && \
+      if [ $v = dark ]; then n=Dark; else n=Light; fi && \
+      cp /usr/share/plasma/desktoptheme/breeze-$v/colors /usr/share/plasma/desktoptheme/breeze-$v/plasmarc $d/ && \
+      printf '{"KPlugin": {"Id": "arkaos-%s", "Name": "ArkaOS %s", "Description": "Breeze %s with ArkaOS panels", "License": "LGPL-2.1-or-later"}, "X-Plasma-API": "5.0"}\n' \
+        $v $n $n > $d/metadata.json || exit 1; \
+    done && \
     mkdir -p /usr/share/arkaos/arkasetup && \
     cp -a /var/home/arkasetup/.bash_profile /var/home/arkasetup/.hushlogin /usr/share/arkaos/arkasetup/ && \
     systemctl enable arkad.service arka-pulsed.service

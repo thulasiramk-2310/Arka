@@ -11,6 +11,7 @@
 var top = new Panel;
 top.location = 'top';
 top.height = 34;
+try { top.floating = false; } catch (e) {}      // flat bar on the screen edge; the dock floats
 top.addWidget('org.kde.plasma.kickerdash');     // full-screen launcher button
 top.addWidget('org.kde.plasma.panelspacer');
 var clock = top.addWidget('org.kde.plasma.digitalclock');
@@ -20,7 +21,9 @@ clock.currentConfigGroup = ['Appearance'];
 clock.writeConfig('showDate', true);
 clock.writeConfig('dateDisplayFormat', 1);      // beside the time
 clock.writeConfig('dateFormat', 'custom');
-clock.writeConfig('customDateFormat', 'ddd d MMM');
+// The trailing space keeps the date and time apart: on a bar attached to the
+// screen edge Plasma's clock otherwise draws them touching ("Oct05:49").
+clock.writeConfig('customDateFormat', 'ddd d MMM ');
 top.addWidget('org.kde.plasma.panelspacer');
 top.addWidget('org.kde.plasma.systemtray');
 var topId = top.id;
