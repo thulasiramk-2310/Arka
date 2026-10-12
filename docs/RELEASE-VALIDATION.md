@@ -279,6 +279,34 @@ baseline. It is not a supported release target. Release builds must record and
 pin reviewed container digests and package/toolchain provenance; `--locked`
 alone does not make the entire image reproducible.
 
+### Automatic recovery on one real laptop, 2026-10-12
+
+Laptop: Nokia PureBook, Intel Core i5-10210U. ArkaOS ran from a USB stick flashed
+with the image whose base digest is `684ffa4a`; the internal Windows disk was not
+used. A test registry on a second laptop served a one-layer update (10 KB) over
+Wi-Fi, and no base layer was requested. The laptop sent its journals back after
+each step.
+
+1. Broken update (a required health check that fails on purpose) staged with
+   `bootc switch`. At shutdown: "Setting rollback trigger for deployment:
+   sha256:abc47c5e".
+2. Unattended: three failed boots ("Boot counter is 2, rebooting to try again",
+   "Boot counter is 1, rebooting to try again", "Boot counter exhausted and
+   next-deployment-id is set - initiating rollback", "Rollback successful", "Next
+   boot: rollback deployment"). The first two failed boots lasted about 35
+   seconds each; the third, which did the rollback, about a minute. The fourth
+   boot was the original digest `684ffa4a`, with the update's marker file
+   absent, `boot_success=1`, no failed units, and three test files in `/var`
+   with unchanged hashes.
+3. Healthy update (marker file only) staged: one boot, health check passed,
+   counter cleared, still running after a second restart, no restart loop.
+
+Limits: one laptop. Its hardware clock reset to 2019 on every start (a failing
+clock battery), so journal timestamps are meaningless and the order of boots is
+the evidence. Not tried on hardware: an update that fails before the system
+starts, `bootc rollback` by hand, an upgrade from the old trapped boot-counter
+state, and the installer.
+
 ## Hardware targets
 
 The current build is x86-64 and uses x64 UEFI artifacts. ARM, 32-bit machines,

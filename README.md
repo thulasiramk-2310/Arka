@@ -104,7 +104,11 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   on 2026-10-11: a broken update went back after three failed boots, an update
   that could not start went back within about 30 seconds, a healthy update stayed
   across restarts, `sudo bootc rollback` still works by hand, and the test files
-  in `/home` and `/var` were unchanged. If applying an update fails at shutdown
+  in `/home` and `/var` were unchanged. On 2026-10-12 the same first and third cases
+  also ran on one real laptop (Intel Core i5-10210U, started from a USB stick): the
+  broken update went back after three failed boots and the healthy update stayed
+  across two restarts. An update that fails before the system starts has not been
+  tried on hardware. If applying an update fails at shutdown
   (for example a full `/boot`), ArkaOS keeps the version you were on; stock
   greenboot would roll that healthy system back to an older version
   ([greenboot-rs#219](https://github.com/fedora-iot/greenboot-rs/issues/219)).
