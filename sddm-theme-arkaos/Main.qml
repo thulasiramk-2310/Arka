@@ -712,20 +712,16 @@ Rectangle {
                 Keys.onReturnPressed: pwd.reveal = !pwd.reveal
                 Item {
                     anchors.centerIn: parent; width: root.px(19); height: width
-                    Glyph {
-                        tint: pwd.reveal ? c.accentFg : c.textLo
-                        PathMove { x: 2; y: 12 }
-                        PathQuad { x: 22; y: 12; controlX: 12; controlY: 2 }
-                        PathQuad { x: 2; y: 12; controlX: 12; controlY: 22 }
-                        PathMove { x: 15; y: 12 }
-                        PathArc { x: 9; y: 12; radiusX: 3; radiusY: 3 }
-                        PathArc { x: 15; y: 12; radiusX: 3; radiusY: 3 }
+                    Glyph {   // password shown: an open eye
+                        visible: pwd.reveal
+                        tint: c.accentFg
+                        PathSvg { path: "M2 12 Q12 3 22 12 Q12 21 2 12 M14.6 12 A2.6 2.6 0 1 1 9.4 12 A2.6 2.6 0 1 1 14.6 12" }
                     }
-                    Glyph {
+                    Glyph {   // password hidden: the eye struck through, with no pupil,
+                              // so it never reads as a "no entry" sign
                         visible: !pwd.reveal
                         tint: c.textLo
-                        PathMove { x: 4; y: 20 }
-                        PathLine { x: 20; y: 4 }
+                        PathSvg { path: "M2 12 Q12 3 22 12 Q12 21 2 12 M4 4 L20 20" }
                     }
                 }
                 MouseArea {
@@ -900,11 +896,8 @@ Rectangle {
             onActivated: sddm.reboot()
             icon: Glyph {
                 tint: c.textHi
-                PathMove { x: 20; y: 12 }
-                PathArc { x: 7; y: 5; radiusX: 8; radiusY: 8; useLargeArc: true }
-                PathMove { x: 7; y: 1.5 }
-                PathLine { x: 7; y: 5.5 }
-                PathLine { x: 11; y: 5.5 }
+                // A 300 degree circle with a chevron that sits on the arc's tangent.
+                PathSvg { path: "M16.59 5.45 A8 8 0 1 1 8.62 4.75 M3.75 3.62 L8.62 4.75 L6.35 9.20" }
             }
         }
         IconButton {
