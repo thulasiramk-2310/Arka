@@ -36,6 +36,8 @@ COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
 COPY arka-rtc-mode /usr/libexec/arka-rtc-mode
 COPY systemd/arka-rtc-mode.service /usr/lib/systemd/system/arka-rtc-mode.service
+COPY arka-dns-after-clock /usr/libexec/arka-dns-after-clock
+COPY systemd/arka-dns-after-clock.service /usr/lib/systemd/system/arka-dns-after-clock.service
 COPY tmpfiles/arkaos-arkasetup.conf /usr/lib/tmpfiles.d/arkaos-arkasetup.conf
 COPY systemd/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf /usr/lib/systemd/system/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
@@ -467,6 +469,9 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #    wallpaper; arkaos-oobe-apply selects it when the user picks Light.
 #  - Firefox runs through the bubblewrap sandbox wrapper.
 #  - arkad and arka-pulsed (read-only org.arka.pulse, mirrors arkad) enabled.
+#  - time and names after a wrong clock: chrony also asks four time servers by address
+#    (so it works without DNS) and arka-dns-after-clock restarts systemd-resolved once
+#    when the clock jumps. Fixes "Server not found" on a dead-battery laptop (Nokia).
 #  - arka-rtc-mode (first boot): when the firmware lists Windows Boot Manager, read
 #    the hardware clock as local time like Windows; otherwise ArkaOS shows a time
 #    5 h 30 min off. Changes how Linux reads the clock only, never Windows.
@@ -476,7 +481,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/bin/firefox-sandbox && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
@@ -495,9 +500,10 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
       printf '{"KPlugin": {"Id": "arkaos-%s", "Name": "ArkaOS %s", "Description": "Breeze %s with ArkaOS panels", "License": "LGPL-2.1-or-later"}, "X-Plasma-API": "5.0"}\n' \
         $v $n $n > $d/metadata.json || exit 1; \
     done && \
+    printf '\n# ArkaOS: also ask these time servers by address. With a dead clock battery the date\n# starts wrong, DNS then rejects every answer, and a time service that needs DNS\n# can never fix the date. Cloudflare and Google answer on fixed addresses.\nserver 162.159.200.1 iburst\nserver 162.159.200.123 iburst\nserver 216.239.35.0 iburst\nserver 216.239.35.4 iburst\n' >> /etc/chrony.conf && \
     mkdir -p /usr/share/arkaos/arkasetup && \
     cp -a /var/home/arkasetup/.bash_profile /var/home/arkasetup/.hushlogin /usr/share/arkaos/arkasetup/ && \
-    systemctl enable arkad.service arka-pulsed.service arka-rtc-mode.service
+    systemctl enable arkad.service arka-pulsed.service arka-rtc-mode.service arka-dns-after-clock.service
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed

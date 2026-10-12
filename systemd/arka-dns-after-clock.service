@@ -1,0 +1,12 @@
+[Unit]
+Description=Restart name resolution once if the clock was far off at boot
+After=chronyd.service systemd-resolved.service
+
+[Service]
+# Type=simple so a computer that never gets a network does not hold up boot:
+# the script waits for the clock, which can take as long as the network does.
+Type=simple
+ExecStart=/usr/libexec/arka-dns-after-clock
+
+[Install]
+WantedBy=multi-user.target

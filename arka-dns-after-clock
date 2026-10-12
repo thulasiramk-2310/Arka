@@ -1,0 +1,40 @@
+#!/bin/sh
+# arka-dns-after-clock — if the clock was far off at boot and the time service
+# has now corrected it, restart name resolution once.
+#
+# Why: a computer whose clock battery is dead starts with a wrong date. While
+# the date is wrong, systemd-resolved rejects every DNSSEC-signed answer, and
+# it keeps rejecting them after the clock is fixed until it is restarted
+# (clearing its cache is not enough; checked on real hardware). With no names
+# resolving, Firefox shows "Server not found". The time service reaches its
+# servers by address (see /etc/chrony.conf), so it can fix the clock without DNS.
+#
+# This only runs once per boot, only restarts the service if the clock moved by
+# more than an hour, and never touches the DNSSEC setting.
+set -u
+TIMEDATECTL=${ARKA_TIMEDATECTL:-timedatectl}
+SYSTEMCTL=${ARKA_SYSTEMCTL:-systemctl}
+NOW=${ARKA_NOW:-"date +%s"}      # a command that prints the time in seconds
+SLEEP=${ARKA_SLEEP:-sleep}
+LIMIT=${ARKA_LIMIT:-360}         # polls of 5 seconds: give up after 30 minutes
+
+start=$($NOW)
+i=0
+while [ "$($TIMEDATECTL show -p NTPSynchronized --value 2>/dev/null)" != yes ]; do
+    i=$((i + 1))
+    if [ "$i" -gt "$LIMIT" ]; then
+        echo "arka-dns-after-clock: the clock never synchronised; leaving name resolution alone"
+        exit 0
+    fi
+    $SLEEP 5
+done
+
+now=$($NOW)
+jump=$((now - start - i * 5))
+[ "$jump" -lt 0 ] && jump=$((0 - jump))
+if [ "$jump" -gt 3600 ]; then
+    echo "arka-dns-after-clock: the clock moved by about $jump seconds; restarting name resolution"
+    $SYSTEMCTL restart systemd-resolved
+else
+    echo "arka-dns-after-clock: the clock was already right; nothing to do"
+fi
