@@ -11,7 +11,9 @@
 //
 // ARKA_OOBE_PREVIEW=<page> opens it windowed at a page for design review
 // (hello, look, name, password, signin, privacy, working, bye) and never
-// creates an account or reboots. ARKA_OOBE_THEME=dark previews the dark look.
+// creates an account or reboots. Setup opens in the dark look so the first
+// screens are not a full-brightness white panel in a dim room (reported on real
+// hardware); ARKA_OOBE_THEME=light previews the light look.
 // ARKA_OOBE_SHOT=<file.png> (preview only) renders the window to a PNG and
 // quits.
 
@@ -369,7 +371,9 @@ fn draw_mock(cr: &cairo::Context, w: f64, h: f64, dark: bool) {
 
 fn build_ui(app: &adw::Application) {
     let preview = std::env::var("ARKA_OOBE_PREVIEW").ok();
-    let dark = Rc::new(Cell::new(preview.is_some() && std::env::var("ARKA_OOBE_THEME").as_deref() == Ok("dark")));
+    // Open dark: the first screens ("hello world", the look choice) come before
+    // anyone can pick a look, so they must not glare. Choosing Light is one tap.
+    let dark = Rc::new(Cell::new(std::env::var("ARKA_OOBE_THEME").as_deref() != Ok("light")));
 
     let provider = gtk4::CssProvider::new();
     gtk4::style_context_add_provider_for_display(
@@ -517,11 +521,29 @@ fn build_ui(app: &adw::Application) {
     for (t, d) in [(&light_tile, false), (&dark_tile, true)] {
         let set_look = set_look.clone();
         t.connect_toggled(move |b| if b.is_active() { set_look(d) });
-        // Keyboard: moving focus onto a look picks it, like a radio group, so
-        // arrow + Enter chooses what is highlighted.
-        t.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
     }
     let look_body = gtk4::Box::new(gtk4::Orientation::Horizontal, 20);
+    // Keyboard: the arrow keys pick a look, like a radio group, so arrow + Enter
+    // chooses what is highlighted. Selection follows the arrow keys only, not
+    // focus: when the page first appears GTK puts focus on the first tile
+    // (Light), and selecting on focus flipped the whole setup to Light, which
+    // undid opening in Dark.
+    {
+        let keys = gtk4::EventControllerKey::new();
+        let (l, d) = (light_tile.clone(), dark_tile.clone());
+        keys.connect_key_pressed(move |_, key, _, _| {
+            use gtk4::gdk::Key;
+            let tile = match key {
+                Key::Left | Key::Up => &l,
+                Key::Right | Key::Down => &d,
+                _ => return glib::Propagation::Proceed,
+            };
+            tile.grab_focus();
+            tile.set_active(true);
+            glib::Propagation::Stop
+        });
+        look_body.add_controller(keys);
+    }
     {
         let bp = adw::Breakpoint::new(adw::BreakpointCondition::parse("max-width: 720sp").expect("breakpoint"));
         bp.add_setter(&look_body, "orientation", Some(&gtk4::Orientation::Vertical.to_value()));
