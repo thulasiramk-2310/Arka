@@ -152,7 +152,9 @@ fn css(dark: bool) -> String {
     let (bg, fg, muted, faint, line, hover, pfg, phover, off) = if dark {
         ("#101114", "#f1f1f1", "#a6a6a6", "#8c8c8c", "#3b3e45", "#1c1e22", "#101114", "#d6d6d6", "#3b3e45")
     } else {
-        ("#ffffff", "#111111", "#5c5c5c", "#737373", "#d4d4d4", "#f2f2f2", "#ffffff", "#2b2b2b", "#d9d9d9")
+        // A soft paper white instead of #ffffff: pure white at full brightness was
+        // painful on real hardware. Text keeps at least 4.5:1 contrast.
+        ("#f3f2ee", "#111111", "#5c5c5c", "#6b6b6b", "#d0cfca", "#e8e7e3", "#f3f2ee", "#2b2b2b", "#d6d5d0")
     };
     format!(
         "
