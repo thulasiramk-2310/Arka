@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::{enforcers::AsyncEnforcer, score, state::SharedState};
@@ -6,6 +8,15 @@ async fn observe(e: &dyn AsyncEnforcer, state: &SharedState) {
     if tokio::time::timeout(Duration::from_secs(15), e.update_state(state)).await.is_err() {
         state.write().await.invalidate(e.name());
     }
+}
+
+/// Controls that logged a drift and have not been confirmed since. Lets the
+/// log say "confirmed again" even when the setting came back without arkad
+/// applying it (for example firewalld restarted by hand), so the event list
+/// never shows a drift as unresolved after it is fixed.
+fn drifted() -> &'static Mutex<HashSet<&'static str>> {
+    static SET: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+    SET.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 /// Called under one shared mutex by the periodic loop and the D-Bus method.
@@ -18,6 +29,9 @@ pub async fn reconcile(enforcers: &[Box<dyn AsyncEnforcer>], state: &SharedState
         let healthy = state.read().await.control_healthy(e.name());
         if was_healthy && !healthy {
             crate::log::log_event(e.name(), "drift", "Setting could not be confirmed; trying again");
+            drifted().lock().unwrap().insert(e.name());
+        } else if healthy && drifted().lock().unwrap().remove(e.name()) {
+            crate::log::log_event(e.name(), "recovered", "Setting confirmed again");
         }
         if force || !healthy {
             let applied = tokio::time::timeout(Duration::from_secs(15), e.enforce()).await;
@@ -30,6 +44,7 @@ pub async fn reconcile(enforcers: &[Box<dyn AsyncEnforcer>], state: &SharedState
             if !apply_ok || !verified {
                 failed.push(e.name().to_owned());
             } else if !healthy {
+                drifted().lock().unwrap().remove(e.name());
                 crate::log::log_event(e.name(), "recovered", "Setting confirmed after applying it again");
             }
         }
@@ -70,6 +85,38 @@ mod tests {
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
         assert!(!s.read().await.hostname_privacy);
         assert!(s.read().await.last_check > 0);
+    }
+}
+
+#[cfg(test)]
+mod drift_tracking_tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use crate::{error::ArkadError, state::ArkadState};
+
+    // Healthy or not according to a switch; enforce always fails, so only an
+    // outside change can bring it back (like firewalld restarted by hand).
+    struct Switch(Arc<AtomicBool>);
+    #[async_trait::async_trait]
+    impl AsyncEnforcer for Switch {
+        fn name(&self) -> &'static str { "ipv6" }
+        async fn enforce(&self) -> Result<(), ArkadError> { Err(ArkadError::Enforce("no".into())) }
+        async fn update_state(&self, s: &SharedState) { s.write().await.ipv6_privacy = self.0.load(Ordering::SeqCst); }
+    }
+
+    #[tokio::test]
+    async fn a_drift_fixed_from_outside_is_tracked_until_confirmed() {
+        let on = Arc::new(AtomicBool::new(true));
+        let es: Vec<Box<dyn AsyncEnforcer>> = vec![Box::new(Switch(on.clone()))];
+        let s = Arc::new(tokio::sync::RwLock::new(ArkadState::default()));
+        assert!(reconcile(&es, &s, false).await.is_empty());
+        on.store(false, Ordering::SeqCst);
+        assert_eq!(reconcile(&es, &s, false).await, ["ipv6"]);
+        assert!(drifted().lock().unwrap().contains("ipv6"), "drift remembered");
+        on.store(true, Ordering::SeqCst);
+        assert!(reconcile(&es, &s, false).await.is_empty());
+        assert!(!drifted().lock().unwrap().contains("ipv6"), "confirmed again, forgotten");
     }
 }
 
