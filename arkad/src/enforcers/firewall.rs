@@ -22,9 +22,9 @@ impl AsyncEnforcer for FirewallEnforcer {
         if crate::command::run("systemctl", &["is-active", "--quiet", "firewalld"]).await.is_err() {
             crate::command::run("systemctl", &["start", "firewalld"]).await?;
         }
-        let out = crate::command::run("firewall-cmd", &["--get-default-zone"]).await?;
+        let out = crate::command::run_patient("firewall-cmd", &["--get-default-zone"]).await?;
         if String::from_utf8_lossy(&out.stdout).trim() != ZONE {
-            crate::command::run("firewall-cmd", &["--set-default-zone", ZONE]).await?;
+            crate::command::run_patient("firewall-cmd", &["--set-default-zone", ZONE]).await?;
         }
         // Interfaces the user moved to another zone are left alone; they show
         // up as "Needs attention" instead of being silently changed back.
@@ -35,12 +35,12 @@ impl AsyncEnforcer for FirewallEnforcer {
         // Check runtime rules, not just the zone's name: firewall-config and
         // other applications can add exceptions without changing that name.
         let (zones, rules, direct, passthroughs, policies, dhcp) = tokio::join!(
-            crate::command::run("firewall-cmd", &["--get-active-zones"]),
-            crate::command::run("firewall-cmd", &["--zone=arkaos", "--list-all"]),
-            crate::command::run("firewall-cmd", &["--direct", "--get-all-rules"]),
-            crate::command::run("firewall-cmd", &["--direct", "--get-all-passthroughs"]),
-            crate::command::run("firewall-cmd", &["--list-all-policies"]),
-            crate::command::run("firewall-cmd", &["--info-service=dhcpv6-client"]),
+            crate::command::run_patient("firewall-cmd", &["--get-active-zones"]),
+            crate::command::run_patient("firewall-cmd", &["--zone=arkaos", "--list-all"]),
+            crate::command::run_patient("firewall-cmd", &["--direct", "--get-all-rules"]),
+            crate::command::run_patient("firewall-cmd", &["--direct", "--get-all-passthroughs"]),
+            crate::command::run_patient("firewall-cmd", &["--list-all-policies"]),
+            crate::command::run_patient("firewall-cmd", &["--info-service=dhcpv6-client"]),
         );
         let on = match (zones, rules, direct, passthroughs, policies, dhcp) {
             (Ok(z), Ok(r), Ok(d), Ok(t), Ok(p), Ok(h)) =>

@@ -69,8 +69,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Fixed, bounded retry cadence avoids spinning on small machines. Each
     // control is checked independently; healthy controls are not reapplied.
     let interval = Duration::from_secs(cfg.check_interval_secs.clamp(10, 60));
+    // Right after boot a slow control (firewalld on a USB stick) can miss its
+    // first check. Re-check quickly a few times so a transient miss clears in
+    // seconds, not after a full interval. Healthy controls are not reapplied.
+    let mut quick_rechecks = if failed.is_empty() { 0 } else { 4 };
     loop {
-        tokio::time::sleep(interval).await;
+        if quick_rechecks > 0 {
+            quick_rechecks -= 1;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        } else {
+            tokio::time::sleep(interval).await;
+        }
         let _guard = enforcement_lock.lock().await;
         reconcile::reconcile(&enforcers, &shared, false).await;
         let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Watchdog]);
