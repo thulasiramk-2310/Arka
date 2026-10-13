@@ -2,11 +2,18 @@
 Name=Arka
 Comment=ArkaOS app icons — one family, a distinct colour per app
 Inherits=breeze-dark
-Directories=scalable/apps
+Directories=scalable/apps,scalable/actions
 
 [scalable/apps]
 Context=Applications
 Size=48
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/actions]
+Context=Actions
+Size=24
 MinSize=8
 MaxSize=512
 Type=Scalable
