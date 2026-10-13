@@ -412,6 +412,11 @@ COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
 RUN chmod 755 /usr/libexec/arkaos-oobe-apply /usr/libexec/arka-plasma-firstrun
 
+# Touchpads scroll the content with the fingers ("natural" scrolling), as on
+# macOS, Windows and GNOME; KDE's own default is the opposite. KWin reads this
+# default at login for every touchpad; System Settings can still turn it off.
+RUN printf '[Libinput][Defaults][Touchpad]\nNaturalScroll=true\n' > /etc/xdg/kcminputrc
+
 # ArkaOS global themes ("look-and-feel"), built from Breeze's. Plasma reads a
 # new desktop's wallpaper and panel layout from the global theme, so these
 # make the very first frame ArkaOS: colours, Plasma style, icons, cursor,
