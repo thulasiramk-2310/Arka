@@ -202,14 +202,20 @@ pub struct Notifier {
     pub min_gap_secs: u64,
     last_fire: Option<u64>,
     last_seen_ts: u64,
-    /// remembers the previous "something is down" state so critical fires on
-    /// the transition into down, not every tick.
-    was_down: bool,
+    /// When the current "something is down" episode started, if one is open.
+    /// Critical fires once per episode, and only after it has lasted
+    /// DOWN_CONFIRM_SECS: a setting that heals by the next check (a slow
+    /// firewalld right after boot) is not worth an alarm.
+    down_since: Option<u64>,
+    fired_this_episode: bool,
 }
+
+/// Two tray polls apart (POLL_SECS is 30), with a little slack.
+pub const DOWN_CONFIRM_SECS: u64 = 25;
 
 impl Notifier {
     pub fn new(min_gap_secs: u64, start_ts: u64) -> Self {
-        Self { min_gap_secs, last_fire: None, last_seen_ts: start_ts, was_down: false }
+        Self { min_gap_secs, last_fire: None, last_seen_ts: start_ts, down_since: None, fired_this_episode: false }
     }
 
     fn rate_ok(&self, now: u64) -> bool {
@@ -223,11 +229,18 @@ impl Notifier {
     /// state; `now` is the current unix time. Returns a notification to raise,
     /// or None. Mutates internal bookkeeping either way.
     pub fn evaluate(&mut self, events: &[Event], enf: &Enforcement, now: u64) -> Option<Notification> {
-        // Critical: a protection is currently down. Fire only on the transition
-        // into "down" (edge), and respect the rate limit.
+        // Critical: a protection is down and has stayed down across two checks.
+        // Fire once per episode and respect the rate limit.
         let down = enf.down();
         let is_down = !down.is_empty();
-        let critical = if is_down && !self.was_down && self.rate_ok(now) {
+        if !is_down {
+            self.down_since = None;
+            self.fired_this_episode = false;
+        } else if self.down_since.is_none() {
+            self.down_since = Some(now);
+        }
+        let lasted = self.down_since.is_some_and(|s| now.saturating_sub(s) >= DOWN_CONFIRM_SECS);
+        let critical = if is_down && lasted && !self.fired_this_episode && self.rate_ok(now) {
             Some(Notification {
                 summary: "A privacy setting isn't in place".to_string(),
                 body: format!("Not in place: {}. arkad will try to apply it again.", down.join(", ")),
@@ -236,17 +249,30 @@ impl Notifier {
         } else {
             None
         };
-        self.was_down = is_down;
         if let Some(n) = critical {
+            self.fired_this_episode = true;
             self.last_fire = Some(now);
             // still advance last_seen so drift events up to now aren't re-counted
             self.advance_seen(events);
             return Some(n);
         }
 
-        // Warn: new drift events since we last looked.
-        let fresh: Vec<&Event> = events.iter().filter(|e| e.is_drift() && e.ts > self.last_seen_ts).collect();
-        self.advance_seen(events);
+        // Warn: new drift events since we last looked, once they are
+        // DOWN_CONFIRM_SECS old and still not fixed. arkad often repairs a
+        // drift within the same second (an interface coming back after
+        // sleep); a popup for something already fixed is only noise. The
+        // tray icon still shows "fixed recently" either way.
+        let settled = now.saturating_sub(DOWN_CONFIRM_SECS);
+        let fresh: Vec<&Event> = events.iter()
+            .filter(|e| e.is_drift() && e.ts > self.last_seen_ts && e.ts <= settled)
+            .filter(|d| !events.iter().any(|r| r.ev == "recovered" && r.cat == d.cat && r.ts >= d.ts))
+            .collect();
+        // Events newer than `settled` stay unseen until they can be judged.
+        if let Some(max) = events.iter().map(|e| e.ts).filter(|ts| *ts <= settled).max() {
+            if max > self.last_seen_ts {
+                self.last_seen_ts = max;
+            }
+        }
         if fresh.is_empty() || !self.rate_ok(now) {
             return None;
         }
@@ -320,7 +346,9 @@ mod tests {
     fn alerts_never_promise_protection() {
         let mut e = enf_all_on();
         e.mac = false;
-        let n = Notifier::new(60, 0).evaluate(&[], &e, 1000).unwrap();
+        let mut notifier = Notifier::new(60, 0);
+        assert!(notifier.evaluate(&[], &e, 1000).is_none(), "not on the first check");
+        let n = notifier.evaluate(&[], &e, 1030).unwrap();
         let text = format!("{} {}", n.summary, n.body).to_lowercase();
         assert!(!text.contains("protect"), "{text}");
         for l in [Level::Ok, Level::Warn, Level::Critical] {
@@ -423,17 +451,37 @@ mod tests {
         let mut n = Notifier::new(60, 0);
         let e = enf_all_on();
         let evs = vec![Event { ts: 100, cat: "system".into(), ev: "drift".into(), msg: "drifted".into() }];
-        let first = n.evaluate(&evs, &e, 100);
+        assert_eq!(n.evaluate(&evs, &e, 100), None, "too fresh to judge");
+        let first = n.evaluate(&evs, &e, 130);
         assert!(first.is_some());
         assert!(!first.unwrap().critical);
         // same event again → already seen, no re-fire
-        assert_eq!(n.evaluate(&evs, &e, 101), None);
+        assert_eq!(n.evaluate(&evs, &e, 131), None);
         // a second drift arrives but within the rate-limit window → suppressed
         let evs2 = vec![
             Event { ts: 100, cat: "system".into(), ev: "drift".into(), msg: "drifted".into() },
-            Event { ts: 130, cat: "system".into(), ev: "drift".into(), msg: "again".into() },
+            Event { ts: 140, cat: "system".into(), ev: "drift".into(), msg: "again".into() },
         ];
-        assert_eq!(n.evaluate(&evs2, &e, 130), None); // 130-100 < 60
+        assert_eq!(n.evaluate(&evs2, &e, 170), None); // 170-130 < 60
+    }
+
+    #[test]
+    fn a_drift_fixed_at_once_never_pops_up() {
+        // The Nokia case after sleep: ipv6 drift and recovery in the same second.
+        let mut n = Notifier::new(60, 0);
+        let e = enf_all_on();
+        let evs = vec![
+            Event { ts: 100, cat: "ipv6".into(), ev: "drift".into(), msg: "could not be confirmed".into() },
+            Event { ts: 100, cat: "ipv6".into(), ev: "recovered".into(), msg: "confirmed again".into() },
+        ];
+        for t in [100, 130, 160, 400] {
+            assert_eq!(n.evaluate(&evs, &e, t), None, "t={t}");
+        }
+        // A drift in another setting that stays unfixed still warns.
+        let mut evs2 = evs.clone();
+        evs2.push(Event { ts: 500, cat: "dns".into(), ev: "drift".into(), msg: "dns drifted".into() });
+        assert_eq!(n.evaluate(&evs2, &e, 510), None);
+        assert_eq!(n.evaluate(&evs2, &e, 530).unwrap().body, "dns drifted");
     }
 
     #[test]
@@ -443,10 +491,24 @@ mod tests {
         e.dns_ok = false;
         e.dns_detail = "Unknown".into();
         let evs: Vec<Event> = vec![];
-        let first = n.evaluate(&evs, &e, 500);
-        assert!(first.as_ref().unwrap().critical);
-        assert!(first.unwrap().body.contains("DNS"));
-        // still down next tick → no repeat (edge-triggered)
-        assert_eq!(n.evaluate(&evs, &e, 501), None);
+        assert_eq!(n.evaluate(&evs, &e, 500), None, "first check: wait for the next one");
+        let second = n.evaluate(&evs, &e, 530);
+        assert!(second.as_ref().unwrap().critical);
+        assert!(second.unwrap().body.contains("DNS"));
+        // still down next tick → no repeat (once per episode)
+        assert_eq!(n.evaluate(&evs, &e, 560), None);
+    }
+
+    #[test]
+    fn a_setting_that_heals_by_the_next_check_never_alarms() {
+        // The Nokia case: firewalld slow right after boot, fine 30 s later.
+        let mut n = Notifier::new(60, 0);
+        let mut down = enf_all_on();
+        down.firewall = false;
+        assert_eq!(n.evaluate(&[], &down, 100), None);
+        assert_eq!(n.evaluate(&[], &enf_all_on(), 130), None);
+        // A later, lasting failure still alarms.
+        assert_eq!(n.evaluate(&[], &down, 700), None);
+        assert!(n.evaluate(&[], &down, 730).unwrap().body.contains("Firewall"));
     }
 }
