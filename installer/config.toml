@@ -18,6 +18,8 @@
 #
 # %post: bootc mounts / as a read-only composefs overlay, which cannot be
 # reconfigured; a "/" line in fstab only makes systemd-remount-fs fail.
+# The installed system then takes its updates from the signed public image
+# instead of the ISO's embedded copy.
 #
 # No account is created here: the Users module is turned off and ArkaOS setup
 # (arka-oobe) creates the account on first boot, as on the disk images.
@@ -30,6 +32,7 @@ autopart --type=plain --fstype=xfs --nohome --encrypted
 
 %post
 awk '$1 ~ /^#/ || $2 != "/"' /etc/fstab > /etc/fstab.arkaos && mv /etc/fstab.arkaos /etc/fstab
+bootc switch --mutate-in-place --transport registry ghcr.io/thulasiramk-2310/arka:latest
 %end
 """
 
