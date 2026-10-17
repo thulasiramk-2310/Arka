@@ -1,0 +1,5 @@
+# Where to find the signatures of ArkaOS images: cosign stores them in the
+# registry next to the image ("sigstore attachments").
+docker:
+  ghcr.io/thulasiramk-2310/arka:
+    use-sigstore-attachments: true

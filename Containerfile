@@ -412,6 +412,16 @@ COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
 COPY arka-dock/org.arkaos.dock /usr/share/plasma/plasmoids/org.arkaos.dock
 
+# Updates come from ghcr.io/thulasiramk-2310/arka, built and signed by the
+# Image workflow. Only images signed with the ArkaOS key are accepted from
+# there; a pull of an unsigned or differently signed image fails before
+# anything is installed. Other registries keep Fedora's default policy.
+COPY cosign.pub /etc/pki/containers/arka.pub
+COPY containers/arka.yaml /etc/containers/registries.d/arka.yaml
+RUN python3 -c 'import json; p="/etc/containers/policy.json"; c=json.load(open(p)); \
+c.setdefault("transports", {}).setdefault("docker", {})["ghcr.io/thulasiramk-2310/arka"] = \
+[{"type": "sigstoreSigned", "keyPath": "/etc/pki/containers/arka.pub", "signedIdentity": {"type": "matchRepository"}}]; \
+json.dump(c, open(p, "w"), indent=4)'
 RUN chmod 755 /usr/libexec/arkaos-oobe-apply /usr/libexec/arka-plasma-firstrun
 
 # Touchpads scroll the content with the fingers ("natural" scrolling), as on
