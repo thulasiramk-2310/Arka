@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "ArkaOS" }],
+        "Description": "A dock: pinned and open apps, icons that grow under the pointer",
+        "Icon": "preferences-desktop-icons",
+        "Id": "org.arkaos.dock",
+        "License": "GPL-3.0-or-later",
+        "Name": "ArkaOS Dock",
+        "Version": "0.1"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

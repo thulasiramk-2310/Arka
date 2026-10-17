@@ -410,6 +410,8 @@ RUN for look in Dark Light; do \
 COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
+COPY arka-dock/org.arkaos.dock /usr/share/plasma/plasmoids/org.arkaos.dock
+
 RUN chmod 755 /usr/libexec/arkaos-oobe-apply /usr/libexec/arka-plasma-firstrun
 
 # Touchpads scroll the content with the fingers ("natural" scrolling), as on
@@ -517,8 +519,8 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
 # (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
-# arka-launcher are not shipped: Plasma's panel, icontasks dock and kickerdash
-# replace them (see legacy/).
+# arka-launcher are not shipped: Plasma's panel, the ArkaOS Dock widget and
+# kickerdash replace them (see legacy/).
 COPY --from=bins / /
 RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \
