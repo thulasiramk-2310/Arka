@@ -1,0 +1,95 @@
+name: Image
+
+# Builds the ArkaOS bootc image, splits it into many small layers so an update
+# downloads only what changed, signs it, and publishes it to
+# ghcr.io/thulasiramk-2310/arka. Installed systems only accept images signed
+# with the key whose public half is cosign.pub (see containers/).
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "website/**"
+      - "**.md"
+  schedule:
+    - cron: "17 3 * * 1"   # weekly, to pick up Fedora security updates
+  workflow_dispatch:
+
+concurrency:
+  group: image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/thulasiramk-2310/arka
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Refuse to publish without the signing key
+        env:
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          if [ -z "$SIGNING_SECRET" ]; then
+            echo "::error::SIGNING_SECRET is not set; an unsigned image would be rejected by ArkaOS"
+            exit 1
+          fi
+
+      - name: Make room (the image is about 12 GB, built twice)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/containers /var/lib/containers
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          sudo podman build --pull=newer \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            -t localhost/arka:build .
+
+      - name: Split into small layers
+        run: |
+          sudo podman run --rm --privileged --security-opt label=disable \
+            -v /var/lib/containers:/var/lib/containers \
+            quay.io/fedora/fedora-bootc:44 \
+            rpm-ostree compose build-chunked-oci --bootc --format-version=1 \
+              --from=localhost/arka:build \
+              --output=containers-storage:localhost/arka:chunked
+          sudo podman rmi localhost/arka:build
+          sudo podman image inspect localhost/arka:chunked --format '{{len .RootFS.Layers}} layers'
+
+      - name: Push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ver=44.$(date -u +%Y%m%d)
+          sudo podman push --digestfile digest localhost/arka:chunked "docker://$IMAGE:latest"
+          sudo podman push localhost/arka:chunked "docker://$IMAGE:$ver"
+          sudo podman push localhost/arka:chunked "docker://$IMAGE:sha-${GITHUB_SHA::7}"
+          echo "DIGEST=$(sudo cat digest)" >> "$GITHUB_ENV"
+
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Sign and verify
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "$TOKEN"
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
+          cosign verify --key cosign.pub "$IMAGE@$DIGEST" > /dev/null
+          echo "Published and signed: $IMAGE@$DIGEST"
