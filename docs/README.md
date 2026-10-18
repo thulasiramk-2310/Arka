@@ -22,7 +22,6 @@ exactly one job. Nothing slowly becomes "the roadmap."
 | [`FUTURE-CONSIDERATIONS.md`](FUTURE-CONSIDERATIONS.md) | **Ideas** — candidate work, committed to nothing |
 | [`RELIABILITY-ARKA-PULSE.md`](RELIABILITY-ARKA-PULSE.md) | **A candidate reliability layer** — arka-pulse, committed to nothing |
 | [`../arka-design-system/README.md`](../arka-design-system/README.md) | **The design system** — tokens, motion, components |
-| [`../legacy/README.md`](../legacy/README.md) | **The archive** — the retired Hyprland-era shell |
 
 Deep-dive findings from earlier phases live at the repo root:
 [`../PHASE3-FINDINGS.md`](../PHASE3-FINDINGS.md) (integrity & boot hardening),

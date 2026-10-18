@@ -19,7 +19,6 @@ sway-foot*
 arkad/target/
 arka-pulse/target/
 arka-shell/target/
-legacy/target/
 
 # secrets — never commit
 tokens

@@ -40,7 +40,7 @@ server, OSD, task models and accessibility.
 
 ## Option B: Rust/GTK layer-shell programs instead of plasmashell
 
-Revive `legacy/arka-bar`, `arka-dock` and `arka-launcher` (about 1,400 lines,
+Revive (from git history, up to 0d707ca) `legacy/arka-bar`, `arka-dock` and `arka-launcher` (about 1,400 lines,
 gtk4-layer-shell). KWin supports the layer-shell protocol, so the surfaces
 work. The rest has to be rebuilt:
 

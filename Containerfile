@@ -530,7 +530,7 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
 # a changed layer rebuilds. Units and configs that reference them are installed
 # (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
 # arka-launcher are not shipped: Plasma's panel, the ArkaOS Dock widget and
-# kickerdash replace them (see legacy/).
+# kickerdash replace them (the old ones are in git history, before 0d707ca).
 COPY --from=bins / /
 RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \

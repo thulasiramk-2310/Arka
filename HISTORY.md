@@ -33,7 +33,7 @@ Not because the prototype failed, but because Plasma better served the actual
 goal — a *usable* desktop OS — providing the panel, launcher, settings, file
 manager, and window management so the project could focus on what makes ArkaOS
 *ArkaOS*. Choosing to pivot rather than defend an earlier technical choice is
-what kept the project healthy. (The Hyprland shell now lives in `legacy/`.)
+what kept the project healthy. (The Hyprland shell was removed from the tree in October 2026; it is in the git history up to 0d707ca.)
 
 **The identity.** With Plasma as the base came the Arka Design System v1.0
 (tokens, typography, motion, components, a privacy color mapping), a full brand

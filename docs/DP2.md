@@ -50,7 +50,7 @@ correctness.)
 
 ## Remaining Hyprland-era debt to clear
 
-- **Vestigial shell crates — DONE (moved to `legacy/`).** `arka-bar`,
+- **Vestigial shell crates — DONE (moved to `legacy/`, later removed; in git history up to 0d707ca).** `arka-bar`,
   `arka-dock`, `arka-launcher` were the custom Hyprland shell; under Plasma they
   are replaced by the panel, icontasks dock, and kickerdash launcher (see
   `arka-layout.js`) and were never autostarted. Confirmed no desktop-file,
