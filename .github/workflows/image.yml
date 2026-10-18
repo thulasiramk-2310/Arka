@@ -11,6 +11,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "website/**"
+      - "assets/**"
       - "**.md"
   schedule:
     - cron: "17 3 * * 1"   # weekly, to pick up Fedora security updates
