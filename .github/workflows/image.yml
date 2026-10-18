@@ -7,7 +7,8 @@ name: Image
 
 on:
   push:
-    branches: [master]
+    # test/* branches are built and checked but never published.
+    branches: [master, "test/**"]
     paths-ignore:
       - "docs/**"
       - "website/**"
@@ -18,7 +19,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: image
+  group: image-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -34,6 +35,7 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: Refuse to publish without the signing key
+        if: github.ref == 'refs/heads/master'
         env:
           SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
         run: |
@@ -70,6 +72,7 @@ jobs:
           sudo podman image inspect localhost/arka:chunked --format '{{len .RootFS.Layers}} layers'
 
       - name: Push
+        if: github.ref == 'refs/heads/master'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -81,10 +84,12 @@ jobs:
           echo "DIGEST=$(sudo cat digest)" >> "$GITHUB_ENV"
 
       - uses: sigstore/cosign-installer@v3
+        if: github.ref == 'refs/heads/master'
         with:
           cosign-release: v2.4.1
 
       - name: Sign and verify
+        if: github.ref == 'refs/heads/master'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_PASSWORD: ""
