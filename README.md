@@ -146,12 +146,17 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   booted. A later update downloaded 5 of the 65 layers (863 MB instead of
   5.3 GB). New installs from the installer take their updates from there. Not yet
   on real hardware.
-- 🧭 **ArkaOS Dock.** The icons-only taskbar is replaced by a dock: pinned and
-  open apps, icons that grow under the pointer, a dot under running apps, and a
-  bounce while an app starts. It is always visible; right-click and choose
-  *Hide dock automatically* to have it slide away until the pointer touches the
-  bottom edge. Tested on a fresh install in a VM (2026-10-17). Icons only grow
-  within the height of the panel, so they are smaller at rest than on a Mac.
+- 🧭 **ArkaOS Dock.** A macOS-style dock replaces the taskbar: pinned and open
+  apps, icons that grow above the dock under the pointer, a small label with the
+  app's name, a dot under running apps, a divider before Trash, and a bounce
+  while an app starts. Behind it the desktop is blurred, on computers whose
+  graphics run KDE's blur effect (not in a VM without 3D). It gets out of the
+  way only when a window covers it and comes back at the bottom edge; right-click
+  it to keep it always visible or to change apps and sizes. It is
+  [Crystal Dock](https://github.com/dangvd/crystal-dock) with an ArkaOS patch
+  (see `crystal-dock/`). Tested in a VM (2026-10-18), not yet on real hardware.
+  Full-screen apps hide it, and it does not come back at the edge until you
+  leave full screen.
 - 🖐️ **Natural touchpad scrolling by default**, as on macOS, Windows and GNOME
   (content follows the fingers). It can be turned off in System Settings. Tested
   in a VM with a virtual touchpad; not yet on a real one.
