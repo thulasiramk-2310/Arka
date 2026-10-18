@@ -53,13 +53,24 @@ kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper f
 
 kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image \
     --group General --key Image "file://$WALL"
-[ -f "$DESK_WALL" ] && plasma-apply-wallpaperimage "$DESK_WALL" >/dev/null 2>&1
 
 # The panel keeps the old Plasma style's icon colours until it restarts (seen
 # in the VM: tray icons stayed light-on-light). Restart it once (about 2 s),
-# and only if the style or icons really changed.
+# and only if the style or icons really changed. Restart BEFORE setting the
+# wallpaper: stopping Plasma while it is still scaling a new wallpaper crashed
+# it (SIGSEGV in the wallpaper loader thread, VM 2026-10-18).
 after="$(kreadconfig6 --file plasmarc --group Theme --key name 2>/dev/null)|$(kreadconfig6 --file kdeglobals --group Icons --key Theme 2>/dev/null)"
 if [ "$before" != "$after" ]; then
+    # Plasma's unit allows 3 starts a minute; a 4th look switch within a
+    # minute left the desktop without Plasma (VM 2026-10-18). Clear the count.
+    systemctl --user reset-failed plasma-plasmashell.service >/dev/null 2>&1 || true
     systemctl --user restart plasma-plasmashell.service >/dev/null 2>&1 || true
+    # Wait (up to 20 s) until the new Plasma is on the session bus again.
+    for _ in $(seq 1 40); do
+        dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+            org.freedesktop.DBus.NameHasOwner string:org.kde.plasmashell 2>/dev/null | grep -q "boolean true" && break
+        sleep 0.5
+    done
 fi
+[ -f "$DESK_WALL" ] && plasma-apply-wallpaperimage "$DESK_WALL" >/dev/null 2>&1
 exit 0
