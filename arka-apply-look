@@ -47,6 +47,28 @@ else
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop
 fi
 
+# The dock (Crystal Dock) has its own colour settings: match the look, and
+# restart it if it is running so it picks them up.
+if [ "$LOOK" = light ]; then
+    dock_bg='#99f6f7f9' dock_border='#33000000' dock_dot='#3c4148'
+else
+    dock_bg='#a61c2027' dock_border='#33ffffff' dock_dot='#e6e8eb'
+fi
+for DOCKCONF in "$HOME"/.config/crystal-dock/KDE/appearance.conf "$HOME"/.config/crystal-dock/generic/appearance.conf; do
+    [ -f "$DOCKCONF" ] || continue
+    kwriteconfig6 --file "$DOCKCONF" --group General --key backgroundColor2D "$dock_bg"
+    kwriteconfig6 --file "$DOCKCONF" --group General --key borderColor "$dock_border"
+    kwriteconfig6 --file "$DOCKCONF" --group General --key activeIndicatorColor2D "$dock_dot"
+    kwriteconfig6 --file "$DOCKCONF" --group General --key inactiveIndicatorColor2D "$dock_dot"
+    kwriteconfig6 --file "$DOCKCONF" --group General --key borderColor2D --delete
+done
+if [ -d "$HOME/.config/crystal-dock" ]; then
+    if pkill -u "$(id -u)" -x crystal-dock; then
+        sleep 0.5
+        setsid crystal-dock >/dev/null 2>&1 < /dev/null &
+    fi
+fi
+
 # The ArkaOS accent stays green in both looks (changeable in System Settings).
 kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
 kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
