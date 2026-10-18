@@ -92,7 +92,7 @@ PlasmoidItem {
         filterByActivity: true
         activity: activityInfo.currentActivity
         filterByScreen: false
-        filterHidden: true
+        filterHidden: false   // minimised windows stay in the dock, with their dot
         launcherList: Plasmoid.configuration.launchers
         onLauncherListChanged: Plasmoid.configuration.launchers = launcherList
         Component.onCompleted: countChanged()
