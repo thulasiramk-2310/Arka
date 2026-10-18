@@ -10,24 +10,23 @@
 
   <!-- track -->
   <line x1="140" y1="150" x2="1060" y2="150" stroke="#1e2630" stroke-width="3"/>
-  <line x1="140" y1="150" x2="300" y2="150" stroke="#16c784" stroke-width="3"/>
+  <line x1="140" y1="150" x2="470" y2="150" stroke="#16c784" stroke-width="3"/>
 
-  <!-- DP1 (current) -->
-  <circle cx="140" cy="150" r="16" fill="#07080e" stroke="#16c784" stroke-width="3" filter="url(#g)"/>
-  <circle cx="140" cy="150" r="7" fill="#16c784">
+  <!-- DP1 (done) -->
+  <circle cx="140" cy="150" r="13" fill="#16c784" stroke="#16c784" stroke-width="2.5"/>
+  <path d="M133 150 l5 5 9 -11" stroke="#07080e" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="140" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#16c784">DP1</text>
+  <text x="140" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">qcow2 · QEMU</text>
+
+  <!-- DP2 (current) -->
+  <circle cx="370" cy="150" r="16" fill="#07080e" stroke="#16c784" stroke-width="3" filter="url(#g)"/>
+  <circle cx="370" cy="150" r="7" fill="#16c784">
     <animate attributeName="r" values="7;9;7" dur="2s" repeatCount="indefinite"/>
   </circle>
-  <text x="140" y="200" text-anchor="middle" font-size="15" font-weight="700" fill="#16c784">DP1</text>
-  <text x="140" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">qcow2 · QEMU</text>
-  <text x="140" y="240" text-anchor="middle" font-size="11" fill="#16c784">← you are here</text>
-
-  <!-- DP2 (in progress) -->
-  <circle cx="370" cy="150" r="14" fill="#07080e" stroke="#16c784" stroke-width="3"/>
-  <circle cx="370" cy="150" r="5" fill="#16c784" opacity="0.7"/>
-  <text x="370" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#16c784">DP2</text>
-  <text x="370" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">real hardware · raw + live ISO</text>
-  <text x="370" y="240" text-anchor="middle" font-size="11" fill="#5b6675">thin Arka installer</text>
-  <text x="370" y="260" text-anchor="middle" font-size="11" fill="#16c784">✓ first bare-metal boot · raw</text>
+  <text x="370" y="200" text-anchor="middle" font-size="15" font-weight="700" fill="#16c784">DP2</text>
+  <text x="370" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">real hardware · installer · signed updates</text>
+  <text x="370" y="240" text-anchor="middle" font-size="11" fill="#16c784">← you are here</text>
+  <text x="370" y="260" text-anchor="middle" font-size="11" fill="#5b6675">so far: one laptop · installer tested in a VM</text>
 
   <!-- Beta -->
   <circle cx="600" cy="150" r="13" fill="#07080e" stroke="#1e2630" stroke-width="2.5"/>
@@ -48,7 +47,7 @@
 
   <!-- traveling pulse -->
   <circle r="4" fill="#16c784" filter="url(#g)">
-    <animateMotion path="M140 150 H300" dur="2.2s" repeatCount="indefinite"/>
+    <animateMotion path="M370 150 H470" dur="2.2s" repeatCount="indefinite"/>
     <animate attributeName="opacity" values="0;1;0" dur="2.2s" repeatCount="indefinite"/>
   </circle>
 </svg>

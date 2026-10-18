@@ -51,7 +51,7 @@
 
   <!-- denied path -->
   <path d="M430 240 C430 300 300 300 250 300" stroke="#ff4d4f" stroke-width="1.6" fill="none" opacity="0.55" stroke-dasharray="5 5"/>
-  <text x="285" y="325" font-size="11.5" fill="#ff4d4f" opacity="0.85">denied → app never knows the difference</text>
+  <text x="285" y="325" font-size="11.5" fill="#ff4d4f" opacity="0.85">denied → the request is refused</text>
 
   <!-- meanwhile, below: arkad -->
   <g>
@@ -59,7 +59,7 @@
     <circle cx="370" cy="365" r="7" fill="#16c784">
       <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
     </circle>
-    <text x="392" y="360" font-size="13.5" font-weight="600" fill="#f5f7fa">arkad — always on, underneath everything</text>
-    <text x="392" y="382" font-size="11.5" fill="#9aa4b2">random MAC · encrypted DNS · generic hostname · IPv6 privacy · every event logged for you</text>
+    <text x="392" y="360" font-size="13.5" font-weight="600" fill="#f5f7fa">arkad — re-checks its settings every 60 s</text>
+    <text x="392" y="382" font-size="11.5" fill="#9aa4b2">random MAC · encrypted DNS · IPv6 privacy · firewall · local event log</text>
   </g>
 </svg>

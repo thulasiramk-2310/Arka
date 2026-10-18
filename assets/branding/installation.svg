@@ -12,8 +12,8 @@
   <g>
     <rect x="80" y="150" width="230" height="120" rx="14" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/>
     <text x="195" y="196" text-anchor="middle" font-size="17" font-weight="700" fill="#f5f7fa">Container Image</text>
-    <text x="195" y="220" text-anchor="middle" font-size="12" fill="#9aa4b2">Containerfile — the OS,</text>
-    <text x="195" y="238" text-anchor="middle" font-size="12" fill="#9aa4b2">every byte declared</text>
+    <text x="195" y="220" text-anchor="middle" font-size="12" fill="#9aa4b2">one Containerfile:</text>
+    <text x="195" y="238" text-anchor="middle" font-size="12" fill="#9aa4b2">the whole OS, declared</text>
   </g>
 
   <!-- builder node -->
@@ -27,15 +27,15 @@
   <g>
     <rect x="660" y="70" width="160" height="64" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/>
     <text x="740" y="98" text-anchor="middle" font-size="14" font-weight="600" fill="#f5f7fa">QCOW2</text>
-    <text x="740" y="118" text-anchor="middle" font-size="11" fill="#16c784">DP1 · shipping</text>
+    <text x="740" y="118" text-anchor="middle" font-size="11" fill="#16c784">VMs · testing</text>
 
-    <rect x="660" y="178" width="160" height="64" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <text x="740" y="206" text-anchor="middle" font-size="14" font-weight="600" fill="#9aa4b2">RAW</text>
-    <text x="740" y="226" text-anchor="middle" font-size="11" fill="#5b6675">DP2 · hardware</text>
+    <rect x="660" y="178" width="160" height="64" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/>
+    <text x="740" y="206" text-anchor="middle" font-size="14" font-weight="600" fill="#f5f7fa">RAW</text>
+    <text x="740" y="226" text-anchor="middle" font-size="11" fill="#16c784">USB stick · hardware</text>
 
-    <rect x="660" y="286" width="160" height="64" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <text x="740" y="314" text-anchor="middle" font-size="14" font-weight="600" fill="#9aa4b2">Live ISO</text>
-    <text x="740" y="334" text-anchor="middle" font-size="11" fill="#5b6675">DP2 · installer</text>
+    <rect x="660" y="286" width="160" height="64" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/>
+    <text x="740" y="314" text-anchor="middle" font-size="14" font-weight="600" fill="#f5f7fa">Installer ISO</text>
+    <text x="740" y="334" text-anchor="middle" font-size="11" fill="#16c784">encrypted by default</text>
   </g>
 
   <!-- OOBE / desktop -->
@@ -70,5 +70,5 @@
       <animate attributeName="opacity" values="0;1;0" dur="1.4s" begin="0.9s" repeatCount="indefinite"/></circle>
   </g>
 
-  <text x="600" y="396" text-anchor="middle" font-size="12" fill="#5b6675">however the bits land on disk, the system that boots is byte-identical</text>
+  <text x="600" y="396" text-anchor="middle" font-size="12" fill="#5b6675">however it lands on disk, it boots the same image and updates from ghcr.io</text>
 </svg>

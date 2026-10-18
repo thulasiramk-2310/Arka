@@ -31,8 +31,8 @@
     <text x="915" y="151" font-size="10.5" font-weight="400" fill="#16c784">boot-loop · budgets</text>
 
     <rect x="1030" y="100" width="120" height="66" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <text x="1090" y="130">Release</text>
-    <text x="1090" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">tag · notes</text>
+    <text x="1090" y="130">Publish</text>
+    <text x="1090" y="151" font-size="10.5" font-weight="400" fill="#9aa4b2">signed · ghcr.io</text>
   </g>
 
   <!-- arrows -->

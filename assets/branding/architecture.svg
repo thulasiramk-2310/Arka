@@ -10,7 +10,7 @@
 
   <!-- Shell apps row -->
   <g font-size="12.5" font-weight="600" fill="#f5f7fa" text-anchor="middle">
-    <rect x="90"  y="80" width="150" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="165" y="106">Dashboard</text><text x="165" y="124" font-size="10" font-weight="400" fill="#9aa4b2">score · timeline · report</text>
+    <rect x="90"  y="80" width="150" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="165" y="106">Dashboard</text><text x="165" y="124" font-size="10" font-weight="400" fill="#9aa4b2">settings · timeline · report</text>
     <rect x="270" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="340" y="106">Capsule</text><text x="340" y="124" font-size="10" font-weight="400" fill="#9aa4b2">app store</text>
     <rect x="440" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="510" y="106">Permissions</text><text x="510" y="124" font-size="10" font-weight="400" fill="#9aa4b2">grants · history</text>
     <rect x="610" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="680" y="106">Settings</text><text x="680" y="124" font-size="10" font-weight="400" fill="#9aa4b2">system · privacy</text>
@@ -22,8 +22,8 @@
   <!-- Plasma shell band -->
   <rect x="90" y="176" width="1020" height="70" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
   <path d="M120 226 L134 202 L148 226 Z" fill="none" stroke="#16c784" stroke-width="2.5" stroke-linejoin="round"/>
-  <text x="600" y="205" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">ArkaWM — KDE Plasma, branded</text>
-  <text x="600" y="228" text-anchor="middle" font-size="11.5" fill="#9aa4b2">top panel · floating dock · full-screen launcher · SDDM login · Plymouth splash · design system everywhere</text>
+  <text x="600" y="205" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Arka Shell — KDE Plasma on KWin, ArkaOS look</text>
+  <text x="600" y="228" text-anchor="middle" font-size="11.5" fill="#9aa4b2">top bar · ArkaOS Dock · full-screen launcher · SDDM login · Plymouth splash · one design system</text>
 
   <!-- arkad band -->
   <rect x="90" y="286" width="1020" height="90" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5">
@@ -33,8 +33,8 @@
     <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
   </circle>
   <text x="600" y="318" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">arkad — the privacy core (Rust, static)</text>
-  <text x="600" y="341" text-anchor="middle" font-size="11.5" fill="#9aa4b2">MAC randomization · encrypted DNS (DoT) · hostname · IPv6 privacy · sandbox integrity</text>
-  <text x="600" y="362" text-anchor="middle" font-size="11" fill="#5b6675">D-Bus: org.arka.arkad — PrivacyScore · typed status enums · EnforceAll() · events → privacy.jsonl</text>
+  <text x="600" y="341" text-anchor="middle" font-size="11.5" fill="#9aa4b2">MAC randomization · encrypted DNS (DoT) · hostname · IPv6 privacy · firewall · browser sandbox check</text>
+  <text x="600" y="362" text-anchor="middle" font-size="11" fill="#5b6675">D-Bus: org.arka.arkad — read-only status properties · EnforceAll() · events → privacy.jsonl</text>
 
   <!-- D-Bus arrows apps<->arkad -->
   <g stroke="#2e7bff" stroke-width="1.5" opacity="0.65">
@@ -50,10 +50,10 @@
 
   <!-- platform band -->
   <rect x="90" y="416" width="1020" height="64" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-  <text x="600" y="443" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Immutable platform — bootc · composefs (read-only root) · atomic updates · rollback · TPM PCRs 0–10</text>
-  <text x="600" y="466" text-anchor="middle" font-size="11" fill="#9aa4b2">one Containerfile declares every byte — reproducible, diffable, un-tamperable at runtime</text>
+  <text x="600" y="443" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Immutable platform — bootc · composefs (read-only root) · signed updates · automatic rollback</text>
+  <text x="600" y="466" text-anchor="middle" font-size="11" fill="#9aa4b2">one Containerfile declares the image — built in CI, signed, read-only while running</text>
 
   <!-- kernel -->
   <rect x="90" y="500" width="1020" height="40" rx="12" fill="#050609" stroke="#1e2630" stroke-width="1.5"/>
-  <text x="600" y="525" text-anchor="middle" font-size="12.5" fill="#9aa4b2">Linux kernel (Fedora 42) → hardware</text>
+  <text x="600" y="525" text-anchor="middle" font-size="12.5" fill="#9aa4b2">Linux kernel (Fedora 44) → hardware</text>
 </svg>
