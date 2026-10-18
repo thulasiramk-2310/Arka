@@ -129,6 +129,7 @@ fun layout() {
     if (global.updating) draw_fill();
     global.box.image = scaled(Image("entry.png"));
     box.sprite.SetImage(global.box.image);
+    global.dot.image = scaled(dot.src);
     global.promptY = global.cy + 260 * global.f;
 }
 
@@ -185,34 +186,65 @@ box.sprite.SetZ(10);
 box.sprite.SetOpacity(0);
 dots.sprite = Sprite();
 dots.sprite.SetZ(11);
+// Passphrase dots are sprites of dot.png, at most as many as fit in the box.
+global.dotmax = 32;
+dot.src = Image("dot.png");
+for (i = 0; i < global.dotmax; i++) {
+    dot[i] = Sprite();
+    dot[i].SetZ(11);
+    dot[i].SetOpacity(0);
+}
+global.dotcount = 0;
 layout();
 
-fun show_prompt(text, entry) {
+fun show_prompt(text) {
     global.prompt.image = label(text, 20, 0.96, 0.97, 0.98);
     prompt.sprite.SetImage(global.prompt.image);
     place(prompt.sprite, global.prompt.image, global.promptY - 52 * global.f);
     prompt.sprite.SetOpacity(1);
     place(box.sprite, global.box.image, global.promptY);
     box.sprite.SetOpacity(1);
-    global.dots.image = label(entry, 26, 0.09, 0.78, 0.52);
-    dots.sprite.SetImage(global.dots.image);
-    place(dots.sprite, global.dots.image, global.promptY);
-    dots.sprite.SetOpacity(1);
     status.sprite.SetOpacity(0);
+}
+
+// Draw n dots centred in the box. Past what fits, the row stops growing; it
+// only shows that typing is happening, never the passphrase length beyond that.
+fun draw_dots(n) {
+    w = global.dot.image.GetWidth();
+    step = Math.Int(w * 1.9);
+    fit = Math.Int((global.box.image.GetWidth() - 48 * global.f - w) / step) + 1;
+    n = Math.Min(n, Math.Min(fit, global.dotmax));
+    x0 = Math.Int(global.wx + global.sw / 2 - ((n - 1) * step + w) / 2);
+    y = Math.Int(global.wy + global.promptY - global.dot.image.GetHeight() / 2);
+    for (i = 0; i < global.dotmax; i++) {
+        if (i < n) {
+            dot[i].SetImage(global.dot.image);
+            dot[i].SetX(x0 + i * step);
+            dot[i].SetY(y);
+            dot[i].SetOpacity(1);
+        } else {
+            dot[i].SetOpacity(0);
+        }
+    }
+    global.dotcount = n;
 }
 
 fun display_password_callback(prompt_text, bullets) {
     text = prompt_text;
     if (text == "") text = "Enter the passphrase to unlock this disk";
-    entry = "";
-    n = Math.Min(bullets, 24);
-    for (i = 0; i < n; i++) entry += "• ";
-    show_prompt(text, entry);
+    show_prompt(text);
+    dots.sprite.SetOpacity(0);
+    draw_dots(bullets);
 }
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
 
 fun display_question_callback(prompt_text, entry) {
-    show_prompt(prompt_text, entry);
+    show_prompt(prompt_text);
+    draw_dots(0);
+    global.dots.image = label(entry, 26, 0.09, 0.78, 0.52);
+    dots.sprite.SetImage(global.dots.image);
+    place(dots.sprite, global.dots.image, global.promptY);
+    dots.sprite.SetOpacity(1);
 }
 Plymouth.SetDisplayQuestionFunction(display_question_callback);
 
@@ -221,6 +253,7 @@ fun display_normal_callback() {
     prompt.sprite.SetOpacity(0);
     box.sprite.SetOpacity(0);
     dots.sprite.SetOpacity(0);
+    draw_dots(0);
     if (status.text != "") status.sprite.SetOpacity(1);
 }
 Plymouth.SetDisplayNormalFunction(display_normal_callback);

@@ -37,3 +37,6 @@ rm -f seg-l.png seg-r.png
 # Passphrase box: rounded outline the bullets sit in.
 magick -size 760x96 xc:none -fill "#0f141c" -stroke "#2a3440" -strokewidth 3 \
   -draw "roundrectangle 2,2 757,93 20,20" entry.png
+# One passphrase dot, drawn as an image: the boot font may have no bullet
+# character (it showed as empty boxes in the VM, 2026-10-18).
+magick -size 24x24 xc:none -fill "$G" -draw "circle 12,12 12,3" dot.png
