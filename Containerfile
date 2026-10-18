@@ -22,6 +22,14 @@ COPY arka-shell/ /build/
 WORKDIR /build
 RUN cargo build --locked --release
 
+# Stage 2b: the dock. Fedora's crystal-dock source package rebuilt with
+# crystal-dock/arkaos-look.patch (blurred background, label bubble, divider
+# before Trash).
+FROM docker.io/fedora:${FEDORA_VERSION} AS dock-builder
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q rpm-build 'dnf-command(builddep)' 'dnf-command(download)'
+COPY crystal-dock/arkaos-look.patch crystal-dock/build-rpm.sh /build/
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked sh /build/build-rpm.sh
+
 # Staging stages for the small, often-edited files and the built binaries,
 # laid out at their final paths. Each COPY into the 11 GB bootc image costs
 # about a minute and a half (the layer diff walks the whole image), so the
@@ -35,6 +43,11 @@ COPY kernel/20-arkaos-recovery.toml /usr/lib/bootc/kargs.d/20-arkaos-recovery.to
 COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
 COPY autostart/arka-privacy-dots.desktop /etc/xdg/autostart/arka-privacy-dots.desktop
+COPY crystal-dock/arkaos-dock.desktop /etc/xdg/autostart/arkaos-dock.desktop
+COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/KDE/panel_1.conf
+COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/KDE/appearance.conf
+COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/generic/panel_1.conf
+COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/generic/appearance.conf
 COPY arka-rtc-mode /usr/libexec/arka-rtc-mode
 COPY systemd/arka-rtc-mode.service /usr/lib/systemd/system/arka-rtc-mode.service
 COPY arka-dns-after-clock /usr/libexec/arka-dns-after-clock
@@ -410,7 +423,6 @@ RUN for look in Dark Light; do \
 COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
-COPY arka-dock/org.arkaos.dock /usr/share/plasma/plasmoids/org.arkaos.dock
 
 # Updates come from ghcr.io/thulasiramk-2310/arka, built and signed by the
 # Image workflow. Only images signed with the ArkaOS key are accepted from
@@ -497,8 +509,12 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #  - ArkaOS Plasma styles (arkaos-dark/-light): Breeze's colours with ArkaOS
 #    panels (24px corners, 1px border, soft shadow; plasma-style/). Plasma
 #    takes every other element from its default style.
-# Runtime library for the privacy dots overlay (a late layer: the big package layers above stay cached).
-RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-layer-shell
+# Runtime library for the privacy dots overlay, and the dock (Crystal Dock with
+# the ArkaOS patch, its own layer-shell window, so icons can grow above it;
+# see crystal-dock/).
+# A late layer: the big package layers above stay cached.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bind,from=dock-builder,source=/build/out,target=/tmp/dock \
+    dnf install --setopt=keepcache=True -y -q gtk4-layer-shell /tmp/dock/crystal-dock-*.rpm
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
@@ -529,8 +545,8 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
 # (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
-# arka-launcher are not shipped: Plasma's panel, the ArkaOS Dock widget and
-# kickerdash replace them (the old ones are in git history, before 0d707ca).
+# arka-launcher are not shipped: Plasma's panel, Crystal Dock and kickerdash
+# replace them (the old ones are in git history, before 0d707ca).
 COPY --from=bins / /
 RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \

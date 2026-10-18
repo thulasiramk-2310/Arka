@@ -1,6 +1,6 @@
 // ArkaOS desktop layout for KDE Plasma — evokes the ArkaOS design:
 //   • a slim top bar (launcher + clock + system tray)
-//   • the ArkaOS Dock at the bottom (always visible; can hide itself)
+//   • the dock at the bottom is Crystal Dock, started separately
 //   • a full-screen application launcher (Application Dashboard)
 // Applied once on first login by arka-plasma-firstrun via evaluateScript.
 // JS strings use single quotes so the whole script can be passed inside a
@@ -28,23 +28,15 @@ top.addWidget('org.kde.plasma.panelspacer');
 top.addWidget('org.kde.plasma.systemtray');
 var topId = top.id;
 
-// --- Floating dock (ArkaOS Dock: pinned + open apps, grows under the pointer)
-// It replaces Plasma's icons-only task manager. Always visible by default;
-// right-click > "Hide dock automatically" switches it to auto-hide.
-var dock = new Panel;
-dock.location = 'bottom';
-dock.height = 64;   // 48 felt cramped in daily use — bigger icons, easier hit targets (see docs/FIELD-NOTES.md)
-try { dock.floating = true; } catch (e) {}
-try { dock.lengthMode = 'fit'; } catch (e) {}
-try { dock.alignment = 'center'; } catch (e) {}
-try { dock.hiding = 'none'; } catch (e) {}
-dock.addWidget('org.arkaos.dock');
-var dockId = dock.id;
+// --- Dock ---------------------------------------------------------------------
+// The dock is Crystal Dock, its own window started at login (see crystal-dock/),
+// not a Plasma panel: a panel can't grow icons above itself the way the macOS
+// Dock does.
 
 // --- Remove the original default panel(s) -----------------------------------
 var all = panels();
 for (var i = 0; i < all.length; i++) {
-    if (all[i].id != topId && all[i].id != dockId) {
+    if (all[i].id != topId) {
         all[i].remove();
     }
 }

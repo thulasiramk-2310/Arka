@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Dock
+Comment=The dock at the bottom of the screen (Crystal Dock)
+Exec=/usr/bin/crystal-dock
+Icon=user-desktop
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=2
+X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
