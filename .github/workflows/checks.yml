@@ -76,12 +76,13 @@ jobs:
 
   desktop:
     runs-on: ubuntu-24.04
+    # Same environment the image builds these apps in (Containerfile
+    # shell-builder): Ubuntu has no gtk4-layer-shell, which the privacy dots need.
+    container: docker.io/library/fedora:44
     steps:
       - uses: actions/checkout@v4
-      - name: Select stable Rust
-        run: rustup default stable
       - name: Install desktop build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
+        run: dnf install -y -q gtk4-devel gtk4-layer-shell-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
       - name: Test every desktop crate including first-run setup
         run: cargo test --locked --manifest-path arka-shell/Cargo.toml --workspace
       - name: Test desktop backends without a display or host services
