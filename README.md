@@ -130,10 +130,38 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   shows Fedora's branding, it asks for the passphrase twice, the unlock prompt
   shows the disk's internal name, every restart of an encrypted computer
   (including rollback retries) needs the passphrase, and the ISO (6.7 GB) is
-  not published yet. Not tested on real hardware.
+  not published yet. Not tested on real hardware. The installer gives `/boot`
+  its own partition. On 2026-10-17 a broken update rolled back on such an
+  install even with the ArkaOS greenboot fix switched off, because the trigger
+  is stopped together with `/boot` there (as reported on
+  [greenboot-rs#218](https://github.com/fedora-iot/greenboot-rs/issues/218)).
+  USB images have no separate `/boot` and rely on the fix.
 
-Everything above was tested in a VM on 2026-10-11 or 2026-10-12 unless it says
-otherwise. Still a developer preview: the installer is new and VM-tested only, one
+- ✍️ **Signed updates from ghcr.io.** GitHub Actions builds the image on every
+  change and once a week, splits it into 65 layers, signs it with cosign and
+  publishes it as `ghcr.io/thulasiramk-2310/arka`. ArkaOS accepts an image from
+  there only if it is signed with the ArkaOS key (`cosign.pub`). In a VM on
+  2026-10-17 an unsigned image and an image checked against another key were both
+  refused before anything was downloaded, and the signed image installed and
+  booted. A later update downloaded 5 of the 65 layers (863 MB instead of
+  5.3 GB). New installs from the installer take their updates from there. Not yet
+  on real hardware.
+- 🧭 **ArkaOS Dock.** The icons-only taskbar is replaced by a dock: pinned and
+  open apps, icons that grow under the pointer, a dot under running apps, and a
+  bounce while an app starts. It is always visible; right-click and choose
+  *Hide dock automatically* to have it slide away until the pointer touches the
+  bottom edge. Tested on a fresh install in a VM (2026-10-17). Icons only grow
+  within the height of the panel, so they are smaller at rest than on a Mac.
+- 🖐️ **Natural touchpad scrolling by default**, as on macOS, Windows and GNOME
+  (content follows the fingers). It can be turned off in System Settings. Tested
+  in a VM with a virtual touchpad; not yet on a real one.
+- 🔕 **Fewer false privacy alarms.** The tray only warns about a problem that
+  lasts about 30 seconds, so a firewall that is slow to start, or a setting
+  arkad fixes at once, no longer shows a popup. When a setting comes back on its
+  own, the log says *Setting confirmed again*. Tested in a VM (2026-10-14).
+
+Everything above was tested in a VM between 2026-10-11 and 2026-10-17 unless it
+says otherwise. Still a developer preview: the installer is new and VM-tested only, one
 hardware data point, and known polish tracked in the field notes.
 
 ---
@@ -171,7 +199,7 @@ personal files or guarantee that the selected image will boot.
 ## From one image, everything
 
 <p align="center">
-  <img src="assets/branding/installation.svg" width="100%" alt="One container image feeds bootc-image-builder producing qcow2 (DP1), raw and live ISO (DP2); every path ends in the same welcome wizard and desktop"/>
+  <img src="assets/branding/installation.svg" width="100%" alt="One container image feeds bootc-image-builder, producing a qcow2 for VMs, a raw image for USB sticks and an encrypted installer ISO; every path ends in the same welcome wizard and desktop, and updates come from ghcr.io"/>
 </p>
 
 Installation is delivery, not configuration — however the bits land on disk,
@@ -181,7 +209,7 @@ wizard. Strategy: [docs/INSTALLATION-ARCHITECTURE.md](docs/INSTALLATION-ARCHITEC
 ## How it's built
 
 <p align="center">
-  <img src="assets/branding/workflow.svg" width="100%" alt="Code → container build → disk image → boot in VM → QA → release; any failure loops back"/>
+  <img src="assets/branding/workflow.svg" width="100%" alt="Code → container build → disk image → boot in VM → QA → signed publish to ghcr.io; any failure loops back"/>
 </p>
 
 **Compile success ≠ runtime correctness.** Every change boots in a VM before it
@@ -239,7 +267,7 @@ wizard, full-screen launcher, Privacy Dashboard, Privacy Report, Capsule, and Se
 ## Roadmap
 
 <p align="center">
-  <img src="assets/branding/roadmap.svg" width="100%" alt="Roadmap: DP1 (current, qcow2/QEMU) → DP2 (real hardware, live ISO, thin installer) → Beta (trusted testers) → RC (bugs and polish only) → 1.0"/>
+  <img src="assets/branding/roadmap.svg" width="100%" alt="Roadmap: DP1 (done, qcow2/QEMU) → DP2 (current: real hardware, installer, signed updates; one laptop so far) → Beta (trusted testers) → RC (bugs and polish only) → 1.0"/>
 </p>
 
 ## Repository
@@ -268,7 +296,7 @@ scripts/                 QA harnesses, make-disk.sh, flash-usb.sh
 | [Architecture](docs/ARCHITECTURE.md) | why each piece exists and how they talk |
 | [Building](docs/BUILDING.md) | source → image → VM in three commands |
 | [Testing](docs/TESTING.md) | verification doctrine, QA harnesses, budgets |
-| [Installation](docs/INSTALLATION-ARCHITECTURE.md) | qcow2 today → thin installer later |
+| [Installation](docs/INSTALLATION-ARCHITECTURE.md) | VM image, USB image and installer ISO |
 | [Design System](arka-design-system/README.md) | tokens, typography, motion, components |
 | [Release Notes](docs/RELEASE-NOTES-DP1.md) | what's in DP1, what's known-incomplete |
 
