@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Format Wheel
+Comment=Convert a file by dropping it on a format
+Exec=arka-wheel
+Icon=document-export
+NoDisplay=true

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Format Wheel
+Exec=arka-wheel
+Icon=document-export
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=2
