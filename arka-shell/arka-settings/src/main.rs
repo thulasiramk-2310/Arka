@@ -540,10 +540,21 @@ fn page_developer() -> gtk4::Widget {
                         let _ = std::fs::create_dir_all(hub_dir(sub));
                     }
                     let _ = std::fs::create_dir_all(glib::home_dir().join("VARA"));
+                    // The password goes in on stdin, never on the command line,
+                    // where other programs on this computer could read it.
                     let (a, p) = (hub_dir("accounts"), hub_dir("policy"));
-                    run_ok("vara", &["account", "create", "--accounts", &a.to_string_lossy(),
-                        "--policy", &p.to_string_lossy(), "--username", &glib::user_name().to_string_lossy(),
-                        "--password", &pass])
+                    let child = Command::new("vara")
+                        .args(["account", "create", "--accounts", &a.to_string_lossy(),
+                            "--policy", &p.to_string_lossy(), "--username", &glib::user_name().to_string_lossy(),
+                            "--password-stdin"])
+                        .current_dir(glib::home_dir())
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::null())
+                        .spawn();
+                    let Ok(mut child) = child else { return false };
+                    use std::io::Write;
+                    let wrote = child.stdin.take().is_some_and(|mut i| i.write_all(format!("{pass}\n").as_bytes()).is_ok());
+                    child.wait().map(|s| s.success()).unwrap_or(false) && wrote
                 }).await.unwrap_or(false);
                 entry.set_text("");
                 entry.set_sensitive(true);

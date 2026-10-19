@@ -38,13 +38,13 @@ COPY convert/wheel/ /build/
 RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build/out -j"$(nproc)"
 
 # Stage 2d: VARA, version control (github.com/thulasiramk-2310/vara), built
-# from its v0.4.1 release, with the web files of its Hub. The checkout must be
+# from its v0.4.2 release, with the web files of its Hub. The checkout must be
 # exactly the release commit, so a moved tag fails the build instead of
 # changing what ships. Pure Go, static.
 FROM docker.io/library/golang:1.25-alpine AS vara-builder
 RUN apk add --no-cache git
-ARG VARA_TAG=v0.4.1
-ARG VARA_COMMIT=9fdf4afef9e4cfd562eccfb2561146ec3bd52342
+ARG VARA_TAG=v0.4.2
+ARG VARA_COMMIT=05489d4b19af52361f3d834a0158926e421e6ee8
 RUN git clone --quiet --depth 1 --branch "$VARA_TAG" https://github.com/thulasiramk-2310/vara /src && \
     test "$(git -C /src rev-parse HEAD)" = "$VARA_COMMIT" && \
     cd /src && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VARA_TAG#v}" -o /out/vara ./cmd/vara && \
