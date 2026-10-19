@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""arka-convert: convert files next to the originals, with no network access.
+
+    arka-convert FORMAT FILE...        convert each FILE to FORMAT
+    arka-convert --targets FILE        list the formats FILE can become
+
+The converted file is saved beside the original and never replaces anything:
+a name that is taken gets " (1)", " (2)" and so on. Every converter (ffmpeg,
+pdftoppm, Pillow) runs inside a bubblewrap sandbox with no network. The sandbox
+can read your files but can only write into a scratch folder; the finished file
+is moved out of it afterwards. If bubblewrap is missing nothing is converted.
+Used by the "Convert to" entry in the Dolphin right-click menu.
+"""
+
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"}
+AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
+VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
+
+TARGETS = {
+    "image": ["png", "jpg", "webp", "pdf"],
+    "pdf": ["png"],
+    "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a"],
+    "video": ["mp4", "mkv", "webm", "mp3"],
+}
+
+NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "pdf": "PDF", "mp3": "MP3",
+         "flac": "FLAC", "wav": "WAV", "ogg": "Ogg Vorbis", "opus": "Opus",
+         "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM"}
+
+# ffmpeg output options for each target. -vn drops any cover art or video.
+AUDIO_OPTS = {
+    "mp3": ["-vn", "-c:a", "libmp3lame", "-q:a", "2"],
+    "flac": ["-vn", "-c:a", "flac"],
+    "wav": ["-vn", "-c:a", "pcm_s16le"],
+    "ogg": ["-vn", "-c:a", "libvorbis", "-q:a", "5"],
+    "opus": ["-vn", "-c:a", "libopus", "-b:a", "128k"],
+    "m4a": ["-vn", "-c:a", "aac", "-b:a", "192k"],
+}
+VIDEO_OPTS = {
+    "mp4": ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-c:v", "libopenh264",
+            "-b:v", "5M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+            "-movflags", "+faststart"],
+    # MKV holds almost any codec, so the streams are copied, not re-encoded.
+    "mkv": ["-map", "0:v:0", "-map", "0:a?", "-sn", "-c", "copy"],
+    "webm": ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-c:v", "libvpx-vp9",
+             "-b:v", "0", "-crf", "32", "-row-mt", "1", "-c:a", "libopus",
+             "-b:a", "128k"],
+}
+
+
+def kind_of(path):
+    ext = Path(path).suffix.lower().lstrip(".")
+    if ext in IMAGE:
+        return "image"
+    if ext == "pdf":
+        return "pdf"
+    if ext in AUDIO:
+        return "audio"
+    if ext in VIDEO:
+        return "video"
+    return None
+
+
+def targets_for(path):
+    kind = kind_of(path)
+    ext = Path(path).suffix.lower().lstrip(".")
+    ext = "jpg" if ext == "jpeg" else ext
+    return [t for t in TARGETS.get(kind, []) if t != ext]
+
+
+def free_name(directory, stem, ext):
+    """A file name in directory that does not exist yet."""
+    candidate = directory / f"{stem}.{ext}"
+    n = 1
+    while candidate.exists():
+        candidate = directory / f"{stem} ({n}).{ext}"
+        n += 1
+    return candidate
+
+
+def sandbox_prefix(scratch):
+    """The bubblewrap command that runs a converter with no network."""
+    if os.environ.get("ARKA_CONVERT_UNSANDBOXED") == "1":  # tests only
+        return []
+    bwrap = shutil.which("bwrap")
+    if not bwrap:
+        raise RuntimeError("the sandbox (bubblewrap) is not installed")
+    return [bwrap, "--unshare-net", "--unshare-pid", "--unshare-ipc", "--die-with-parent",
+            "--new-session", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+            "--tmpfs", "/run/user", "--bind", str(scratch), str(scratch),
+            "--chdir", str(scratch), "--setenv", "HOME", str(scratch),
+            "--setenv", "TMPDIR", str(scratch)]
+
+
+def run(scratch, cmd):
+    done = subprocess.run(sandbox_prefix(scratch) + cmd, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if done.returncode != 0:
+        lines = [l for l in done.stderr.strip().splitlines() if l.strip()]
+        raise RuntimeError(lines[-1] if lines else f"{cmd[0]} failed")
+
+
+def image_worker(src, dst, fmt):
+    """Runs inside the sandbox: convert one picture with Pillow."""
+    from PIL import Image
+    with Image.open(src) as im:
+        im.seek(0)  # animated pictures: first frame only
+        if fmt in ("jpg", "pdf") and im.mode in ("RGBA", "LA", "P", "PA"):
+            im = im.convert("RGBA")
+            flat = Image.new("RGB", im.size, "white")
+            flat.paste(im, mask=im.split()[-1])
+            im = flat
+        elif fmt in ("jpg", "pdf") and im.mode != "RGB":
+            im = im.convert("RGB")
+        names = {"jpg": "JPEG", "png": "PNG", "webp": "WEBP", "pdf": "PDF"}
+        extra = {"quality": 92} if fmt in ("jpg", "webp") else {}
+        im.save(dst, names[fmt], **extra)
+
+
+def convert_one(src, fmt):
+    """Convert src to fmt. Returns the list of files made."""
+    src = Path(src).resolve()
+    kind = kind_of(src)
+    if kind is None:
+        raise RuntimeError("this kind of file can't be converted yet")
+    if fmt not in TARGETS[kind]:
+        raise RuntimeError(f"{NAMES.get(fmt, fmt)} isn't available for this kind of file")
+    if fmt not in targets_for(src):
+        raise RuntimeError(f"it is already {NAMES.get(fmt, fmt)}")
+    out_dir = src.parent
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        inp = str(src)
+        if kind == "image":
+            tmp = scratch / f"out.{fmt}"
+            run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
+                          "--image-worker", inp, str(tmp), fmt])
+            made = [tmp]
+        elif kind == "pdf":
+            run(scratch, ["pdftoppm", "-png", "-r", "150", inp, str(scratch / "page")])
+            made = sorted(scratch.glob("page-*.png"))
+        else:
+            tmp = scratch / f"out.{fmt}"
+            opts = AUDIO_OPTS[fmt] if fmt in AUDIO_OPTS and (kind == "audio" or fmt == "mp3") \
+                else VIDEO_OPTS[fmt]
+            run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", inp, *opts, str(tmp)])
+            made = [tmp]
+        made = [m for m in made if m.exists() and m.stat().st_size > 0]
+        if not made:
+            raise RuntimeError("the converter made no file")
+        results = []
+        for i, m in enumerate(made):
+            if kind == "pdf":
+                stem = src.stem if len(made) == 1 else f"{src.stem}-{i + 1}"
+            else:
+                stem = src.stem
+            final = free_name(out_dir, stem, fmt)
+            m.rename(final)
+            results.append(final)
+        return results
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def notify(text, body="", replace=None):
+    """Show a desktop notification. Returns its id, or None."""
+    if os.environ.get("ARKA_CONVERT_QUIET") == "1":
+        return None
+    exe = shutil.which("notify-send")
+    if not exe:
+        print(f"{text} {body}".strip(), file=sys.stderr)
+        return None
+    cmd = [exe, "-a", "ArkaOS", "-i", "document-export", "-p"]
+    if replace:
+        cmd += ["-r", str(replace)]
+    done = subprocess.run(cmd + [text, body], capture_output=True, text=True)
+    return done.stdout.strip() or None
+
+
+def main(argv):
+    if len(argv) >= 5 and argv[1] == "--image-worker":
+        image_worker(argv[2], argv[3], argv[4])
+        return 0
+    if len(argv) == 3 and argv[1] == "--targets":
+        print("\n".join(targets_for(argv[2])))
+        return 0
+    if len(argv) < 3 or argv[1].startswith("-"):
+        print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
+        return 2
+    fmt, files = argv[1].lower(), argv[2:]
+    fmt = "jpg" if fmt == "jpeg" else fmt
+    heavy = any(kind_of(f) in ("audio", "video") for f in files)
+    nid = notify(f"Converting to {NAMES.get(fmt, fmt)}",
+                 files[0] if len(files) == 1 else f"{len(files)} files") if heavy else None
+    made, failed = [], []
+    for f in files:
+        try:
+            made += convert_one(f, fmt)
+        except Exception as e:  # one bad file does not stop the rest
+            failed.append(f"{Path(f).name}: {e}")
+    if failed:
+        notify("Couldn't convert everything", "\n".join(failed[:4]), nid)
+    elif len(made) == 1:
+        notify("Converted", f"Saved as {made[0].name}", nid)
+    else:
+        notify("Converted", f"{len(made)} files saved next to the originals", nid)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,36 @@
+[Desktop Entry]
+Type=Service
+MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;
+Actions=mp3;flac;wav;ogg;opus;m4a;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action mp3]
+Name=MP3
+Exec=arka-convert mp3 %F
+Icon=audio-x-generic
+
+[Desktop Action flac]
+Name=FLAC
+Exec=arka-convert flac %F
+Icon=audio-x-generic
+
+[Desktop Action wav]
+Name=WAV
+Exec=arka-convert wav %F
+Icon=audio-x-generic
+
+[Desktop Action ogg]
+Name=Ogg Vorbis
+Exec=arka-convert ogg %F
+Icon=audio-x-generic
+
+[Desktop Action opus]
+Name=Opus
+Exec=arka-convert opus %F
+Icon=audio-x-generic
+
+[Desktop Action m4a]
+Name=AAC (m4a)
+Exec=arka-convert m4a %F
+Icon=audio-x-generic

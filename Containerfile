@@ -57,6 +57,11 @@ COPY tmpfiles/arkaos-arkasetup.conf /usr/lib/tmpfiles.d/arkaos-arkasetup.conf
 COPY systemd/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf /usr/lib/systemd/system/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
+COPY convert/arka-convert /usr/bin/arka-convert
+COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert-image.desktop
+COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
+COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
+COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-dark
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-light
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
@@ -516,10 +521,15 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 # A late layer: the big package layers above stay cached.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bind,from=dock-builder,source=/build/out,target=/tmp/dock \
     dnf install --setopt=keepcache=True -y -q gtk4-layer-shell /tmp/dock/crystal-dock-*.rpm
+# "Convert to" in the Dolphin right-click menu (convert/arka-convert): ffmpeg for
+# sound and video (Fedora's build includes MP3, AAC and H.264 through OpenH264),
+# Pillow for pictures, poppler for PDF pages. The tool runs them with no network.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \

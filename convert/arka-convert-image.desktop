@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;
+Actions=png;jpg;webp;pdf;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action png]
+Name=PNG
+Exec=arka-convert png %F
+Icon=image-x-generic
+
+[Desktop Action jpg]
+Name=JPEG
+Exec=arka-convert jpg %F
+Icon=image-x-generic
+
+[Desktop Action webp]
+Name=WebP
+Exec=arka-convert webp %F
+Icon=image-x-generic
+
+[Desktop Action pdf]
+Name=PDF
+Exec=arka-convert pdf %F
+Icon=image-x-generic
