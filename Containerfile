@@ -30,6 +30,13 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 COPY crystal-dock/arkaos-look.patch crystal-dock/build-rpm.sh /build/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked sh /build/build-rpm.sh
 
+# Stage 2c: the format wheel (convert/wheel), a small Qt Quick program that
+# waits in the session and shows a ring of formats at the cursor.
+FROM docker.io/fedora:${FEDORA_VERSION} AS wheel-builder
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q cmake gcc-c++ extra-cmake-modules qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kglobalaccel-devel kf6-kwindowsystem-devel layer-shell-qt-devel
+COPY convert/wheel/ /build/
+RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build/out -j"$(nproc)"
+
 # Staging stages for the small, often-edited files and the built binaries,
 # laid out at their final paths. Each COPY into the 11 GB bootc image costs
 # about a minute and a half (the layer diff walks the whole image), so the
@@ -62,6 +69,9 @@ COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert
 COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
+COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
+COPY convert/org.arkaos.wheel.desktop /usr/share/applications/org.arkaos.wheel.desktop
+COPY convert/arka-wheel-autostart.desktop /etc/xdg/autostart/arka-wheel.desktop
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-dark
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-light
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
@@ -92,6 +102,7 @@ COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bl
 COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
 COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
 COPY --from=shell-builder /build/target/release/arka-privacy-dots /usr/bin/arka-privacy-dots
+COPY --from=wheel-builder /build/out/arka-wheel /usr/bin/arka-wheel
 
 # Stage 3: bootc image
 FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
@@ -524,8 +535,11 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bin
 # "Convert to" in the Dolphin right-click menu (convert/arka-convert): ffmpeg for
 # sound and video (Fedora's build includes MP3, AAC and H.264 through OpenH264),
 # Pillow for pictures, poppler for PDF pages. The tool runs them with no network.
+# The format wheel (arka-wheel) needs Qt Quick, KGlobalAccel, KWindowSystem and
+# LayerShellQt, which Plasma already brings; listed so they stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
-    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils \
+      qt6-qtdeclarative kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
