@@ -8,17 +8,24 @@
 # This is the only privileged step: create the account the user just entered,
 # set autologin, switch to the graphical target, and mark first-boot done.
 #
-#   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark]
+#   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark
+#                            [<tools> <commit-name> <commit-email>]]
 #          (password on stdin; look defaults to dark, the image default)
+#
+# tools is the optional version control from setup's Advanced options: a comma
+# list of vara and git, each set up with the name and email for commits.
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "arkaos-oobe-apply: expected username, autologin flag and optional look" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 6 ] || [ "$#" -eq 4 ] || [ "$#" -eq 5 ]; then
+    echo "arkaos-oobe-apply: expected username, autologin flag, optional look and optional version control" >&2
     exit 2
 fi
 user="$1"
 autologin="$2"
 look="${3:-dark}"
+tools="${4:-}"
+commit_name="${5:-}"
+commit_email="${6:-}"
 
 # Serialize account creation, including retries from the graphical and TUI paths.
 exec 9>/run/arkaos-oobe.lock
@@ -42,6 +49,23 @@ fi
 if [[ "$look" != "light" && "$look" != "dark" ]]; then
     echo "arkaos-oobe-apply: invalid look" >&2
     exit 2
+fi
+
+if [ -n "$tools" ]; then
+    for tool in ${tools//,/ }; do
+        if [[ "$tool" != "vara" && "$tool" != "git" ]]; then
+            echo "arkaos-oobe-apply: invalid version control tool" >&2
+            exit 2
+        fi
+    done
+    if [ -z "$commit_name" ] || [ "${#commit_name}" -gt 100 ] || [[ "$commit_name" == *[[:cntrl:]]* ]]; then
+        echo "arkaos-oobe-apply: invalid name for commits" >&2
+        exit 2
+    fi
+    if [ "${#commit_email}" -gt 254 ] || [[ ! "$commit_email" =~ ^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+$ ]]; then
+        echo "arkaos-oobe-apply: invalid email for commits" >&2
+        exit 2
+    fi
 fi
 
 # Never reset an existing account, including root or the setup user.
@@ -96,6 +120,22 @@ runuser -u "$user" -- bash -c '
     kwriteconfig6 --file "$home/.config/plasmarc" --group Theme --key name "$style"
     kwriteconfig6 --file "$home/.config/plasmarc" --group Wallpapers --key defaultWallpaperTheme "$wall"
 ' arka-setup-look "/home/$user" "$look"
+
+# Optional version control. runuser keeps root's HOME and working directory, so
+# give the tools the new account's own (Git looks for a repository in the
+# working directory even for --global settings and fails in root's). Each tool
+# writes only that account's settings. A failure here is reported but does not
+# stop setup: the account matters more.
+for tool in ${tools//,/ }; do
+    as_user=(runuser -u "$user" -- env --chdir="/home/$user" HOME="/home/$user" XDG_CONFIG_HOME="/home/$user/.config")
+    case "$tool" in
+        vara) "${as_user[@]}" vara identity set --default --name "$commit_name" --email "$commit_email" >/dev/null ||
+                  echo "arkaos-oobe-apply: warning: could not set the VARA identity" >&2 ;;
+        git)  { "${as_user[@]}" git config --global user.name "$commit_name" &&
+                "${as_user[@]}" git config --global user.email "$commit_email"; } ||
+                  echo "arkaos-oobe-apply: warning: could not set the Git identity" >&2 ;;
+    esac
+done
 
 mkdir -p /etc/sddm.conf.d
 # Login screen follows the chosen look (arkaos-light is built from the same

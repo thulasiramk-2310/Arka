@@ -42,16 +42,23 @@ fn main() {
 // via a tight NOPASSWD sudo rule (see Containerfile). arka-oobe itself runs
 // UNPRIVILEGED inside the arkasetup login session, so it must not touch /etc or
 // run useradd directly. The password is passed on stdin, never in argv.
-fn create_account(user: &str, pass: &str, autologin: bool, dark: bool) -> Result<(), String> {
+// `dev` is the optional version control from Advanced options: the tools
+// ("vara", "git" or "vara,git") plus the name and email for commits.
+fn create_account(user: &str, pass: &str, autologin: bool, dark: bool,
+                  dev: Option<(String, String, String)>) -> Result<(), String> {
     use std::io::Write;
+    let mut args = vec![
+        "-n".to_string(),
+        "/usr/libexec/arkaos-oobe-apply".to_string(),
+        user.to_string(),
+        if autologin { "1" } else { "0" }.to_string(),
+        if dark { "dark" } else { "light" }.to_string(),
+    ];
+    if let Some((tools, name, email)) = dev {
+        args.extend([tools, name, email]);
+    }
     let mut child = std::process::Command::new("sudo")
-        .args([
-            "-n",
-            "/usr/libexec/arkaos-oobe-apply",
-            user,
-            if autologin { "1" } else { "0" },
-            if dark { "dark" } else { "light" },
-        ])
+        .args(&args)
         .stdin(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("sudo arkaos-oobe-apply: {e}"))?;
@@ -66,6 +73,32 @@ fn create_account(user: &str, pass: &str, autologin: bool, dark: bool) -> Result
         Ok(())
     } else {
         Err(format!("account setup failed ({st})"))
+    }
+}
+
+// Same rules as arkaos-oobe-apply, so a bad value is caught on the page.
+fn valid_commit_name(n: &str) -> bool {
+    !n.trim().is_empty() && n.chars().count() <= 100 && !n.chars().any(char::is_control)
+}
+
+fn valid_commit_email(e: &str) -> bool {
+    let mut parts = e.split('@');
+    let ok = |p: Option<&str>| p.is_some_and(|p| !p.is_empty() && !p.chars().any(|c| c.is_whitespace() || c.is_control()));
+    e.len() <= 254 && ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
+}
+
+#[cfg(test)]
+mod commit_identity_tests {
+    #[test]
+    fn names_and_emails_follow_the_helper_rules() {
+        assert!(super::valid_commit_name("Alice Example"));
+        for bad in ["", "   ", "Ali\nce", &"x".repeat(101)] {
+            assert!(!super::valid_commit_name(bad), "{bad:?}");
+        }
+        assert!(super::valid_commit_email("alice@example.org"));
+        for bad in ["", "alice", "@example.org", "alice@", "a b@c.d", "a@b@c", "a@b\n"] {
+            assert!(!super::valid_commit_email(bad), "{bad:?}");
+        }
     }
 }
 
@@ -218,6 +251,15 @@ checkbutton.oobe-choice radio {{
 }}
 checkbutton.oobe-choice radio:checked {{ background-color: {fg}; border-color: {fg}; }}
 .oobe-choice-title {{ font-size: 18px; font-weight: 600; color: {fg}; }}
+expander.oobe-adv title {{ font-size: 15px; color: {muted}; }}
+expander.oobe-adv arrow {{ color: {muted}; }}
+checkbutton.oobe-tool {{ padding: 8px 0; color: {fg}; }}
+checkbutton.oobe-tool check {{
+  background: none; background-color: {bg}; border: 1.5px solid {faint}; border-radius: 4px;
+  min-width: 18px; min-height: 18px; box-shadow: none; color: {pfg};
+}}
+checkbutton.oobe-tool check:checked {{ background-color: {fg}; border-color: {fg}; }}
+entry.oobe-field.small {{ font-size: 18px; min-height: 44px; }}
 .oobe-choice-sub {{ font-size: 15px; color: {muted}; }}
 
 .oobe-dot {{ min-width: 9px; min-height: 9px; border-radius: 5px; background-color: {line}; }}
@@ -614,6 +656,53 @@ fn build_ui(app: &adw::Application) {
     let sign_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     sign_body.append(&ask);
     sign_body.append(&auto);
+
+    // Advanced options: version control, for people who write code. Folded
+    // away by default; nothing is set up unless a tool is ticked.
+    let tool = |title: &str, sub: &str| -> gtk4::CheckButton {
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+        col.set_margin_start(10);
+        col.append(&label(title, "oobe-choice-title"));
+        col.append(&label(sub, "oobe-choice-sub"));
+        let b = gtk4::CheckButton::new();
+        b.add_css_class("oobe-tool");
+        b.set_child(Some(&col));
+        b
+    };
+    let vara_cb = tool("VARA", "Version control with built-in undo and integrity checks.");
+    let git_cb = tool("Git", "The most widely used version control system.");
+    let commit_name = gtk4::Entry::new();
+    commit_name.add_css_class("oobe-field");
+    commit_name.add_css_class("small");
+    commit_name.set_placeholder_text(Some("Name for your commits"));
+    let commit_email = gtk4::Entry::new();
+    commit_email.add_css_class("oobe-field");
+    commit_email.add_css_class("small");
+    commit_email.set_placeholder_text(Some("Email for your commits"));
+    for e in [&commit_name, &commit_email] {
+        e.set_sensitive(false);
+    }
+    for cb in [&vara_cb, &git_cb] {
+        let (v, g, n, m) = (vara_cb.clone(), git_cb.clone(), commit_name.clone(), commit_email.clone());
+        cb.connect_toggled(move |_| {
+            let on = v.is_active() || g.is_active();
+            n.set_sensitive(on);
+            m.set_sensitive(on);
+        });
+    }
+    let adv_body = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    adv_body.set_margin_top(10);
+    adv_body.append(&label("Version control, for writing code. Optional.", "oobe-note"));
+    adv_body.append(&vara_cb);
+    adv_body.append(&git_cb);
+    adv_body.append(&commit_name);
+    adv_body.append(&commit_email);
+    adv_body.append(&label("Saved only on this computer, in VARA's and Git's own settings.", "oobe-note"));
+    let adv = gtk4::Expander::new(Some("Advanced options"));
+    adv.add_css_class("oobe-adv");
+    adv.set_margin_top(22);
+    adv.set_child(Some(&adv_body));
+    sign_body.append(&adv);
     pages.add_named(
         &page(&label("How should ArkaOS start?", "oobe-title"),
               &label("You can change this later in Settings.", "oobe-sub"), &sign_body),
@@ -860,6 +949,8 @@ fn build_ui(app: &adw::Application) {
         let (cur, show, fail, finish) = (cur.clone(), show.clone(), fail.clone(), finish.clone());
         let (name_entry, pass_entry, conf_entry, ask, dark) =
             (name_entry.clone(), pass_entry.clone(), conf_entry.clone(), ask.clone(), dark.clone());
+        let (vara_cb, git_cb, commit_name, commit_email) =
+            (vara_cb.clone(), git_cb.clone(), commit_name.clone(), commit_email.clone());
         let next_btn = next.clone();
         let preview = preview.is_some();
         let busy = Rc::new(Cell::new(false));
@@ -876,19 +967,36 @@ fn build_ui(app: &adw::Application) {
                 else if p != c { fail("The passwords don't match.") }
                 else { show(3) }
             }
-            "signin" => show(4),
+            "signin" => {
+                if !(vara_cb.is_active() || git_cb.is_active()) {
+                    show(4)
+                } else if !valid_commit_name(&commit_name.text()) {
+                    fail("Enter the name to put on your commits.")
+                } else if !valid_commit_email(commit_email.text().trim()) {
+                    fail("Enter an email for your commits, like you@example.com.")
+                } else {
+                    show(4)
+                }
+            }
             "privacy" => {
                 if busy.replace(true) { return; }
                 next_btn.set_sensitive(false);
                 show(5);
                 let user = name_entry.text().to_string();
                 let (u, p, autologin, d) = (user.clone(), pass_entry.text().to_string(), !ask.is_active(), dark.get());
+                let tools: Vec<&str> = [("vara", vara_cb.is_active()), ("git", git_cb.is_active())]
+                    .into_iter().filter(|(_, on)| *on).map(|(t, _)| t).collect();
+                let dev = (!tools.is_empty()).then(|| (
+                    tools.join(","),
+                    commit_name.text().trim().to_string(),
+                    commit_email.text().trim().to_string(),
+                ));
                 let (show, busy, fail, finish) = (show.clone(), busy.clone(), fail.clone(), finish.clone());
                 glib::spawn_future_local(async move {
                     let res = if preview {
                         Ok(())
                     } else {
-                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d))
+                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, dev))
                             .await
                             .unwrap_or_else(|_| Err("account helper crashed".into()))
                     };

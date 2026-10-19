@@ -57,17 +57,19 @@ class ApplyTests(unittest.TestCase):
             source = source.replace(prefix, str(self.root) + prefix)
         self.helper = self.root / 'helper'
         self.helper.write_text(source)
-        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser'):
+        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser', 'vara', 'git'):
             command = self.root / 'bin' / name
             command.write_text(MOCK_COMMAND)
             command.chmod(0o755)
         self.env = dict(os.environ, OOBE_TEST_ROOT=str(self.root))
         self.env['PATH'] = str(self.root / 'bin') + os.pathsep + '/usr/bin:/bin'
 
-    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None):
+    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None):
         args = ['bash', str(self.helper), user, autologin]
         if look is not None:
             args.append(look)
+        if dev is not None:
+            args.extend(dev)
         return subprocess.run(
             args, input=password,
             text=True, capture_output=True, env=self.env, timeout=5,
@@ -196,6 +198,57 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse((self.root / 'var/lib/arkaos-firstboot-done').exists())
         self.assertTrue((self.root / 'etc/sudoers.d/95-arkaos-oobe').exists())
 
+
+    def calls(self):
+        import json
+        path = self.root / 'calls'
+        return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+    def test_version_control_is_set_up_as_the_new_account(self):
+        result = self.run_helper(look='dark', dev=['vara,git', 'Alice Example', 'alice@example.org'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        home = str(self.root / 'home/alice')
+        tool_calls = [c for c in self.calls() if c[0] == 'runuser' and c[4:5] == ['env']]
+        expected_env = ['env', '--chdir=' + home, 'HOME=' + home, 'XDG_CONFIG_HOME=' + home + '/.config']
+        self.assertEqual(tool_calls, [
+            ['runuser', '-u', 'alice', '--', *expected_env, 'vara', 'identity', 'set', '--default',
+             '--name', 'Alice Example', '--email', 'alice@example.org'],
+            ['runuser', '-u', 'alice', '--', *expected_env, 'git', 'config', '--global', 'user.name', 'Alice Example'],
+            ['runuser', '-u', 'alice', '--', *expected_env, 'git', 'config', '--global', 'user.email', 'alice@example.org'],
+        ])
+        self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
+
+    def test_without_version_control_no_tool_runs(self):
+        result = self.run_helper(look='dark')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse([c for c in self.calls() if c[0] in ('vara', 'git')])
+
+    def test_only_git_when_only_git_is_chosen(self):
+        result = self.run_helper(look='light', dev=['git', 'Alice', 'a@b.c'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        names = [c[0] for c in self.calls()]
+        self.assertIn('git', names)
+        self.assertNotIn('vara', names)
+
+    def test_bad_version_control_input_is_rejected_before_account_creation(self):
+        for dev in (['svn', 'Alice', 'a@b.c'], ['vara', '', 'a@b.c'], ['vara', 'Alice', 'not-an-email'],
+                    ['vara', 'Ali\nce', 'a@b.c'], ['vara', 'Alice', 'a b@c.d'], ['vara;git', 'Alice', 'a@b.c']):
+            with self.subTest(dev=dev):
+                result = self.run_helper(look='dark', dev=dev)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assert_no_account_changes()
+
+    def test_partial_version_control_arguments_are_rejected(self):
+        result = self.run_helper(look='dark', dev=['vara', 'Alice'])
+        self.assertEqual(result.returncode, 2)
+        self.assert_no_account_changes()
+
+    def test_failed_tool_setup_still_finishes_the_account(self):
+        self.env['OOBE_TEST_FAIL'] = 'vara'
+        result = self.run_helper(look='dark', dev=['vara', 'Alice', 'a@b.c'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('could not set the VARA identity', result.stderr)
+        self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
 
 if __name__ == '__main__':
     unittest.main()
