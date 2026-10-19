@@ -228,10 +228,10 @@ gate on a 100-boot reliability loop. Doctrine and harnesses:
 Fedora 44 candidate, light look, from a VM test of a built image:
 
 <p align="center">
-  <img src="website/img/desktop-light.png" width="100%" alt="The ArkaOS desktop in its light look: slim top bar, the ArkaOS Dock with Settings, Discover, Files and Firefox, and a pale wallpaper with the ArkaOS triangle in thin lines"/>
+  <img src="website/img/desktop-light.png" width="100%" alt="The ArkaOS desktop in its light look: slim top bar, the ArkaOS Dock with the app menu, Settings, Discover, Files, Firefox and, after a divider, Trash, and a pale wallpaper with the ArkaOS triangle in thin lines"/>
 </p>
 <p align="center">
-  <img src="website/img/dock-light.png" width="60%" alt="Close-up of the ArkaOS Dock: icons grow around the pointer, and a green dot under Firefox shows it is running"/>
+  <img src="website/img/dock-light.png" width="60%" alt="Close-up of the ArkaOS Dock: icons grow around the pointer, a small label above the Files icon shows its name, Dolphin, and a dot under it shows it is running"/>
 </p>
 <p align="center">
   <img src="website/img/setup-privacy-light.png" width="49%" alt="The last step of setup, Your privacy settings, listing six settings including the firewall, each marked Configured"/>
