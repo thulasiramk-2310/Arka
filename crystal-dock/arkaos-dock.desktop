@@ -2,7 +2,7 @@
 Type=Application
 Name=ArkaOS Dock
 Comment=The dock at the bottom of the screen (Crystal Dock)
-Exec=/usr/bin/crystal-dock
+Exec=/usr/libexec/arka-dock-start
 Icon=user-desktop
 OnlyShowIn=KDE;
 NoDisplay=true

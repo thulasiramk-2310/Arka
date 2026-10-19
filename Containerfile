@@ -44,6 +44,7 @@ COPY arka-arm-boot-counter /usr/libexec/arka-arm-boot-counter
 COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
 COPY autostart/arka-privacy-dots.desktop /etc/xdg/autostart/arka-privacy-dots.desktop
 COPY crystal-dock/arkaos-dock.desktop /etc/xdg/autostart/arkaos-dock.desktop
+COPY crystal-dock/arka-dock-start /usr/libexec/arka-dock-start
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/KDE/panel_1.conf
 COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/KDE/appearance.conf
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/generic/panel_1.conf
