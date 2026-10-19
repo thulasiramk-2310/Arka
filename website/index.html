@@ -98,6 +98,47 @@ pre { font: 13px/1.5 var(--mono); background: var(--bg-2); border: 1px solid var
 footer.site { padding: 40px 0 56px; color: var(--ink-2); font-size: 14px; }
 footer.site .wrap { display: flex; gap: 24px; flex-wrap: wrap; }
 footer.site .end { margin-left: auto; }
+/* Hero reveal: pure CSS, so the page is readable at once and nothing covers it. */
+html { overflow-x: clip; }
+.hero { position: relative; isolation: isolate; }
+.hero::before { content: ""; position: absolute; z-index: -1; left: -30%; right: -30%; top: -10%; height: 80%; pointer-events: none;
+  background: radial-gradient(50% 50% at 30% 40%, rgba(22,199,132,.10), transparent 70%), radial-gradient(40% 40% at 75% 30%, rgba(120,140,170,.10), transparent 70%);
+  animation: drift 32s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translate3d(-3%, 0, 0); } to { transform: translate3d(3%, 4%, 0); } }
+.hw { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .14em; margin-bottom: -.14em; }
+.hw > span { display: inline-block; animation: wup .9s cubic-bezier(.16,1,.3,1) both; animation-delay: calc(.1s + var(--i) * .055s); }
+@keyframes wup { from { transform: translateY(112%); } }
+@keyframes fup { from { opacity: 0; transform: translateY(14px); } }
+.hero .tag { animation: fup .6s ease both; }
+.hero .lead { animation: fup .8s cubic-bezier(.16,1,.3,1) .75s both; }
+.hero .ctas { animation: fup .8s cubic-bezier(.16,1,.3,1) .95s both; }
+.hero .shot { animation: fup 1s cubic-bezier(.16,1,.3,1) 1.1s both; }
+.hero2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 56px; align-items: center; }
+.hero2 h1 { font-size: clamp(34px, 4.4vw, 54px); }
+.hvis { container-type: inline-size; }
+.hd { background: #fff; color: #111317; border: 1px solid #e3e6eb; border-radius: 3cqw; padding: 5cqw 5.5cqw 4.5cqw; box-shadow: 0 5cqw 10cqw rgba(17,19,23,.16); font-family: var(--sans);
+  animation: hdrise 1.1s cubic-bezier(.16,1,.3,1) .9s both; }
+@keyframes hdrise { from { opacity: 0; transform: translateY(8cqw) scale(.985); } }
+.hd .hb { display: flex; align-items: center; gap: 2cqw; font-size: 2.5cqw; font-weight: 600; margin-bottom: 4cqw; }
+.hd .hb svg { width: 3.6cqw; height: 3.6cqw; }
+.hd h2 { font: 500 6.4cqw/1.1 var(--serif); margin: 0; color: #111317; }
+.hd .hsub { font-size: 2.6cqw; line-height: 1.4; color: #4a505b; margin: 1.4cqw 0 3cqw; }
+.hd .r { display: grid; grid-template-columns: 1fr auto; gap: 2cqw; padding: 2.1cqw 0; border-top: 1px solid #edf0f3; animation: fup .6s ease both; animation-delay: calc(1.7s + var(--i) * .1s); }
+.hd .r b { display: block; font-size: 2.9cqw; font-weight: 600; line-height: 1.3; padding-left: 4cqw; position: relative; }
+.hd .r b::before { content: ""; position: absolute; left: 0; top: 1cqw; width: 1.7cqw; height: 1.7cqw; border-radius: 50%; background: #0e8a5f; animation: dotc .01s both; animation-delay: calc(2.4s + var(--i) * .33s); }
+@keyframes dotc { from { background: #cfd5dc; } }
+.hd .r i { display: block; font-style: normal; font-size: 2.3cqw; color: #4a505b; padding-left: 4cqw; line-height: 1.35; }
+.hd .stw { display: grid; align-self: start; }
+.hd .stw > * { grid-area: 1 / 1; justify-self: end; font-size: 2.3cqw; font-weight: 600; }
+.hd .s1 { color: #9aa2ad; opacity: 0; animation: chk .12s linear both; animation-delay: calc(2.38s + var(--i) * .33s); }
+@keyframes chk { from { opacity: 1; } to { opacity: 0; } }
+.hd .s2s { color: #0b7a53; animation: fup .3s ease both; animation-delay: calc(2.4s + var(--i) * .33s); }
+.hd .hn { font-size: 2.3cqw; color: #4a505b; margin: 2.6cqw 0 0; animation: fup .6s ease 4.2s both; }
+@media (max-width: 900px) { .hero2 { grid-template-columns: 1fr; gap: 36px; } .hero2 h1 { font-size: clamp(34px, 7vw, 48px); } }
+@media (prefers-reduced-motion: reduce) {
+  .hero::before, .hw > span, .hero .tag, .hero .lead, .hero .ctas, .hero .shot, .hd, .hd .r, .hd .r b::before, .hd .s1, .hd .s2s, .hd .hn { animation: none !important; }
+}
+button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -122,14 +163,19 @@ footer.site .end { margin-left: auto; }
 </header>
 
 <main id="main">
-  <div class="wrap hero">
+  <div class="wrap hero hero2">
+    <div class="hcopy">
     <span class="tag">Developer preview — not ready for everyday use</span>
-    <h1>A Linux desktop that sets up your privacy, and shows you where it stands.</h1>
+    <h1><span class="hw"><span style="--i:0">A</span></span> <span class="hw"><span style="--i:1">Linux</span></span> <span class="hw"><span style="--i:2">desktop</span></span> <span class="hw"><span style="--i:3">that</span></span> <span class="hw"><span style="--i:4">sets</span></span> <span class="hw"><span style="--i:5">up</span></span> <span class="hw"><span style="--i:6">your</span></span> <span class="hw"><span style="--i:7">privacy,</span></span> <span class="hw"><span style="--i:8">and</span></span> <span class="hw"><span style="--i:9">shows</span></span> <span class="hw"><span style="--i:10">you</span></span> <span class="hw"><span style="--i:11">where</span></span> <span class="hw"><span style="--i:12">it</span></span> <span class="hw"><span style="--i:13">stands.</span></span></h1>
     <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system on disk when it updates. It's built on Fedora and KDE Plasma.</p>
     <div class="ctas">
       <a class="pill" href="#try">Try it in a virtual machine</a>
       <a class="pill quiet" href="#honest">What we can and can't show</a>
     </div>
+    </div>
+    <div class="hvis"><div class="hd" aria-hidden="true"><div class="hb"><svg viewBox="0 0 24 24"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#16c784" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#16c784"/></svg>Privacy Dashboard</div><h2>Privacy</h2><p class="hsub">What ArkaOS has set up on this computer. Covers only what&#39;s listed here.</p><div class="r" style="--i:0"><div><b>Encrypted DNS</b><i>Requires system DNS lookups to be encrypted.</i></div><span class="stw"><span class="s1" style="--i:0">Checking</span><span class="s2s" style="--i:0">Configured</span></span></div><div class="r" style="--i:1"><div><b>Private network address</b><i>Uses a random hardware address on network connections.</i></div><span class="stw"><span class="s1" style="--i:1">Checking</span><span class="s2s" style="--i:1">Configured</span></span></div><div class="r" style="--i:2"><div><b>Generic device name</b><i>Uses the generic network name &quot;arka&quot; instead of yours.</i></div><span class="stw"><span class="s1" style="--i:2">Checking</span><span class="s2s" style="--i:2">Configured</span></span></div><div class="r" style="--i:3"><div><b>Temporary IPv6 addresses</b><i>Uses temporary IPv6 addresses that change over time.</i></div><span class="stw"><span class="s1" style="--i:3">Checking</span><span class="s2s" style="--i:3">Configured</span></span></div><div class="r" style="--i:4"><div><b>Sandboxed browser</b><i>Opens Firefox in a sandbox that sees only your Downloads folder.</i></div><span class="stw"><span class="s1" style="--i:4">Checking</span><span class="s2s" style="--i:4">Configured</span></span></div><div class="r" style="--i:5"><div><b>Firewall</b><i>Rejects connections other computers try to open to this one.</i></div><span class="stw"><span class="s1" style="--i:5">Checking</span><span class="s2s" style="--i:5">Configured</span></span></div><p class="hn">Checked just now.</p></div></div>
+  </div>
+  <div class="wrap" style="padding-bottom:56px">
     <figure class="shot">
       <img src="img/desktop-light.png" width="1440" height="900" alt="The ArkaOS desktop in its light look: a slim top bar with the date and system tray, the ArkaOS Dock at the bottom, and a pale wallpaper with the ArkaOS triangle drawn in thin lines.">
       <figcaption class="note">The ArkaOS desktop in the light look, from a test in a virtual machine. You choose light or dark during setup.</figcaption>
@@ -140,6 +186,7 @@ footer.site .end { margin-left: auto; }
     <div class="wrap">
       <h2>See it in a minute</h2>
       <p class="lead" style="margin-top:14px">From switching it on to the Privacy dashboard: setup, choosing light or dark, and your desktop. Recorded in a virtual machine; nothing is sped up except waiting.</p>
+      <p style="margin-top:20px"><button class="pill" type="button" data-film>Watch the 43-second film</button></p>
       <figure class="shot">
         <video controls preload="none" playsinline width="1440" height="900" poster="img/desktop-light.png" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
           <source src="media/arkaos-tour.mp4" type="video/mp4">
@@ -264,6 +311,7 @@ footer.site .end { margin-left: auto; }
     <a href="docs/">Documentation</a>
     <a href="https://github.com/thulasiramk-2310/Arka">Source code</a>
     <span>GPL-3.0</span>
+    <a href="#tour" data-film>Watch the film</a>
     <span class="end">Built on Fedora, bootc and KDE Plasma.</span>
   </div>
 </footer>
@@ -289,5 +337,6 @@ footer.site .end { margin-left: auto; }
   });
 })();
 </script>
+<script src="intro.js" defer></script>
 </body>
 </html>
