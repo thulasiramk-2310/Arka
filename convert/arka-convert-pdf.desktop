@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=application/pdf;
+Actions=png;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action png]
+Name=PNG
+Exec=arka-convert png %F
+Icon=application-pdf

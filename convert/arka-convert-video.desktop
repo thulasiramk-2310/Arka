@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Service
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;
+Actions=mp4;mkv;webm;mp3;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action mp4]
+Name=MP4
+Exec=arka-convert mp4 %F
+Icon=video-x-generic
+
+[Desktop Action mkv]
+Name=MKV
+Exec=arka-convert mkv %F
+Icon=video-x-generic
+
+[Desktop Action webm]
+Name=WebM
+Exec=arka-convert webm %F
+Icon=video-x-generic
+
+[Desktop Action mp3]
+Name=MP3 (audio only)
+Exec=arka-convert mp3 %F
+Icon=video-x-generic
