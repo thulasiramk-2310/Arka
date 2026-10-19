@@ -38,15 +38,17 @@ COPY convert/wheel/ /build/
 RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build/out -j"$(nproc)"
 
 # Stage 2d: VARA, version control (github.com/thulasiramk-2310/vara), built
-# from its v0.4.1 release. The checkout must be exactly the release commit, so
-# a moved tag fails the build instead of changing what ships. Pure Go, static.
+# from its v0.4.1 release, with the web files of its Hub. The checkout must be
+# exactly the release commit, so a moved tag fails the build instead of
+# changing what ships. Pure Go, static.
 FROM docker.io/library/golang:1.25-alpine AS vara-builder
 RUN apk add --no-cache git
 ARG VARA_TAG=v0.4.1
 ARG VARA_COMMIT=9fdf4afef9e4cfd562eccfb2561146ec3bd52342
 RUN git clone --quiet --depth 1 --branch "$VARA_TAG" https://github.com/thulasiramk-2310/vara /src && \
     test "$(git -C /src rev-parse HEAD)" = "$VARA_COMMIT" && \
-    cd /src && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VARA_TAG#v}" -o /out/vara ./cmd/vara
+    cd /src && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VARA_TAG#v}" -o /out/vara ./cmd/vara && \
+    cp -r /src/web /out/hub && rm -f /out/hub/README.md
 
 # Staging stages for the small, often-edited files and the built binaries,
 # laid out at their final paths. Each COPY into the 11 GB bootc image costs
@@ -83,6 +85,7 @@ COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert
 COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
 COPY convert/org.arkaos.wheel.desktop /usr/share/applications/org.arkaos.wheel.desktop
 COPY convert/arka-wheel-autostart.desktop /etc/xdg/autostart/arka-wheel.desktop
+COPY systemd/vara-hub.service /usr/lib/systemd/user/vara-hub.service
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-dark
 COPY plasma-style/panel /usr/share/plasma/desktoptheme/arkaos-light
 COPY arkad/org.arka.arkad.policy /usr/share/polkit-1/actions/org.arka.arkad.policy
@@ -115,6 +118,7 @@ COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
 COPY --from=shell-builder /build/target/release/arka-privacy-dots /usr/bin/arka-privacy-dots
 COPY --from=wheel-builder /build/out/arka-wheel /usr/bin/arka-wheel
 COPY --from=vara-builder /out/vara /usr/bin/vara
+COPY --from=vara-builder /out/hub /usr/share/vara/hub
 
 # Stage 3: bootc image
 FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}

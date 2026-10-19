@@ -1,0 +1,16 @@
+[Unit]
+Description=VARA Hub on this computer
+Documentation=https://github.com/thulasiramk-2310/vara/blob/main/docs/DEPLOYMENT.md
+
+# Off until switched on in Settings > Developer tools, which also creates the
+# Hub account first. Listens on this computer only. Repositories live in
+# ~/VARA, the Hub's accounts, policy and metadata in ~/.local/share/vara-hub.
+[Service]
+ExecStartPre=/usr/bin/mkdir -p %h/VARA %h/.local/share/vara-hub/accounts %h/.local/share/vara-hub/policy %h/.local/share/vara-hub/meta
+ExecStart=/usr/bin/vara serve --addr 127.0.0.1:8737 --root %h/VARA \
+    --accounts %h/.local/share/vara-hub/accounts --policy %h/.local/share/vara-hub/policy \
+    --meta %h/.local/share/vara-hub/meta --hub /usr/share/vara/hub
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

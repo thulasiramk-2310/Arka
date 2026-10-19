@@ -1,3 +1,4 @@
+pub mod commit_identity;
 pub mod dns;
 pub mod sandbox;
 #[cfg(feature = "gtk")]

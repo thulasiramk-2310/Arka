@@ -76,32 +76,6 @@ fn create_account(user: &str, pass: &str, autologin: bool, dark: bool,
     }
 }
 
-// Same rules as arkaos-oobe-apply, so a bad value is caught on the page.
-fn valid_commit_name(n: &str) -> bool {
-    !n.trim().is_empty() && n.chars().count() <= 100 && !n.chars().any(char::is_control)
-}
-
-fn valid_commit_email(e: &str) -> bool {
-    let mut parts = e.split('@');
-    let ok = |p: Option<&str>| p.is_some_and(|p| !p.is_empty() && !p.chars().any(|c| c.is_whitespace() || c.is_control()));
-    e.len() <= 254 && ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
-}
-
-#[cfg(test)]
-mod commit_identity_tests {
-    #[test]
-    fn names_and_emails_follow_the_helper_rules() {
-        assert!(super::valid_commit_name("Alice Example"));
-        for bad in ["", "   ", "Ali\nce", &"x".repeat(101)] {
-            assert!(!super::valid_commit_name(bad), "{bad:?}");
-        }
-        assert!(super::valid_commit_email("alice@example.org"));
-        for bad in ["", "alice", "@example.org", "alice@", "a b@c.d", "a@b@c", "a@b\n"] {
-            assert!(!super::valid_commit_email(bad), "{bad:?}");
-        }
-    }
-}
-
 fn valid_username(u: &str) -> bool {
     let mut c = u.chars();
     match c.next() {
@@ -130,17 +104,6 @@ struct Privacy {
 
 fn fresh_privacy_check(last: u64, now: u64) -> bool {
     last != 0 && now.checked_sub(last).is_some_and(|age| age < 90)
-}
-
-#[cfg(test)]
-mod freshness_tests {
-    #[test]
-    fn reject_missing_future_and_stale_checks() {
-        assert!(super::fresh_privacy_check(100, 189));
-        for (last, now) in [(0, 100), (101, 100), (100, 190), (100, 1000)] {
-            assert!(!super::fresh_privacy_check(last, now));
-        }
-    }
 }
 
 async fn read_privacy() -> Option<Privacy> {
@@ -970,9 +933,9 @@ fn build_ui(app: &adw::Application) {
             "signin" => {
                 if !(vara_cb.is_active() || git_cb.is_active()) {
                     show(4)
-                } else if !valid_commit_name(&commit_name.text()) {
+                } else if !arka_shell_common::commit_identity::valid_name(&commit_name.text()) {
                     fail("Enter the name to put on your commits.")
-                } else if !valid_commit_email(commit_email.text().trim()) {
+                } else if !arka_shell_common::commit_identity::valid_email(commit_email.text().trim()) {
                     fail("Enter an email for your commits, like you@example.com.")
                 } else {
                     show(4)
@@ -1125,5 +1088,16 @@ fn build_ui(app: &adw::Application) {
             }
             app.quit();
         });
+    }
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    #[test]
+    fn reject_missing_future_and_stale_checks() {
+        assert!(super::fresh_privacy_check(100, 189));
+        for (last, now) in [(0, 100), (101, 100), (100, 190), (100, 1000)] {
+            assert!(!super::fresh_privacy_check(last, now));
+        }
     }
 }

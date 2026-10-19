@@ -54,6 +54,7 @@ fn build_ui(app: &adw::Application) {
         ("Privacy",    "security-high-symbolic"),
         ("Internet",   "network-wireless-symbolic"),
         ("Updates",    "software-update-available-symbolic"),
+        ("Developer tools", "applications-development-symbolic"),
         ("Advanced",   "utilities-terminal-symbolic"),
     ];
 
@@ -88,6 +89,7 @@ fn build_ui(app: &adw::Application) {
     stack.add_named(&page_privacy(),    Some("Privacy"));
     stack.add_named(&page_internet(),   Some("Internet"));
     stack.add_named(&page_updates(),    Some("Updates"));
+    stack.add_named(&page_developer(),  Some("Developer tools"));
     stack.add_named(&page_advanced(),   Some("Advanced"));
 
     // Wire sidebar selection → stack
@@ -372,6 +374,194 @@ fn page_updates() -> gtk4::Widget {
     open_row.connect_activated(|_| { let _ = Command::new("arka-update").spawn(); });
     group.add(&open_row);
     b.append(&group);
+    b.upcast()
+}
+
+// The VARA Hub runs as this user's systemd service (vara-hub.service), off
+// until switched on here, and listens on this computer only.
+const HUB_URL: &str = "http://127.0.0.1:8737";
+
+fn hub_dir(sub: &str) -> std::path::PathBuf {
+    glib::user_data_dir().join("vara-hub").join(sub)
+}
+
+// The commit name and email: VARA's own setting first, Git's otherwise.
+fn current_identity() -> (String, String) {
+    let file = glib::user_config_dir().join("vara").join("identity");
+    let (mut name, mut email) = (String::new(), String::new());
+    for line in std::fs::read_to_string(file).unwrap_or_default().lines() {
+        if let Some((k, v)) = line.split_once('=') {
+            match k.trim() {
+                "name" => name = v.trim().to_string(),
+                "email" => email = v.trim().to_string(),
+                _ => {}
+            }
+        }
+    }
+    let git = |key: &str| {
+        Command::new("git").args(["config", "--global", "--get", key]).output()
+            .ok().filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+    };
+    if name.is_empty() { name = git("user.name"); }
+    if email.is_empty() { email = git("user.email"); }
+    (name, email)
+}
+
+fn run_ok(program: &str, args: &[&str]) -> bool {
+    Command::new(program).args(args).current_dir(glib::home_dir())
+        .output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+fn page_developer() -> gtk4::Widget {
+    let b = page_box("Developer tools", "Version control for writing code. Everything here stays on this computer.");
+
+    // Name and email for commits, written to VARA's and Git's own settings.
+    let id_group = adw::PreferencesGroup::new();
+    id_group.set_title("Name and email for commits");
+    id_group.set_description(Some("VARA and Git put these on every commit you make."));
+    let (name, email) = current_identity();
+    let name_row = adw::EntryRow::new();
+    name_row.set_title("Name");
+    name_row.set_text(&name);
+    let email_row = adw::EntryRow::new();
+    email_row.set_title("Email");
+    email_row.set_text(&email);
+    let save_row = adw::ActionRow::new();
+    save_row.set_title("Save for VARA and Git");
+    let save = gtk4::Button::with_label("Save");
+    save.set_valign(gtk4::Align::Center);
+    save_row.add_suffix(&save);
+    {
+        let (n, e, row) = (name_row.clone(), email_row.clone(), save_row.clone());
+        save.connect_clicked(move |btn| {
+            let (name, email) = (n.text().trim().to_string(), e.text().trim().to_string());
+            if !arka_shell_common::commit_identity::valid_name(&name) {
+                row.set_subtitle("Enter the name to put on your commits.");
+                return;
+            }
+            if !arka_shell_common::commit_identity::valid_email(&email) {
+                row.set_subtitle("Enter an email like you@example.com.");
+                return;
+            }
+            btn.set_sensitive(false);
+            let (row, btn) = (row.clone(), btn.clone());
+            glib::spawn_future_local(async move {
+                let done = gtk4::gio::spawn_blocking(move || {
+                    let vara = run_ok("vara", &["identity", "set", "--default", "--name", &name, "--email", &email]);
+                    let git = run_ok("git", &["config", "--global", "user.name", &name])
+                        && run_ok("git", &["config", "--global", "user.email", &email]);
+                    (vara, git)
+                }).await;
+                row.set_subtitle(match done {
+                    Ok((true, true)) => "Saved for VARA and Git.",
+                    Ok((true, false)) => "Saved for VARA. Git's setting could not be changed.",
+                    Ok((false, true)) => "Saved for Git. VARA's setting could not be changed.",
+                    _ => "Could not save. Nothing was changed.",
+                });
+                btn.set_sensitive(true);
+            });
+        });
+    }
+    id_group.add(&name_row);
+    id_group.add(&email_row);
+    id_group.add(&save_row);
+
+    // The local VARA Hub.
+    let hub_group = adw::PreferencesGroup::new();
+    hub_group.set_title("VARA Hub on this computer");
+    hub_group.set_description(Some(
+        "A web view of the repositories in your VARA folder. Only this computer can reach it.",
+    ));
+    let hub_row = adw::SwitchRow::new();
+    hub_row.set_title("Run the VARA Hub");
+    hub_row.set_subtitle(HUB_URL);
+    hub_row.set_active(run_ok("systemctl", &["--user", "is-enabled", "--quiet", "vara-hub.service"]));
+    let pass_row = adw::PasswordEntryRow::new();
+    pass_row.set_title("Choose a Hub password (8 characters or more), then press Enter");
+    pass_row.set_show_apply_button(true);
+    pass_row.set_visible(false);
+    let open_row = adw::ActionRow::new();
+    open_row.set_title("Open the Hub");
+    open_row.set_subtitle("Sign in with your username and Hub password.");
+    open_row.set_activatable(true);
+    open_row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
+    open_row.set_sensitive(hub_row.is_active());
+    open_row.connect_activated(|_| { let _ = Command::new("xdg-open").arg(HUB_URL).spawn(); });
+
+    // Start or stop the service; the switch shows the result, not the wish.
+    let set_hub: std::rc::Rc<dyn Fn(bool)> = {
+        let (hub_row, open_row) = (hub_row.clone(), open_row.clone());
+        std::rc::Rc::new(move |on: bool| {
+            let (hub_row, open_row) = (hub_row.clone(), open_row.clone());
+            glib::spawn_future_local(async move {
+                let ok = gtk4::gio::spawn_blocking(move || {
+                    let verb = if on { "enable" } else { "disable" };
+                    run_ok("systemctl", &["--user", verb, "--now", "vara-hub.service"])
+                }).await.unwrap_or(false);
+                let now = run_ok("systemctl", &["--user", "is-active", "--quiet", "vara-hub.service"]);
+                hub_row.set_active(now);
+                open_row.set_sensitive(now);
+                hub_row.set_subtitle(if ok { HUB_URL } else if on { "The Hub could not start." } else { "The Hub could not stop." });
+            });
+        })
+    };
+    {
+        let (pass_row, set_hub) = (pass_row.clone(), set_hub.clone());
+        hub_row.connect_active_notify(move |row| {
+            let has_account = std::fs::read_dir(hub_dir("accounts")).map(|mut d| d.next().is_some()).unwrap_or(false);
+            let enabled = run_ok("systemctl", &["--user", "is-enabled", "--quiet", "vara-hub.service"]);
+            if row.is_active() == enabled {
+                return; // a state change made by set_hub itself
+            }
+            if row.is_active() && !has_account {
+                // First use: the Hub needs an account before it starts.
+                row.set_active(false);
+                pass_row.set_visible(true);
+                pass_row.grab_focus();
+                return;
+            }
+            set_hub(row.is_active());
+        });
+    }
+    {
+        let (hub_row, set_hub) = (hub_row.clone(), set_hub.clone());
+        pass_row.connect_apply(move |entry| {
+            let pass = entry.text().to_string();
+            if pass.chars().count() < 8 {
+                entry.set_title("Use at least 8 characters, then press Enter");
+                return;
+            }
+            entry.set_sensitive(false);
+            let (entry, hub_row, set_hub) = (entry.clone(), hub_row.clone(), set_hub.clone());
+            glib::spawn_future_local(async move {
+                let created = gtk4::gio::spawn_blocking(move || {
+                    for sub in ["accounts", "policy", "meta"] {
+                        let _ = std::fs::create_dir_all(hub_dir(sub));
+                    }
+                    let _ = std::fs::create_dir_all(glib::home_dir().join("VARA"));
+                    let (a, p) = (hub_dir("accounts"), hub_dir("policy"));
+                    run_ok("vara", &["account", "create", "--accounts", &a.to_string_lossy(),
+                        "--policy", &p.to_string_lossy(), "--username", &glib::user_name().to_string_lossy(),
+                        "--password", &pass])
+                }).await.unwrap_or(false);
+                entry.set_text("");
+                entry.set_sensitive(true);
+                if created {
+                    entry.set_visible(false);
+                    set_hub(true);
+                } else {
+                    hub_row.set_subtitle("Could not create the Hub account.");
+                }
+            });
+        });
+    }
+    hub_group.add(&hub_row);
+    hub_group.add(&pass_row);
+    hub_group.add(&open_row);
+
+    b.append(&id_group);
+    b.append(&hub_group);
     b.upcast()
 }
 
