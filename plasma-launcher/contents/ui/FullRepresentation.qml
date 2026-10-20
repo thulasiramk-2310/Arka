@@ -43,6 +43,8 @@ Item {
     readonly property var searchModel: root.runnerModel.count ? root.runnerModel.modelForRow(0) : null
     readonly property Item contentView: searching ? searchView : (category === 0 ? pinnedView : appsView)
 
+    // Highlights, tiles and fields share the popups' cut corners (CutRect).
+    readonly property real cut: Math.round(Kirigami.Units.smallSpacing * 1.5)
     readonly property color selectedBackground: Qt.alpha(Kirigami.Theme.highlightColor, 0.16)
     readonly property color hoverBackground: Qt.alpha(Kirigami.Theme.textColor, 0.06)
 
@@ -161,27 +163,50 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        PlasmaExtras.SearchField {
-            id: searchField
-
+        // The search field with the popups' cut corners. The frame is drawn
+        // behind the field rather than as its background: Plasma's TextField
+        // sizes itself from its background, which loops with a Shape.
+        Item {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.smallSpacing
             implicitHeight: Math.round(full.unit * 2.4)
-            placeholderText: i18nc("@info:placeholder", "Search apps and settings")
-            focus: true
 
-            onTextChanged: root.runnerModel.query = text
-
-            function openFirstResult() {
-                if (full.searching && searchView.count > 0) {
-                    full.launch(full.searchModel, 0);
-                }
+            CutRect {
+                anchors.fill: parent
+                cut: full.cut
+                color: Qt.alpha(Kirigami.Theme.textColor, 0.04)
+                borderWidth: 1
+                borderColor: searchField.activeFocus ? Kirigami.Theme.highlightColor
+                    : Qt.alpha(Kirigami.Theme.textColor, 0.18)
             }
 
-            Keys.onDownPressed: full.focusContent()
-            Keys.onReturnPressed: openFirstResult()
-            Keys.onEnterPressed: openFirstResult()
+            PlasmaExtras.SearchField {
+                id: searchField
+
+                anchors.fill: parent
+                placeholderText: i18nc("@info:placeholder", "Search apps and settings")
+                focus: true
+                background: null
+                // Without Plasma's frame there are no frame margins, so keep a
+                // gap between the search icon and the text.
+                leftPadding: effectiveHorizontalAlignment === TextInput.AlignRight
+                    ? Kirigami.Units.largeSpacing : _iconWidth + Kirigami.Units.largeSpacing
+                rightPadding: effectiveHorizontalAlignment === TextInput.AlignRight
+                    ? _iconWidth + Kirigami.Units.largeSpacing : Kirigami.Units.largeSpacing
+
+                onTextChanged: root.runnerModel.query = text
+
+                function openFirstResult() {
+                    if (full.searching && searchView.count > 0) {
+                        full.launch(full.searchModel, 0);
+                    }
+                }
+
+                Keys.onDownPressed: full.focusContent()
+                Keys.onReturnPressed: openFirstResult()
+                Keys.onEnterPressed: openFirstResult()
+            }
         }
 
         RowLayout {
@@ -248,12 +273,12 @@ Item {
                         full.category = index;
                     }
 
-                    background: Rectangle {
-                        radius: Kirigami.Units.cornerRadius
+                    background: CutRect {
+                        cut: full.cut
                         color: categoryButton.current ? full.selectedBackground
                              : (categoryButton.hovered ? full.hoverBackground : "transparent")
-                        border.width: categories.activeFocus && categoryButton.current ? 1 : 0
-                        border.color: Kirigami.Theme.highlightColor
+                        borderWidth: categories.activeFocus && categoryButton.current ? 1 : 0
+                        borderColor: Kirigami.Theme.highlightColor
                     }
 
                     contentItem: RowLayout {
@@ -491,11 +516,11 @@ Item {
                     root.expanded = false;
                 }
 
-                background: Rectangle {
-                    radius: height / 2
+                background: CutRect {
+                    cut: full.cut
                     color: privacyChip.hovered ? full.hoverBackground : "transparent"
-                    border.width: 1
-                    border.color: privacyChip.visualFocus ? Kirigami.Theme.highlightColor
+                    borderWidth: 1
+                    borderColor: privacyChip.visualFocus ? Kirigami.Theme.highlightColor
                         : Qt.alpha(Kirigami.Theme.textColor, 0.15)
                 }
 
@@ -603,13 +628,13 @@ Item {
             onClicked: mouse => full.openPinMenu(tile, mouse.x, mouse.y, tile.model.favoriteId)
         }
 
-        background: Rectangle {
+        background: CutRect {
             anchors.fill: parent
             anchors.margins: 2
-            radius: Kirigami.Units.cornerRadius * 2
+            cut: full.cut + 2
             color: (tile.hovered || (tile.view.activeFocus && tile.view.currentIndex === tile.index)) ? full.hoverBackground : "transparent"
-            border.width: tile.view.activeFocus && tile.view.currentIndex === tile.index ? 1 : 0
-            border.color: Kirigami.Theme.highlightColor
+            borderWidth: tile.view.activeFocus && tile.view.currentIndex === tile.index ? 1 : 0
+            borderColor: Kirigami.Theme.highlightColor
         }
 
         contentItem: ColumnLayout {
@@ -667,11 +692,11 @@ Item {
             onClicked: mouse => full.openPinMenu(row, mouse.x, mouse.y, row.model.favoriteId)
         }
 
-        background: Rectangle {
-            radius: Kirigami.Units.cornerRadius * 2
+        background: CutRect {
+            cut: full.cut
             color: (row.hovered || row.marked || (row.view.activeFocus && row.view.currentIndex === row.index)) ? full.hoverBackground : "transparent"
-            border.width: row.view.activeFocus && row.view.currentIndex === row.index ? 1 : 0
-            border.color: Kirigami.Theme.highlightColor
+            borderWidth: row.view.activeFocus && row.view.currentIndex === row.index ? 1 : 0
+            borderColor: Kirigami.Theme.highlightColor
         }
 
         contentItem: RowLayout {
