@@ -73,8 +73,11 @@ fi
 kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
 kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
 
+# The lock screen keeps the dark wallpaper in both looks, as the login screen
+# does: its clock and text are white, and on the light wallpaper they were
+# hard to read.
 kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image \
-    --group General --key Image "file://$WALL"
+    --group General --key Image "file:///usr/share/arka/wallpapers/default.png"
 
 # The panel keeps the old Plasma style's icon colours until it restarts (seen
 # in the VM: tray icons stayed light-on-light). Restart it once (about 2 s),
