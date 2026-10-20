@@ -114,8 +114,20 @@ Tested in a VM on 2026-10-20 (image 8337693a with the files copied in): open by
 click and Meta, search and Enter, arrow keys between search, categories and
 apps, pin and unpin, launching, the privacy line opening the Dashboard, Lock,
 Log Out and Shut Down prompts, Light, Dark, 150% scaling, and a new account
-getting the ArkaOS pins. Not yet tested: a screen reader, two monitors, real
+getting the ArkaOS pins. On 2026-10-20 the published image (8fb95e41) passed
+the same checks, and two virtual screens worked once the bar came to every
+screen (`panels/`). Not yet tested: a screen reader, real monitors, real
 hardware.
+
+## A bar on every screen (2026-10-20)
+
+Plasma does not give a newly connected screen a panel. `arka-layout.js` adds
+the top bar to each screen at first login; `arka-panels` runs it again, in a
+mode that only adds bars, at every login (a user service) and whenever KWin
+reports a change of screens (the `arka-panels` KWin script starts that
+service). Each screen's desktop remembers that it got a bar, so a bar the user
+removes is not added back. A second screen's bar uses the launcher the account
+already has, so an account that kept KDE's menu gets KDE's menu there too.
 
 ## Done means (each step, in a VM, then on hardware)
 

@@ -165,8 +165,23 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   and search are Plasma's own, so newly installed apps show up, and the panel
   follows the Light or Dark look. New accounts get it; an older account keeps
   KDE's menu until you right-click it and pick *Show Alternatives*. Tested in a
-  VM (2026-10-20) with the mouse and the keyboard, in Light, Dark and at 150%
-  scaling; not yet with a screen reader, on two monitors or on real hardware.
+  VM (2026-10-20) with the mouse and the keyboard, in Light, Dark, at 150%
+  scaling and on two virtual screens; not yet with a screen reader or on real
+  hardware.
+- 🖥️ **A top bar on every screen.** Each screen gets the bar with the
+  launcher, clock and tray, including a screen plugged in later. A bar you
+  remove from a screen stays removed. Tested in a VM with two virtual screens
+  (2026-10-20); not yet with real monitors.
+- 📵 **KDE Connect is off by default.** While it runs, it makes the computer
+  visible to phones and computers on the same network. It no longer starts at
+  login, from the tray or from Dolphin's right-click menu. Opening the KDE
+  Connect app turns it on until you log out, and adding its widget back to the
+  tray starts it at every login. Existing accounts get this with the update.
+  Tested in a VM (2026-10-20).
+- 🔒 **A readable lock screen in Light.** The lock screen keeps the dark
+  wallpaper, as the login screen does, so its white clock stays readable. New
+  accounts' trays leave out Weather and Vaults; both can be switched back on in
+  the tray's settings. Tested in a VM (2026-10-20).
 - 🔁 **Convert files from the right-click menu.** In Dolphin, *Convert to* turns
   pictures into PNG, JPEG, WebP or PDF, a PDF into one PNG per page or a smaller
   PDF (pictures reduced to 150 dpi; nothing is kept if it would not be smaller),
