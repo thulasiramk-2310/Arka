@@ -24,10 +24,11 @@ RUN cargo build --locked --release
 
 # Stage 2b: the dock. Fedora's crystal-dock source package rebuilt with
 # crystal-dock/arkaos-look.patch (blurred background, label bubble, divider
-# before Trash).
+# before Trash) and arkaos-per-user.patch (one dock per account, not per
+# computer).
 FROM docker.io/fedora:${FEDORA_VERSION} AS dock-builder
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q rpm-build 'dnf-command(builddep)' 'dnf-command(download)'
-COPY crystal-dock/arkaos-look.patch crystal-dock/build-rpm.sh /build/
+COPY crystal-dock/arkaos-look.patch crystal-dock/arkaos-per-user.patch crystal-dock/build-rpm.sh /build/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked sh /build/build-rpm.sh
 
 # Stage 2c: the format wheel (convert/wheel), a small Qt Quick program that

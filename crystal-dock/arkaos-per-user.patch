@@ -1,0 +1,24 @@
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -19,6 +19,8 @@
+ #include <filesystem>
+ #include <iostream>
+ 
++#include <unistd.h>
++
+ #include <QApplication>
+ #include <QDir>
+ #include <QIcon>
+@@ -68,9 +70,10 @@
+ int main(int argc, char** argv) {
+   QApplication app(argc, argv);
+ 
+-  // Enforces single instance.
++  // Enforces single instance, per user: with one key for the whole computer,
++  // the dock of one account kept every other account's dock from starting.
+   QSharedMemory sharedMemory;
+-  sharedMemory.setKey("crystal-dock-key");
++  sharedMemory.setKey(QString("crystal-dock-key-%1").arg(getuid()));
+   if (!sharedMemory.create(1 /*byte*/)) {
+     // The failure might have been caused by a previous crash.
+     sharedMemory.attach();
