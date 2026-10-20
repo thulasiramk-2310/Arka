@@ -157,6 +157,16 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   (see `crystal-dock/`). Tested in a VM (2026-10-18), not yet on real hardware.
   Full-screen apps hide it, and it does not come back at the edge until you
   leave full screen.
+- 🔎 **ArkaOS launcher.** The button at the top left, or the Meta key, opens a
+  panel instead of KDE's full-screen menu: a search box for apps and settings,
+  the app categories, your pinned apps, and Lock, Log Out, Restart and Shut
+  Down. Right-click an app to pin or unpin it. The line at the bottom shows the
+  same privacy status as the tray and opens the Privacy Dashboard. The app list
+  and search are Plasma's own, so newly installed apps show up, and the panel
+  follows the Light or Dark look. New accounts get it; an older account keeps
+  KDE's menu until you right-click it and pick *Show Alternatives*. Tested in a
+  VM (2026-10-20) with the mouse and the keyboard, in Light, Dark and at 150%
+  scaling; not yet with a screen reader, on two monitors or on real hardware.
 - 🔁 **Convert files from the right-click menu.** In Dolphin, *Convert to* turns
   pictures into PNG, JPEG, WebP or PDF, a PDF into one PNG per page or a smaller
   PDF (pictures reduced to 150 dpi; nothing is kept if it would not be smaller),

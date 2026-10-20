@@ -1,8 +1,9 @@
 # Arka Shell on KWin: plan
 
 Status: Option A chosen (2026-10-12). Step 1, the panel surface, is built as
-a Plasma style (see "What the first prototype showed"); the shell package
-itself is not shipped yet.
+a Plasma style (see "What the first prototype showed"). The launcher shipped on
+2026-10-20 as a Plasma widget, `org.arkaos.launcher` (see "The launcher"); the
+shell package itself is not shipped yet.
 
 The desktop direction (decided 2026-10-05) is to keep KWin as the compositor and
 give ArkaOS its own shell: the panel, dock, launcher and notification look. An
@@ -16,7 +17,7 @@ Replacing the visible parts is the easy half. Plasma's shell process
 
 | Piece | Today, in plasmashell |
 |---|---|
-| Panel, dock, launcher | Plasma panel, `icontasks`, `kickerdash` |
+| Panel, dock, launcher | Plasma panel, Crystal Dock, `org.arkaos.launcher` (was `kickerdash`) |
 | Window list for the dock | Plasma task manager model (KDE window-management protocol) |
 | System tray | StatusNotifierItem host |
 | Notifications | notification server and popups |
@@ -86,6 +87,35 @@ work. The rest has to be rebuilt:
 - Plasma uses the same shadow tiles for every panel, so the flat top bar and
   the floating dock share one soft shadow rather than the design system's
   heavier floating-surface shadow.
+
+## The launcher (2026-10-20)
+
+The launcher is a Plasma widget (`plasma-launcher/`, installed as
+`org.arkaos.launcher`), not a view in a shell package. A widget needs no new
+shell, so existing panels keep working, and Plasma's *Show Alternatives* swaps
+it with Kickoff, Kicker or the Application Dashboard in either direction.
+
+- Data comes from Plasma's own models (`org.kde.plasma.private.kicker`): the app
+  list and categories, search (only the `krunner_services` and
+  `krunner_systemsettings` runners, so it searches what its placeholder says),
+  and pinned apps. Session buttons use `org.kde.plasma.private.sessions`, which
+  shows KDE's usual confirmation.
+- Pins are KActivities resources shared by every launcher of an account, so an
+  account that switches keeps its pins. New accounts get the list in
+  `/etc/xdg/kicker-extra-favoritesrc`; Fedora's kde-settings ships its own
+  (Kontact, KWrite) with `IgnoreDefaults=true`, and `/etc/xdg` is read first.
+- The privacy line runs `arka-privacy-tray --status`, which prints the tray's
+  level and header from one fresh reading, so the launcher never words the
+  status differently from the tray.
+- Colours come from the Plasma colour scheme, so Light, Dark and a user's own
+  scheme all apply.
+
+Tested in a VM on 2026-10-20 (image 8337693a with the files copied in): open by
+click and Meta, search and Enter, arrow keys between search, categories and
+apps, pin and unpin, launching, the privacy line opening the Dashboard, Lock,
+Log Out and Shut Down prompts, Light, Dark, 150% scaling, and a new account
+getting the ArkaOS pins. Not yet tested: a screen reader, two monitors, real
+hardware.
 
 ## Done means (each step, in a VM, then on hardware)
 

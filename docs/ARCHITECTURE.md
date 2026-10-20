@@ -104,7 +104,7 @@ missing, zero, future or older timestamps display a neutral unknown state.
 3. **First login (arka-plasma-firstrun):** VM resolution bump, wallpaper +
    scheme apply via plasma-apply-*, panel layout via
    `PlasmaShell.evaluateScript(arka-layout.js)` (top bar 36px + floating
-   icons-only dock + kickerdash full-screen launcher), then self-removes.
+   icons-only dock + the ArkaOS launcher, `plasma-launcher/`), then self-removes.
 
 Why a first-login script instead of baking plasmashell config? Plasma's panel
 config is per-user, versioned, and hostile to hand-written files; the scripting
