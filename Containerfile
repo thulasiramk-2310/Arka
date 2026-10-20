@@ -457,6 +457,13 @@ RUN for look in Dark Light; do \
 COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
+COPY plasma-launcher /usr/share/plasma/plasmoids/org.arkaos.launcher
+# Apps pinned in the launcher for a new account. Fedora's kde-settings pins
+# Kontact and KWrite through its own kicker-extra-favoritesrc; /etc/xdg comes
+# first in XDG_CONFIG_DIRS, so this list is the one Plasma reads.
+RUN printf '[General]\nPrepend=%s\nIgnoreDefaults=true\n' \
+      'org.mozilla.firefox.desktop;org.kde.dolphin.desktop;org.kde.konsole.desktop;org.kde.discover.desktop;arka-settings.desktop;arka-dashboard.desktop;libreoffice-writer.desktop;libreoffice-calc.desktop;org.kde.kcalc.desktop;org.kde.okular.desktop;org.kde.gwenview.desktop;org.kde.plasma-systemmonitor.desktop' \
+      > /etc/xdg/kicker-extra-favoritesrc
 
 # Updates come from ghcr.io/thulasiramk-2310/arka, built and signed by the
 # Image workflow. Only images signed with the ArkaOS key are accepted from
@@ -591,8 +598,9 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
 # (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
-# arka-launcher are not shipped: Plasma's panel, Crystal Dock and kickerdash
-# replace them (the old ones are in git history, before 0d707ca).
+# arka-launcher are not shipped: Plasma's panel, Crystal Dock and the
+# org.arkaos.launcher widget replace them (the old ones are in git history,
+# before 0d707ca).
 COPY --from=bins / /
 RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \

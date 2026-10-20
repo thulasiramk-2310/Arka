@@ -15,7 +15,7 @@ LOOK=$(cat "$HOME/.config/arka-look" 2>/dev/null)
 /usr/libexec/arka-apply-look "$LOOK"
 
 # Reshape the desktop toward the ArkaOS layout (top bar + floating dock +
-# full-screen launcher) via Plasma's scripting API.
+# launcher) via Plasma's scripting API.
 LAYOUT=/usr/share/arka/arka-layout.js
 # arka-apply-look restarts plasmashell; wait (up to 20 s) until it is back on
 # the session bus before sending it the layout script.
@@ -27,7 +27,7 @@ done
 sleep 1
 # New desktops get the ArkaOS layout from the ArkaOS global theme; only
 # reshape a desktop that doesn't have it yet (e.g. created before that existed).
-if [ -f "$LAYOUT" ] && ! grep -q "org.kde.plasma.kickerdash" "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null; then
+if [ -f "$LAYOUT" ] && ! grep -q -e "org.arkaos.launcher" -e "org.kde.plasma.kickerdash" "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null; then
     dbus-send --session --type=method_call --dest=org.kde.plasmashell \
         /PlasmaShell org.kde.PlasmaShell.evaluateScript \
         string:"$(cat "$LAYOUT")" 2>/dev/null || true

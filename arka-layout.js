@@ -1,7 +1,8 @@
 // ArkaOS desktop layout for KDE Plasma — evokes the ArkaOS design:
 //   • a slim top bar (launcher + clock + system tray)
 //   • the dock at the bottom is Crystal Dock, started separately
-//   • a full-screen application launcher (Application Dashboard)
+//   • the ArkaOS launcher (org.arkaos.launcher, plasma-launcher/), a popup
+//     from the top-left button
 // Applied once on first login by arka-plasma-firstrun via evaluateScript.
 // JS strings use single quotes so the whole script can be passed inside a
 // double-quoted shell argument.
@@ -12,7 +13,7 @@ var top = new Panel;
 top.location = 'top';
 top.height = 34;
 try { top.floating = false; } catch (e) {}      // flat bar on the screen edge; the dock floats
-top.addWidget('org.kde.plasma.kickerdash');     // full-screen launcher button
+top.addWidget('org.arkaos.launcher');           // launcher button
 top.addWidget('org.kde.plasma.panelspacer');
 var clock = top.addWidget('org.kde.plasma.digitalclock');
 // Readable date beside the time ("Sat 4 Oct 19:33"). Day/month names follow
