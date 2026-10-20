@@ -1,0 +1,21 @@
+#!/bin/bash
+# arka-panels — put the ArkaOS top bar on any screen that doesn't have one yet.
+# Started at login (arka-panels.service) and by the arka-panels KWin script
+# when a screen is added. It runs arka-layout.js with arkaKeepPanels set, which
+# only adds bars: it never removes a panel, and a screen gets a bar only once.
+
+LAYOUT=/usr/share/arka/arka-layout.js
+[ -f "$LAYOUT" ] || exit 0
+
+# Wait (up to 30 s) until plasmashell is on the session bus.
+for _ in $(seq 1 60); do
+    dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.NameHasOwner string:org.kde.plasmashell 2>/dev/null | grep -q "boolean true" && break
+    sleep 0.5
+done
+# Plasma makes a new screen's desktop a moment after KWin reports the screen.
+sleep 2
+
+dbus-send --session --type=method_call --dest=org.kde.plasmashell \
+    /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+    string:"var arkaKeepPanels = true; $(cat "$LAYOUT")" 2>/dev/null || true

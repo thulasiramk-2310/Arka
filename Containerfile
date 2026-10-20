@@ -466,6 +466,12 @@ RUN printf '[General]\nPrepend=%s\nIgnoreDefaults=true\n' \
       'org.mozilla.firefox.desktop;org.kde.dolphin.desktop;org.kde.konsole.desktop;org.kde.discover.desktop;arka-settings.desktop;arka-dashboard.desktop;libreoffice-writer.desktop;libreoffice-calc.desktop;org.kde.kcalc.desktop;org.kde.okular.desktop;org.kde.gwenview.desktop;org.kde.plasma-systemmonitor.desktop' \
       > /etc/xdg/kicker-extra-favoritesrc
 
+# A top bar on every screen, including one connected later (panels/).
+COPY panels/arka-panels /usr/libexec/arka-panels
+COPY panels/arka-panels.service /usr/lib/systemd/user/arka-panels.service
+COPY panels/kwin /usr/share/kwin/scripts/arka-panels
+RUN chmod 755 /usr/libexec/arka-panels && systemctl --global enable arka-panels.service
+
 # Updates come from ghcr.io/thulasiramk-2310/arka, built and signed by the
 # Image workflow. Only images signed with the ArkaOS key are accepted from
 # there; a pull of an unsigned or differently signed image fails before

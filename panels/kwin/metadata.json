@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ArkaOS"
+            }
+        ],
+        "Description": "Adds the ArkaOS top bar to a screen when it is connected",
+        "EnabledByDefault": true,
+        "Icon": "video-display",
+        "Id": "arka-panels",
+        "License": "GPL-3.0-or-later",
+        "Name": "ArkaOS top bar on new screens"
+    },
+    "X-Plasma-API": "javascript"
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=ArkaOS top bar on every screen
+PartOf=graphical-session.target
+After=plasma-plasmashell.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/arka-panels
+
+[Install]
+WantedBy=plasma-workspace.target
