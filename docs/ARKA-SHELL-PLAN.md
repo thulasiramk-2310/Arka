@@ -88,6 +88,19 @@ work. The rest has to be rebuilt:
   the floating dock share one soft shadow rather than the design system's
   heavier floating-surface shadow.
 
+## Popups (2026-10-20)
+
+Every popup Plasma draws (notifications, the volume and brightness popups, the
+tray, calendar and launcher) takes its frame from the Plasma style's
+`dialogs/background`. `plasma-style/make-panel-svg.py` now writes that file
+too, so all of them change without replacing any KDE component. Four looks
+were compared in the VM (round corners, cut corners, an accent line, a flat
+outline); cut corners were chosen because they echo the ArkaOS mark and no
+other desktop uses them. Corners are cut at 45 degrees (10px), with a 1px
+border and a softer, wider shadow than the panel's. Popups attached to the top
+bar keep a square edge against it, as in Breeze. The launcher's own search
+field, highlights and tiles use the same shape (`CutRect.qml`).
+
 ## The launcher (2026-10-20)
 
 The launcher is a Plasma widget (`plasma-launcher/`, installed as

@@ -168,6 +168,12 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   VM (2026-10-20) with the mouse and the keyboard, in Light, Dark, at 150%
   scaling and on two virtual screens; not yet with a screen reader or on real
   hardware.
+- ⛰️ **ArkaOS popups.** Notifications, the volume and brightness popups, the
+  calendar, the tray and the launcher have corners cut at 45 degrees, like the
+  peaks in the ArkaOS mark and wallpaper, with a thin border and a soft shadow.
+  The launcher's search field, highlights and tiles have the same corners. It is
+  part of the ArkaOS Plasma style, so it follows Light and Dark. Tested in a VM
+  (2026-10-20).
 - 🖥️ **A top bar on every screen.** Each screen gets the bar with the
   launcher, clock and tray, including a screen plugged in later. A bar you
   remove from a screen stays removed. Tested in a VM with two virtual screens
