@@ -188,7 +188,7 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   built-in undo and integrity checks) and Git with the name and email for your
   commits. Settings › Developer tools changes them later and can run a VARA Hub,
   a web view of your repositories that only this computer can reach. The Hub is
-  off until you switch it on. VARA is built from its v0.4.3 release. Tested in a
+  off until you switch it on. VARA is built from its v0.4.4 release. Tested in a
   VM (2026-10-20); not yet on real hardware.
 - 🖐️ **Natural touchpad scrolling by default**, as on macOS, Windows and GNOME
   (content follows the fingers). It can be turned off in System Settings. Tested
