@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Generate the ArkaOS Plasma style's panel-background SVGs.
+"""Generate the ArkaOS Plasma style's panel and dialog background SVGs.
 
     make-panel-svg.py OUT_DIR
 
-Writes OUT_DIR/widgets/panel-background.svg (translucent, used with KWin's
-blur) and OUT_DIR/solid/widgets/panel-background.svg (opaque).
+Writes OUT_DIR/widgets/panel-background.svg and OUT_DIR/dialogs/background.svg
+(translucent, used with KWin's blur), and the same under OUT_DIR/solid/
+(opaque). Dialogs are every popup Plasma draws: notifications, the volume and
+brightness popups, and the tray, calendar and launcher popups.
 
-The panel follows the ArkaOS design system: a raised surface with 24px
-corners and a 1px border, plus a soft shadow (see SH_* below). Plasma reads the panel's shape, blur region and shadow from this SVG,
-so the frame, its alpha (the mask) and the shadow tiles all use the same
-rounded rectangle. Colours come from the colour scheme's classes, so the same
-file works for Light and Dark.
+Both follow the ArkaOS design system: a raised surface with a 1px border and
+a soft shadow, rounded corners for panels and corners cut at 45 degrees for
+popups (see PANEL and DIALOG below). Plasma reads the shape, blur region and
+shadow from these SVGs, so the frame, its alpha (the mask) and the shadow
+tiles all use the same shape. Colours
+come from the colour scheme's classes, so the same files work for Light and
+Dark.
 
 The shadow is rasterised (KWin draws it from image tiles anyway) with the
 panel's own shape cut out, so it never shows through a translucent panel.
@@ -18,33 +22,59 @@ panel's own shape cut out, so it never shows through a translucent panel.
 import base64, io, os, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageChops
 
-R = 24          # corner radius (design system: dock, launcher panel)
-C = 8           # size of the stretchable edge and centre pieces
-HINT = 8        # content padding at the sides
-HINT_TB = 7     # content padding above and below (sizes the top bar's clock)
-BORDER = 0.12   # border opacity, as a fraction of the text colour
-
 # Plasma gives every panel the same shadow tiles, the flat top bar as well as
-# the floating dock, so this is a softer shadow than the design system's
+# the floating dock, so the panel has a softer shadow than the design system's
 # floating-surface token (0 8px 24px, 45%), which looked heavy under the bar.
 # A Gaussian reaches about 2 sigma.
-SH_Y, SH_SIGMA, SH_ALPHA = 2, 6, 0.22
-SPREAD = 2 * SH_SIGMA
-PAD = {"top": SPREAD - SH_Y, "bottom": SPREAD + SH_Y, "left": SPREAD, "right": SPREAD}
+PANEL = dict(
+    R=24,          # corner radius (design system: dock, launcher panel)
+    HINT=8,        # content padding at the sides
+    HINT_TB=7,     # content padding above and below (sizes the top bar's clock)
+    THICK=True,    # also the thick-panel hints
+    SH_Y=2, SH_SIGMA=6, SH_ALPHA=0.22,
+    FILL=0.85,     # translucent version; the solid one is opaque
+)
+# Popups float over windows, so they take a stronger shadow, closer to the
+# design system's floating surface. Their corners are cut at 45 degrees, like
+# the peaks of the ArkaOS mark and wallpaper, which sets ArkaOS's popups apart
+# from the rounded ones of other desktops (chosen 2026-10-20 from four looks).
+DIALOG = dict(
+    R=10,
+    CORNER="cut",
+    BORDER=0.16,
+    HINT=10,
+    HINT_TB=10,
+    THICK=False,
+    SH_Y=6, SH_SIGMA=10, SH_ALPHA=0.28,
+    FILL=0.94,
+)
+C = 8           # size of the stretchable edge and centre pieces
+BORDER = 0.12   # border opacity, as a fraction of the text colour
 SS = 4          # supersampling for the shadow cut-out edge
 
 
-def shadow_tiles():
-    """Shadow of a (2R+C) square with radius R, cut into eight tiles."""
+def pad(st):
+    spread = 2 * st["SH_SIGMA"]
+    return {"top": spread - st["SH_Y"], "bottom": spread + st["SH_Y"], "left": spread, "right": spread}
+
+
+def shadow_tiles(st):
+    """Shadow of a (2R+C) square with corner size R, cut into eight tiles."""
+    R, SH_Y, SH_SIGMA, SH_ALPHA, PAD = st["R"], st["SH_Y"], st["SH_SIGMA"], st["SH_ALPHA"], pad(st)
     w = h = 2 * R + C
     W, H = w + PAD["left"] + PAD["right"], h + PAD["top"] + PAD["bottom"]
     x0, y0 = PAD["left"], PAD["top"]
 
     def shape(dy=0, scale=1):
         im = Image.new("L", (W * scale, H * scale), 0)
-        ImageDraw.Draw(im).rounded_rectangle(
-            [x0 * scale, (y0 + dy) * scale, (x0 + w) * scale - 1, (y0 + dy + h) * scale - 1],
-            radius=R * scale, fill=255)
+        a, b = x0 * scale, (y0 + dy) * scale
+        c, d = (x0 + w) * scale - 1, (y0 + dy + h) * scale - 1
+        r = R * scale
+        if st.get("CORNER") == "cut":
+            ImageDraw.Draw(im).polygon([(a + r, b), (c - r, b), (c, b + r), (c, d - r),
+                                        (c - r, d), (a + r, d), (a, d - r), (a, b + r)], fill=255)
+        else:
+            ImageDraw.Draw(im).rounded_rectangle([a, b, c, d], radius=r, fill=255)
         return im if scale == 1 else im.resize((W, H), Image.LANCZOS)
 
     blur = shape(SH_Y).filter(ImageFilter.GaussianBlur(SH_SIGMA))
@@ -75,14 +105,15 @@ def shadow_tiles():
     return tiles
 
 
-def frame(fill_opacity):
-    """Nine vector pieces of the rounded frame, laid out on a grid.
+def frame(st, fill_opacity):
+    """Nine vector pieces of the frame (round or cut corners), laid out on a grid.
 
     The border is a filled 1px shape, not a stroke: QtSvg counts half the
     stroke width in an element's bounds, which left seams between pieces.
     """
+    R = st["R"]
     out = []
-    bo = f'class="ColorScheme-Text" style="fill:currentColor;fill-opacity:{BORDER};stroke:none"'
+    bo = f'class="ColorScheme-Text" style="fill:currentColor;fill-opacity:{st.get("BORDER", BORDER)};stroke:none"'
     bg = f'class="ColorScheme-Background" style="fill:currentColor;fill-opacity:{fill_opacity};stroke:none"'
     E = R + C  # start of the far corner column/row
 
@@ -93,9 +124,15 @@ def frame(fill_opacity):
 
     # Top-left corner: quarter disc and a 1px ring along its arc. The other
     # corners are this one mirrored inside their R x R cell.
-    corner = (f'<path {bg} d="M 0 {R} A {R} {R} 0 0 1 {R} 0 L {R} {R} Z"/>'
-              f'<path {bo} d="M 0 {R} A {R} {R} 0 0 1 {R} 0 L {R} 1 '
-              f'A {R - 1} {R - 1} 0 0 0 1 {R} Z"/>')
+    if st.get("CORNER") == "cut":
+        # A 45-degree cut instead of an arc, and a 1px band along it.
+        k = 1.414
+        corner = (f'<path {bg} d="M 0 {R} L {R} 0 L {R} {R} Z"/>'
+                  f'<path {bo} d="M 0 {R} L {R} 0 L {R} {k} L {k} {R} Z"/>')
+    else:
+        corner = (f'<path {bg} d="M 0 {R} A {R} {R} 0 0 1 {R} 0 L {R} {R} Z"/>'
+                  f'<path {bo} d="M 0 {R} A {R} {R} 0 0 1 {R} 0 L {R} 1 '
+                  f'A {R - 1} {R - 1} 0 0 0 1 {R} Z"/>')
     mirror = lambda sx, sy: (f'<g transform="matrix({sx},0,0,{sy},{R if sx < 0 else 0},{R if sy < 0 else 0})">'
                              f'{corner}</g>')
     edge = lambda w, ht, bx, by, bw, bh: (f'<rect {bg} width="{w}" height="{ht}"/>'
@@ -112,11 +149,12 @@ def frame(fill_opacity):
     return "\n".join(out)
 
 
-def hints(y):
-    """Content padding (normal and thick panels) and shadow extent hints."""
+def hints(st, y):
+    """Content padding (and thick-panel padding) and shadow extent hints."""
+    HINT, HINT_TB, PAD = st["HINT"], st["HINT_TB"], pad(st)
     m = '<rect id="{}" x="{}" y="{}" width="{}" height="{}" style="fill:#ff00ff"/>'
     out = []
-    for prefix in ("", "thick-"):
+    for prefix in ("", "thick-") if st["THICK"] else ("",):
         out += [m.format(prefix + "hint-top-margin", 0, y, 1, HINT_TB),
                 m.format(prefix + "hint-bottom-margin", 2, y, 1, HINT_TB),
                 m.format(prefix + "hint-left-margin", 4, y, HINT, 1),
@@ -132,11 +170,11 @@ def hints(y):
     return "\n".join(out), y + 4
 
 
-def svg(fill_opacity):
-    grid = 2 * R + C
-    hint_svg, y = hints(grid + 8)
+def svg(st, fill_opacity):
+    grid = 2 * st["R"] + C
+    hint_svg, y = hints(st, grid + 8)
     parts, x, row_h = [], 0, 0
-    for name, (w, h, data) in shadow_tiles().items():
+    for name, (w, h, data) in shadow_tiles(st).items():
         parts.append(f'<image id="{name}" x="{x}" y="{y}" width="{w}" height="{h}" '
                      f'xlink:href="data:image/png;base64,{data}"/>')
         x += w + 4
@@ -148,7 +186,7 @@ def svg(fill_opacity):
 .ColorScheme-Text {{ color:#232629; }}
 .ColorScheme-Background {{ color:#eff0f1; }}
 </style></defs>
-{frame(fill_opacity)}
+{frame(st, fill_opacity)}
 {hint_svg}
 {chr(10).join(parts)}
 </svg>
@@ -157,7 +195,9 @@ def svg(fill_opacity):
 
 if __name__ == "__main__":
     out = sys.argv[1]
-    for sub, opacity in (("widgets", 0.85), ("solid/widgets", 1)):
-        os.makedirs(os.path.join(out, sub), exist_ok=True)
-        with open(os.path.join(out, sub, "panel-background.svg"), "w") as f:
-            f.write(svg(opacity))
+    for st, path in ((PANEL, "widgets/panel-background.svg"), (DIALOG, "dialogs/background.svg")):
+        for sub, opacity in (("", st["FILL"]), ("solid", 1)):
+            f = os.path.join(out, sub, path)
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            with open(f, "w") as fh:
+                fh.write(svg(st, opacity))

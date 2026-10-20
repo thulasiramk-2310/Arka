@@ -565,8 +565,9 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 #    the hardware clock as local time like Windows; otherwise ArkaOS shows a time
 #    5 h 30 min off. Changes how Linux reads the clock only, never Windows.
 #  - ArkaOS Plasma styles (arkaos-dark/-light): Breeze's colours with ArkaOS
-#    panels (24px corners, 1px border, soft shadow; plasma-style/). Plasma
-#    takes every other element from its default style.
+#    panels (24px corners, 1px border, soft shadow) and popups (corners cut at
+#    45 degrees; plasma-style/). Plasma takes every other element from its
+#    default style.
 # Runtime library for the privacy dots overlay, and the dock (Crystal Dock with
 # the ArkaOS patch, its own layer-shell window, so icons can grow above it;
 # see crystal-dock/).
@@ -604,7 +605,7 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
       d=/usr/share/plasma/desktoptheme/arkaos-$v && \
       if [ $v = dark ]; then n=Dark; else n=Light; fi && \
       cp /usr/share/plasma/desktoptheme/breeze-$v/colors /usr/share/plasma/desktoptheme/breeze-$v/plasmarc $d/ && \
-      printf '{"KPlugin": {"Id": "arkaos-%s", "Name": "ArkaOS %s", "Description": "Breeze %s with ArkaOS panels", "License": "LGPL-2.1-or-later"}, "X-Plasma-API": "5.0"}\n' \
+      printf '{"KPlugin": {"Id": "arkaos-%s", "Name": "ArkaOS %s", "Description": "Breeze %s with ArkaOS panels and popups", "License": "LGPL-2.1-or-later"}, "X-Plasma-API": "5.0"}\n' \
         $v $n $n > $d/metadata.json || exit 1; \
     done && \
     printf '\n# ArkaOS: also ask these time servers by address. With a dead clock battery the date\n# starts wrong, DNS then rejects every answer, and a time service that needs DNS\n# can never fix the date. Cloudflare and Google answer on fixed addresses.\nserver 162.159.200.1 iburst\nserver 162.159.200.123 iburst\nserver 216.239.35.0 iburst\nserver 216.239.35.4 iburst\n' >> /etc/chrony.conf && \
