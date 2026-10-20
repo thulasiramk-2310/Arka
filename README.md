@@ -165,8 +165,8 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   and search are Plasma's own, so newly installed apps show up, and the panel
   follows the Light or Dark look. New accounts get it; an older account keeps
   KDE's menu until you right-click it and pick *Show Alternatives*. Tested in a
-  VM (2026-10-20) with the mouse and the keyboard, in Light, Dark, at 150%
-  scaling and on two virtual screens; not yet with a screen reader or on real
+  VM (2026-10-20) with the mouse and the keyboard, with the Orca screen reader,
+  in Light, Dark, at 150% scaling and on two virtual screens; not yet on real
   hardware.
 - ⛰️ **ArkaOS popups.** Notifications, the volume and brightness popups, the
   calendar, the tray and the launcher have corners cut at 45 degrees, like the

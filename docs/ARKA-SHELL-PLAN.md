@@ -129,8 +129,10 @@ apps, pin and unpin, launching, the privacy line opening the Dashboard, Lock,
 Log Out and Shut Down prompts, Light, Dark, 150% scaling, and a new account
 getting the ArkaOS pins. On 2026-10-20 the published image (8fb95e41) passed
 the same checks, and two virtual screens worked once the bar came to every
-screen (`panels/`). Not yet tested: a screen reader, real monitors, real
-hardware.
+screen (`panels/`). With Orca, the search field, the categories (read as
+"Office, 13 apps"), the pinned apps, results and session buttons are all
+announced by name; checked again through the AT-SPI tree after the category
+fix. Not yet tested: real monitors, real hardware.
 
 ## A bar on every screen (2026-10-20)
 
