@@ -243,8 +243,49 @@ async fn send_notification(p: &NotificationsProxy<'_>, n: &Notification) {
 
 // ── main loop ────────────────────────────────────────────────────────────────
 
+/// One reading of arkad and the event log: what the tray shows right now.
+async fn snapshot(t: u64) -> (ArkaTray, Vec<Event>) {
+    let enf = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let sys = zbus::Connection::system().await.ok()?;
+        let proxy = ArkadProxy::builder(&sys)
+            .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        read_enforcement(&proxy).await
+    }).await.ok().flatten();
+    let events = read_events();
+    let drifts_today = drifts_since(&events, utc_midnight(t));
+    let recent_drift = events.iter().any(|e| e.is_drift() && e.ts >= t.saturating_sub(RECENT_DRIFT_WINDOW));
+
+    let (enf_now, arkad_up) = match enf {
+        Some(e) => (e, true),
+        None => (Enforcement::default(), false),
+    };
+    let lvl = if arkad_up { level(&enf_now, recent_drift) } else { Level::Critical };
+    let tray = ArkaTray { enf: enf_now, level: lvl, drifts_today, recent: events.clone(), arkad_up };
+    (tray, events)
+}
+
+/// `--status`: print the tray's level and header once, for the launcher.
+fn status_line(tray: &ArkaTray) -> String {
+    let lvl = if !tray.arkad_up {
+        "unknown"
+    } else {
+        match tray.level {
+            Level::Ok => "ok",
+            Level::Warn => "warn",
+            Level::Critical => "critical",
+        }
+    };
+    format!("{lvl}\t{}", tray.header())
+}
+
 #[tokio::main]
 async fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--status") {
+        let (tray, _) = snapshot(now()).await;
+        println!("{}", status_line(&tray));
+        return;
+    }
+
     tracing_subscriber::fmt().with_target(false).without_time().init();
 
     let handle = match ArkaTray::default().spawn().await {
@@ -266,38 +307,17 @@ async fn main() {
 
     loop {
         let t = now();
-        let enf = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            let sys = zbus::Connection::system().await.ok()?;
-            let proxy = ArkadProxy::builder(&sys)
-                .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
-            read_enforcement(&proxy).await
-        }).await.ok().flatten();
-        let events = read_events();
-        let drifts_today = drifts_since(&events, utc_midnight(t));
-        let recent_drift = events.iter().any(|e| e.is_drift() && e.ts >= t.saturating_sub(RECENT_DRIFT_WINDOW));
-
-        let (enf_now, arkad_up) = match enf {
-            Some(e) => (e, true),
-            None => (Enforcement::default(), false),
-        };
-        let lvl = if arkad_up { level(&enf_now, recent_drift) } else { Level::Critical };
+        let (next, events) = snapshot(t).await;
 
         // Notify (only when arkad is reachable — otherwise state is unknown, not "down").
-        if arkad_up {
-            if let (Some(np), Some(n)) = (&notifier_proxy, notifier.evaluate(&events, &enf_now, t)) {
+        if next.arkad_up {
+            if let (Some(np), Some(n)) = (&notifier_proxy, notifier.evaluate(&events, &next.enf, t)) {
                 send_notification(np, &n).await;
             }
         }
 
-        let recent: Vec<Event> = events;
         handle
-            .update(move |tray: &mut ArkaTray| {
-                tray.enf = enf_now;
-                tray.level = lvl;
-                tray.drifts_today = drifts_today;
-                tray.recent = recent;
-                tray.arkad_up = arkad_up;
-            })
+            .update(move |tray: &mut ArkaTray| *tray = next)
             .await;
 
         tokio::time::sleep(std::time::Duration::from_secs(POLL_SECS)).await;
@@ -313,5 +333,13 @@ mod tests {
         assert_eq!(tray.icon_name(), "dialog-question-symbolic");
         assert!(tray.header().starts_with("Status unknown"));
         assert_eq!(tray.menu().len(), 3);
+    }
+
+    #[test]
+    fn status_line_never_reports_ok_without_a_fresh_check() {
+        let tray = ArkaTray::default();
+        assert!(status_line(&tray).starts_with("unknown\tStatus unknown"));
+        let up = ArkaTray { arkad_up: true, ..ArkaTray::default() };
+        assert_eq!(status_line(&up), "ok\tConfigured — 0 drifts today");
     }
 }
