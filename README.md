@@ -157,6 +157,39 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   (see `crystal-dock/`). Tested in a VM (2026-10-18), not yet on real hardware.
   Full-screen apps hide it, and it does not come back at the edge until you
   leave full screen.
+- 🔁 **Convert files from the right-click menu.** In Dolphin, *Convert to* turns
+  pictures into PNG, JPEG, WebP or PDF, a PDF into one PNG per page or a smaller
+  PDF (pictures reduced to 150 dpi; nothing is kept if it would not be smaller),
+  sound into MP3, FLAC, WAV, Ogg, Opus or AAC, and video into MP4 (H.264), MKV
+  or WebM, or just its sound as MP3. The copy is saved next to the original and
+  never replaces a file. Each converter (ffmpeg, Pillow, poppler, Ghostscript)
+  runs in a sandbox with no network access. Long sound and video conversions
+  show their progress, and stopping one leaves no half-made file behind. Tested in a VM (2026-10-19 and
+  2026-10-20); not yet on real hardware. Dolphin's preview of a very short
+  H.264 video (about 2 seconds) can look scrambled; the file itself is fine.
+- 🧹 **Remove hidden details.** Photos, PDFs, sound and video files often carry
+  details you can't see: where a photo was taken, the camera, the author's name,
+  the software that made a document. *Remove hidden details* in Dolphin's
+  right-click menu saves a copy without them, made by
+  [mat2](https://0xacab.org/jvoisin/mat2) inside the same no-network sandbox.
+  It works on PNG, JPEG, WebP, GIF, BMP, TIFF, PDF, MP3, FLAC, Ogg, WAV, MP4 and
+  AVI files. It removes what mat2 knows about; it cannot remove what is in the
+  picture or sound itself. Pictures are saved again, which can change a JPEG
+  slightly. Tested in a VM (2026-10-20): a photo's camera and author, a video's
+  GPS position and a PDF's author were gone from the copies.
+- 🎡 **Format wheel.** Drag a file, press Meta+Alt+C, and a ring of the formats
+  that file can become appears at the pointer; drop the file on one to convert
+  it. *Convert with the format wheel* in the right-click menu opens the same
+  ring for clicking. The shortcut can be changed in System Settings › Shortcuts.
+  Tested in a VM with drags from Dolphin, Gwenview and Firefox (2026-10-19); not
+  yet with a real touchpad.
+- 🧬 **VARA and Git for writing code.** Under *Advanced options*, setup can set
+  up [VARA](https://github.com/thulasiramk-2310/vara) (version control with
+  built-in undo and integrity checks) and Git with the name and email for your
+  commits. Settings › Developer tools changes them later and can run a VARA Hub,
+  a web view of your repositories that only this computer can reach. The Hub is
+  off until you switch it on. VARA is built from its v0.4.3 release. Tested in a
+  VM (2026-10-20); not yet on real hardware.
 - 🖐️ **Natural touchpad scrolling by default**, as on macOS, Windows and GNOME
   (content follows the fingers). It can be turned off in System Settings. Tested
   in a VM with a virtual touchpad; not yet on a real one.
@@ -165,7 +198,7 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   arkad fixes at once, no longer shows a popup. When a setting comes back on its
   own, the log says *Setting confirmed again*. Tested in a VM (2026-10-14).
 
-Everything above was tested in a VM between 2026-10-11 and 2026-10-17 unless it
+Everything above was tested in a VM between 2026-10-11 and 2026-10-20 unless it
 says otherwise. Still a developer preview: the installer is new and VM-tested only, one
 hardware data point, and known polish tracked in the field notes.
 
