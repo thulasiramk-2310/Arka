@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;application/pdf;audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/x-wav;audio/wav;video/mp4;video/x-msvideo;
+Actions=clean;
+X-KDE-Priority=TopLevel
+
+[Desktop Action clean]
+Name=Remove hidden details
+Exec=arka-convert clean %F
+Icon=edit-clear-all

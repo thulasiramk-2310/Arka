@@ -46,7 +46,7 @@ static QStringList formatsForFile(const QString &path)
     else if (video.contains(ext))
         out = {"mp4", "mkv", "webm", "mp3"};
     else if (ext == "pdf")
-        out = {"png"};
+        out = {"png", "smaller-pdf"};
     out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext); // not the format it already is
     return out;
 }
@@ -194,6 +194,7 @@ int main(int argc, char **argv)
     layer->setExclusiveZone(-1);
     layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
     layer->setScope(QStringLiteral("arka-wheel"));
+    layer->setWantsToBeOnActiveScreen(true); // the screen you are working on, not always the first
 
     bus.registerObject(Path, &wheel, QDBusConnection::ExportScriptableSlots);
     bus.registerService(Service);

@@ -28,10 +28,12 @@ Window {
     readonly property color onAccent: (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.6 ? "#111317" : "#FFFFFF"
 
     readonly property var names: ({ png: "PNG", jpg: "JPEG", webp: "WebP", pdf: "PDF", mp3: "MP3", wav: "WAV",
-                                    flac: "FLAC", ogg: "OGG", m4a: "M4A", mp4: "MP4", mkv: "MKV", webm: "WebM" })
+                                    flac: "FLAC", ogg: "OGG", m4a: "M4A", mp4: "MP4", mkv: "MKV", webm: "WebM",
+                                    "smaller-pdf": "Smaller PDF" })
     readonly property var icons: ({ png: "image-png", jpg: "image-jpeg", webp: "image-webp", pdf: "application-pdf",
                                     mp3: "audio-mpeg", wav: "audio-x-wav", flac: "audio-x-flac", ogg: "audio-x-vorbis+ogg",
-                                    m4a: "audio-mp4", mp4: "video-mp4", mkv: "video-x-matroska", webm: "video-webm" })
+                                    m4a: "audio-mp4", mp4: "video-mp4", mkv: "video-x-matroska", webm: "video-webm",
+                                    "smaller-pdf": "application-pdf" })
 
     function label(f) {
         if (isPdf() && f === "png") return "PNG pages"

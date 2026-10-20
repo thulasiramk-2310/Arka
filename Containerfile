@@ -83,6 +83,7 @@ COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-p
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
 COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
+COPY convert/arka-clean.desktop /usr/share/kio/servicemenus/arka-clean.desktop
 COPY convert/org.arkaos.wheel.desktop /usr/share/applications/org.arkaos.wheel.desktop
 COPY convert/arka-wheel-autostart.desktop /etc/xdg/autostart/arka-wheel.desktop
 COPY systemd/vara-hub.service /usr/lib/systemd/user/vara-hub.service
@@ -550,11 +551,12 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bin
     dnf install --setopt=keepcache=True -y -q gtk4-layer-shell /tmp/dock/crystal-dock-*.rpm
 # "Convert to" in the Dolphin right-click menu (convert/arka-convert): ffmpeg for
 # sound and video (Fedora's build includes MP3, AAC and H.264 through OpenH264),
-# Pillow for pictures, poppler for PDF pages. The tool runs them with no network.
+# Pillow for pictures, poppler for PDF pages, mat2 for "Remove hidden details".
+# The tool runs them with no network.
 # The format wheel (arka-wheel) needs Qt Quick, KGlobalAccel, KWindowSystem and
 # LayerShellQt, which Plasma already brings; listed so they stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
-    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils \
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 \
       qt6-qtdeclarative kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
 # Git, offered next to VARA in setup's Advanced options.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \

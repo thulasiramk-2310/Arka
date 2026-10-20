@@ -3,10 +3,11 @@
 
     arka-convert FORMAT FILE...        convert each FILE to FORMAT
     arka-convert --targets FILE        list the formats FILE can become
+    arka-convert clean FILE...         save a copy without hidden details
 
 The converted file is saved beside the original and never replaces anything:
 a name that is taken gets " (1)", " (2)" and so on. Every converter (ffmpeg,
-pdftoppm, Pillow) runs inside a bubblewrap sandbox with no network. The sandbox
+pdftoppm, Ghostscript, Pillow) runs inside a bubblewrap sandbox with no network. The sandbox
 can read your files but can only write into a scratch folder; the finished file
 is moved out of it afterwards. If bubblewrap is missing nothing is converted.
 Used by the "Convert to" entry in the Dolphin right-click menu.
@@ -15,24 +16,32 @@ Used by the "Convert to" entry in the Dolphin right-click menu.
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"}
 AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
 VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
 
 TARGETS = {
-    "image": ["png", "jpg", "webp", "pdf"],
-    "pdf": ["png"],
-    "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a"],
-    "video": ["mp4", "mkv", "webm", "mp3"],
+    "image": ["png", "jpg", "webp", "pdf", "clean"],
+    "pdf": ["png", "smaller-pdf", "clean"],
+    "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a", "clean"],
+    "video": ["mp4", "mkv", "webm", "mp3", "clean"],
 }
+
+# "clean" (mat2) removes hidden details such as location, camera, author and
+# editing software. Only the formats mat2 handles are offered.
+CLEAN_EXT = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "pdf",
+             "mp3", "flac", "ogg", "oga", "opus", "wav", "mp4", "m4v", "avi"}
 
 NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "pdf": "PDF", "mp3": "MP3",
          "flac": "FLAC", "wav": "WAV", "ogg": "Ogg Vorbis", "opus": "Opus",
-         "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM"}
+         "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM",
+         "smaller-pdf": "a smaller PDF", "clean": "a copy without hidden details"}
 
 # ffmpeg output options for each target. -vn drops any cover art or video.
 AUDIO_OPTS = {
@@ -72,7 +81,7 @@ def targets_for(path):
     kind = kind_of(path)
     ext = Path(path).suffix.lower().lstrip(".")
     ext = "jpg" if ext == "jpeg" else ext
-    return [t for t in TARGETS.get(kind, []) if t != ext]
+    return [t for t in TARGETS.get(kind, []) if t != ext and (t != "clean" or ext in CLEAN_EXT)]
 
 
 def free_name(directory, stem, ext):
@@ -107,6 +116,50 @@ def run(scratch, cmd):
         raise RuntimeError(lines[-1] if lines else f"{cmd[0]} failed")
 
 
+def media_seconds(scratch, inp):
+    """The length of a sound or video file in seconds, or None if unknown."""
+    done = subprocess.run(sandbox_prefix(scratch) + [
+        "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", inp],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    try:
+        seconds = float(done.stdout.strip())
+    except ValueError:
+        return None
+    return seconds if seconds > 0 else None
+
+
+def progress_fraction(line, total):
+    """Read one line of ffmpeg's -progress output; the fraction done, or None."""
+    key, _, value = line.strip().partition("=")
+    if key not in ("out_time_us", "out_time_ms") or not total:
+        return None  # out_time_ms is also in microseconds, despite its name
+    try:
+        return max(0.0, min(1.0, int(value) / 1e6 / total))
+    except ValueError:
+        return None
+
+
+def run_ffmpeg(scratch, cmd, total, on_progress):
+    """Run ffmpeg in the sandbox, calling on_progress(fraction) as it goes."""
+    errors = scratch / "ffmpeg-errors.txt"
+    with open(errors, "w") as err, subprocess.Popen(
+            sandbox_prefix(scratch) + cmd[:1] + ["-progress", "pipe:1", "-nostats"] + cmd[1:],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err, text=True) as proc:
+        try:
+            for line in proc.stdout:
+                fraction = progress_fraction(line, total)
+                if fraction is not None and on_progress:
+                    on_progress(fraction)
+            proc.wait()
+        finally:
+            if proc.poll() is None:  # stopped part-way: end ffmpeg before its folder goes
+                proc.terminate()
+                proc.wait()
+    if proc.returncode != 0:
+        lines = [l for l in errors.read_text(errors="replace").splitlines() if l.strip()]
+        raise RuntimeError(lines[-1] if lines else "ffmpeg failed")
+
+
 def image_worker(src, dst, fmt):
     """Runs inside the sandbox: convert one picture with Pillow."""
     from PIL import Image
@@ -124,24 +177,45 @@ def image_worker(src, dst, fmt):
         im.save(dst, names[fmt], **extra)
 
 
-def convert_one(src, fmt):
-    """Convert src to fmt. Returns the list of files made."""
+def convert_one(src, fmt, on_progress=None):
+    """Convert src to fmt. Returns the list of files made. For sound and video,
+    on_progress(fraction) is called as ffmpeg works through the file."""
     src = Path(src).resolve()
     kind = kind_of(src)
     if kind is None:
         raise RuntimeError("this kind of file can't be converted yet")
     if fmt not in TARGETS[kind]:
         raise RuntimeError(f"{NAMES.get(fmt, fmt)} isn't available for this kind of file")
+    if fmt == "clean" and src.suffix.lower().lstrip(".") not in CLEAN_EXT:
+        raise RuntimeError("hidden details can't be removed from this kind of file yet")
     if fmt not in targets_for(src):
         raise RuntimeError(f"it is already {NAMES.get(fmt, fmt)}")
     out_dir = src.parent
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         inp = str(src)
-        if kind == "image":
+        if fmt == "clean":
+            # mat2 writes its result next to its input, and the original's
+            # folder is read-only in the sandbox, so it works on a copy here.
+            ext = src.suffix.lower()
+            work = scratch / f"in{ext}"
+            shutil.copyfile(src, work)
+            run(scratch, ["mat2", work.name])
+            made = [scratch / f"in.cleaned{ext}"]
+        elif kind == "image":
             tmp = scratch / f"out.{fmt}"
             run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
                           "--image-worker", inp, str(tmp), fmt])
+            made = [tmp]
+        elif fmt == "smaller-pdf":
+            # Ghostscript's "ebook" setting: pictures at 150 dpi, text untouched.
+            tmp = scratch / "out.pdf"
+            run(scratch, ["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/ebook", "-dNOPAUSE",
+                          "-dBATCH", "-dSAFER", "-dQUIET", "-sOutputFile=" + str(tmp), inp])
+            if tmp.exists() and tmp.stat().st_size >= src.stat().st_size:
+                raise RuntimeError("it is already as small as this makes it")
             made = [tmp]
         elif kind == "pdf":
             run(scratch, ["pdftoppm", "-png", "-r", "150", inp, str(scratch / "page")])
@@ -150,18 +224,24 @@ def convert_one(src, fmt):
             tmp = scratch / f"out.{fmt}"
             opts = AUDIO_OPTS[fmt] if fmt in AUDIO_OPTS and (kind == "audio" or fmt == "mp3") \
                 else VIDEO_OPTS[fmt]
-            run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", inp, *opts, str(tmp)])
+            run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", inp, *opts, str(tmp)],
+                       media_seconds(scratch, inp), on_progress)
             made = [tmp]
         made = [m for m in made if m.exists() and m.stat().st_size > 0]
         if not made:
             raise RuntimeError("the converter made no file")
         results = []
         for i, m in enumerate(made):
-            if kind == "pdf":
+            if fmt == "clean":
+                stem = f"{src.stem} (cleaned)"
+            elif fmt == "smaller-pdf":
+                stem = f"{src.stem} (smaller)"
+            elif kind == "pdf":
                 stem = src.stem if len(made) == 1 else f"{src.stem}-{i + 1}"
             else:
                 stem = src.stem
-            final = free_name(out_dir, stem, fmt)
+            ext = {"smaller-pdf": "pdf", "clean": src.suffix.lstrip(".")}.get(fmt, fmt)
+            final = free_name(out_dir, stem, ext)
             m.rename(final)
             results.append(final)
         return results
@@ -194,21 +274,41 @@ def main(argv):
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
+    # Being stopped (logging out, a kill) unwinds like Ctrl+C, so the hidden
+    # scratch folder is removed and no half-made file is left.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
     fmt, files = argv[1].lower(), argv[2:]
     fmt = "jpg" if fmt == "jpeg" else fmt
     heavy = any(kind_of(f) in ("audio", "video") for f in files)
     nid = notify(f"Converting to {NAMES.get(fmt, fmt)}",
                  files[0] if len(files) == 1 else f"{len(files)} files") if heavy else None
     made, failed = [], []
-    for f in files:
-        try:
-            made += convert_one(f, fmt)
-        except Exception as e:  # one bad file does not stop the rest
-            failed.append(f"{Path(f).name}: {e}")
+    last = [0.0]
+
+    def progress_for(index, name):
+        # Update the notification at most every two seconds.
+        def update(fraction):
+            now = time.monotonic()
+            if nid and now - last[0] >= 2:
+                last[0] = now
+                where = f" ({index + 1} of {len(files)})" if len(files) > 1 else ""
+                notify(f"Converting to {NAMES.get(fmt, fmt)}", f"{name}{where}: {int(fraction * 100)}%", nid)
+        return update
+
+    try:
+        for i, f in enumerate(files):
+            try:
+                made += convert_one(f, fmt, progress_for(i, Path(f).name))
+            except Exception as e:  # one bad file does not stop the rest
+                failed.append(f"{Path(f).name}: {e}")
+    except (SystemExit, KeyboardInterrupt):
+        notify("Conversion stopped", "Files that were not finished were not saved.", nid)
+        raise
     if failed:
         notify("Couldn't convert everything", "\n".join(failed[:4]), nid)
     elif len(made) == 1:
-        notify("Converted", f"Saved as {made[0].name}", nid)
+        notify("Removed hidden details" if fmt == "clean" else "Converted", f"Saved as {made[0].name}", nid)
     else:
         notify("Converted", f"{len(made)} files saved next to the originals", nid)
     return 1 if failed else 0

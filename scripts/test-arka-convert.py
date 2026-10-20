@@ -8,6 +8,7 @@ Run: python3 scripts/test-arka-convert.py
 
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -61,7 +62,7 @@ class ArkaConvertTest(unittest.TestCase):
     def test_targets_leave_out_the_source_format(self):
         pic = self.png()
         got = convert("--targets", str(pic)).stdout.split()
-        self.assertEqual(got, ["jpg", "webp", "pdf"])
+        self.assertEqual(got, ["jpg", "webp", "pdf", "clean"])
         self.assertEqual(convert("--targets", str(self.dir / "x.txt")).stdout.split(), [])
 
     def test_image_to_each_format_keeps_original(self):
@@ -100,6 +101,30 @@ class ArkaConvertTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.names(), ["doc-1.png", "doc-2.png", "doc.pdf"])
 
+    @unittest.skipUnless(shutil.which("gs"), "needs Ghostscript (ArkaOS has it)")
+    def test_pdf_with_big_pictures_gets_smaller(self):
+        from PIL import Image
+        import random
+        rnd = random.Random(7)
+        big = Image.frombytes("RGB", (2400, 1800), bytes(rnd.getrandbits(8) for _ in range(2400 * 1800 * 3)))
+        pdf = self.dir / "scan.pdf"
+        big.save(pdf, "PDF", resolution=300)
+        r = convert("smaller-pdf", str(pdf))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        small = self.dir / "scan (smaller).pdf"
+        self.assertTrue(small.exists())
+        self.assertLess(small.stat().st_size, pdf.stat().st_size)
+        self.assertTrue(small.read_bytes().startswith(b"%PDF"))
+
+    @unittest.skipUnless(shutil.which("gs"), "needs Ghostscript (ArkaOS has it)")
+    def test_pdf_that_cannot_shrink_is_left_alone(self):
+        from PIL import Image
+        pdf = self.dir / "tiny.pdf"
+        Image.new("RGB", (8, 8), "white").save(pdf, "PDF")
+        r = convert("smaller-pdf", str(pdf))
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.names(), ["tiny.pdf"])
+
     def test_audio(self):
         wav = self.dir / "tone.wav"
         ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=1", str(wav))
@@ -125,6 +150,67 @@ class ArkaConvertTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertTrue((self.dir / "clip (1).mkv").stat().st_size > 0)
         self.assertTrue((self.dir / "clip.mp3").stat().st_size > 0)
+
+    def test_clean_is_offered_only_where_mat2_works(self):
+        self.assertIn("clean", convert("--targets", str(self.dir / "a.mp4")).stdout.split())
+        self.assertNotIn("clean", convert("--targets", str(self.dir / "a.mkv")).stdout.split())
+        mkv = self.dir / "a.mkv"
+        mkv.write_bytes(b"x")
+        r = convert("clean", str(mkv))
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.names(), ["a.mkv"])
+
+    @unittest.skipUnless(shutil.which("mat2"), "needs mat2 (ArkaOS has it)")
+    def test_clean_removes_camera_and_author_from_a_photo(self):
+        from PIL import Image
+        photo = self.dir / "photo.jpg"
+        exif = Image.Exif()
+        exif[0x010F] = "SecretCamCo"
+        exif[0x013B] = "Alice Author"
+        Image.new("RGB", (64, 48), (200, 30, 30)).save(photo, exif=exif)
+        r = convert("clean", str(photo))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cleaned = self.dir / "photo (cleaned).jpg"
+        with Image.open(cleaned) as im:
+            self.assertFalse(dict(im.getexif()), "EXIF survived")
+        self.assertIn(b"SecretCamCo", photo.read_bytes())  # the original is untouched
+
+    def test_progress_lines_become_fractions(self):
+        mod = load_script()
+        self.assertEqual(mod.progress_fraction("out_time_us=5000000", 10.0), 0.5)
+        self.assertEqual(mod.progress_fraction("out_time_ms=20000000\n", 10.0), 1.0)  # clamped
+        self.assertIsNone(mod.progress_fraction("frame=12", 10.0))
+        self.assertIsNone(mod.progress_fraction("out_time_us=N/A", 10.0))
+        self.assertIsNone(mod.progress_fraction("out_time_us=100", None))
+
+    def test_video_conversion_reports_progress(self):
+        mkv = self.dir / "long.mkv"
+        ffmpeg("-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=6",
+               "-f", "lavfi", "-i", "sine=duration=6", "-shortest", str(mkv))
+        seen = []
+        made = load_script().convert_one(str(mkv), "webm", seen.append)
+        self.assertEqual([p.name for p in made], ["long.webm"])
+        self.assertTrue(seen, "no progress was reported")
+        self.assertEqual(seen, sorted(seen))
+        self.assertGreater(seen[-1], 0.8)
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in os.listdir(self.dir)))
+
+    def test_a_stopped_conversion_leaves_nothing_behind(self):
+        import signal
+        import time
+        mkv = self.dir / "long.mkv"
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=60",
+               "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", str(mkv))
+        proc = subprocess.Popen([sys.executable, str(SCRIPT), "webm", str(mkv)], env=ENV)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and not any(n.startswith(".arka-convert-") for n in os.listdir(self.dir)):
+            time.sleep(0.1)
+        time.sleep(1.5)  # ffmpeg is now encoding
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=20)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual(self.names(), ["long.mkv"])
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in os.listdir(self.dir)))
 
     @unittest.skipUnless("libopenh264" in encoders(), "this ffmpeg has no H.264 encoder (ArkaOS's does)")
     def test_video_to_mp4(self):
@@ -163,6 +249,28 @@ class ArkaConvertTest(unittest.TestCase):
         r = convert("jpg", str(pic))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("-odd name.jpg", self.names())
+
+    def test_read_only_folder_gives_a_plain_reason(self):
+        ro = self.dir / "ro"
+        ro.mkdir()
+        pic = self.png("pic.png")
+        target = ro / "pic.png"
+        target.write_bytes(pic.read_bytes())
+        ro.chmod(0o555)
+        try:
+            mod = load_script()
+            with self.assertRaises(RuntimeError) as caught:
+                mod.convert_one(str(target), "jpg")
+            self.assertIn("can't be written to", str(caught.exception))
+            self.assertEqual(sorted(os.listdir(ro)), ["pic.png"])
+        finally:
+            ro.chmod(0o755)
+
+    def test_unicode_and_spaces_in_names(self):
+        pic = self.png("ünïcödé фото 写真.png")
+        r = convert("webp", str(pic))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("ünïcödé фото 写真.webp", self.names())
 
     def test_nothing_is_converted_without_the_sandbox(self):
         pic = self.png()
