@@ -472,6 +472,16 @@ COPY panels/arka-panels.service /usr/lib/systemd/user/arka-panels.service
 COPY panels/kwin /usr/share/kwin/scripts/arka-panels
 RUN chmod 755 /usr/libexec/arka-panels && systemctl --global enable arka-panels.service
 
+# KDE Connect is off by default: while it runs, it makes the computer visible
+# to phones and computers on the same network. Opening the KDE Connect app
+# still starts it. Its login autostart is hidden, its tray widget is taken out
+# once per account (plasma-updates/), and Dolphin's send-to-device entry, which
+# started it on every right-click, is off (Dolphin's settings can turn it on).
+COPY plasma-updates/arkaos-kdeconnect-off.js /usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/arkaos-kdeconnect-off.js
+RUN test -f /etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop && \
+    echo 'Hidden=true' >> /etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop && \
+    printf '[Show]\nkdeconnectfileitemaction=false\n' > /etc/xdg/kservicemenurc
+
 # Updates come from ghcr.io/thulasiramk-2310/arka, built and signed by the
 # Image workflow. Only images signed with the ArkaOS key are accepted from
 # there; a pull of an unsigned or differently signed image fails before
