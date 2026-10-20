@@ -1,0 +1,21 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ArkaOS"
+            }
+        ],
+        "Category": "Application Launchers",
+        "Description": "Opens apps, searches apps and settings, and shows the privacy status",
+        "Icon": "start-here-kde",
+        "Id": "org.arkaos.launcher",
+        "License": "GPL-3.0-or-later",
+        "Name": "ArkaOS Launcher",
+        "Website": "https://github.com/thulasiramk-2310/arka"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.launchermenu"
+    ]
+}
