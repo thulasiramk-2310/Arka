@@ -266,6 +266,10 @@ Item {
                     focusPolicy: Qt.NoFocus
                     text: index === 0 ? i18nc("@item:inlistbox pinned apps", "Pinned") : model.display
                     Accessible.role: Accessible.ListItem
+                    // Read as one item ("Office, 13 apps"), not a name then a bare number.
+                    Accessible.name: index > 0
+                        ? i18ncp("@item:inlistbox %2 is a category", "%2, %1 app", "%2, %1 apps", appCount, text)
+                        : text
                     Accessible.selected: current
 
                     onClicked: {
@@ -289,6 +293,7 @@ Item {
                             text: categoryButton.text
                             elide: Text.ElideRight
                             font.weight: categoryButton.current ? Font.DemiBold : Font.Normal
+                            Accessible.ignored: true
                         }
                         PC3.Label {
                             Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -296,6 +301,7 @@ Item {
                             text: categoryButton.appCount
                             opacity: 0.7
                             font: Kirigami.Theme.smallFont
+                            Accessible.ignored: true
                         }
                     }
                 }
@@ -472,6 +478,7 @@ Item {
                     anchors.centerIn: parent
                     visible: face.status !== Image.Ready
                     text: parent.name.charAt(0).toUpperCase()
+                    Accessible.ignored: true
                     font.weight: Font.DemiBold
                 }
                 Kirigami.ShadowedImage {
