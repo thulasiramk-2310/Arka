@@ -324,10 +324,104 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     });
     motion_group.add(&motion_row);
 
+    // Dock position: Crystal Dock has no menu entry to move an existing dock,
+    // so this writes its setting and restarts it.
+    let dock_group = adw::PreferencesGroup::new();
+    dock_group.set_title("Dock");
+    let dock_row = adw::ActionRow::new();
+    dock_row.set_title("Dock position");
+    dock_row.set_subtitle("Where the dock sits on the screen.");
+    let dock_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    dock_box.add_css_class("linked");
+    dock_box.set_valign(gtk4::Align::Center);
+    let dock_buttons: Vec<(gtk4::ToggleButton, u8)> = [("Bottom", 1u8), ("Left", 2), ("Right", 3)]
+        .iter()
+        .map(|(label, value)| (gtk4::ToggleButton::with_label(label), *value))
+        .collect();
+    for (btn, _) in &dock_buttons {
+        if let Some((first, _)) = dock_buttons.first() {
+            if btn != first {
+                btn.set_group(Some(first));
+            }
+        }
+        dock_box.append(btn);
+    }
+    let shown = dock_position();
+    for (btn, value) in &dock_buttons {
+        if *value == shown {
+            btn.set_active(true);
+        }
+    }
+    for (btn, value) in &dock_buttons {
+        let (row, value) = (dock_row.clone(), *value);
+        btn.connect_toggled(move |b| {
+            if !b.is_active() || dock_position() == value {
+                return;
+            }
+            let row = row.clone();
+            glib::spawn_future_local(async move {
+                let ok = gtk4::gio::spawn_blocking(move || set_dock_position(value)).await.unwrap_or(false);
+                row.set_subtitle(if ok {
+                    "Where the dock sits on the screen."
+                } else {
+                    "Couldn't move the dock. Right-click it for its own settings."
+                });
+            });
+        });
+    }
+    dock_row.add_suffix(&dock_box);
+    dock_group.add(&dock_row);
+
     b.append(&theme_group);
     b.append(&motion_group);
+    b.append(&dock_group);
     b.append(&group);
     b.upcast()
+}
+
+/// Crystal Dock's two config sets, one per desktop it was started under.
+fn dock_confs() -> Vec<std::path::PathBuf> {
+    let base = gtk4::glib::user_config_dir().join("crystal-dock");
+    ["KDE", "generic"].iter().map(|d| base.join(d).join("panel_1.conf")).collect()
+}
+
+/// 1 bottom, 2 left, 3 right, as Crystal Dock stores it; bottom if unset.
+fn dock_position() -> u8 {
+    dock_confs()
+        .first()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| t.lines().find_map(|l| l.strip_prefix("position=").and_then(|v| v.trim().parse().ok())))
+        .unwrap_or(1)
+}
+
+fn set_dock_position(value: u8) -> bool {
+    let v = value.to_string();
+    let mut ok = false;
+    for conf in dock_confs() {
+        if !conf.exists() {
+            continue;
+        }
+        let path = conf.to_string_lossy().to_string();
+        ok |= run_ok("kwriteconfig6", &["--file", &path, "--group", "General", "--key", "position", &v]);
+    }
+    if !ok {
+        return false;
+    }
+    // The dock reads its settings at start, so restart it.
+    let _ = Command::new("pkill").args(["-x", "crystal-dock"]).status();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Detached, so the dock is not a child of this window, with its output
+    // sent nowhere: run_ok would wait for the dock to close the pipes it
+    // inherits, which is when the dock exits.
+    use std::process::Stdio;
+    Command::new("setsid")
+        .args(["-f", "/usr/libexec/arka-dock-start"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 /// KDE's animation speed factor: 0 means no animations.
