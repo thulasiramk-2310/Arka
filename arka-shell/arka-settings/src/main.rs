@@ -494,9 +494,82 @@ fn page_internet() -> gtk4::Widget {
     dns_row.connect_activated(|_| { let _ = Command::new("arka-dashboard").spawn(); });
     dns_group.add(&dns_row);
 
+    // Phone link: KDE Connect is off in a new ArkaOS account, because while it
+    // runs it makes this computer visible to other devices on the network.
+    let phone_group = adw::PreferencesGroup::new();
+    phone_group.set_title("Phone and other devices");
+    let phone_row = adw::SwitchRow::new();
+    phone_row.set_title("Link with your phone (KDE Connect)");
+    phone_row.set_subtitle(phone_subtitle(kdeconnect_running()));
+    phone_row.set_active(kdeconnect_running());
+    phone_row.connect_active_notify(|row| {
+        let want = row.is_active();
+        if want == kdeconnect_running() {
+            return; // the result of a change made below, shown back to the switch
+        }
+        let row = row.clone();
+        glib::spawn_future_local(async move {
+            let ok = gtk4::gio::spawn_blocking(move || set_kdeconnect(want)).await.unwrap_or(false);
+            // The switch shows what is running now, not what was asked.
+            let now = kdeconnect_running();
+            row.set_active(now);
+            row.set_subtitle(if ok { phone_subtitle(now) } else { "Couldn't change this. Open the KDE Connect app instead." });
+        });
+    });
+    phone_group.add(&phone_row);
+
     b.append(&group);
     b.append(&dns_group);
+    b.append(&phone_group);
     b.upcast()
+}
+
+fn phone_subtitle(on: bool) -> &'static str {
+    if on {
+        "On, and it starts at login. Phones and computers on the same network can find this computer. \
+         Pair them in the KDE Connect app."
+    } else {
+        "Off. Nothing on this computer is listening for phones. Turn on to pair a phone with the KDE Connect app."
+    }
+}
+
+fn kdeconnect_running() -> bool {
+    run_ok("pgrep", &["-x", "kdeconnectd"])
+}
+
+fn kdeconnect_autostart() -> std::path::PathBuf {
+    gtk4::glib::user_config_dir().join("autostart").join("org.kde.kdeconnect.daemon.desktop")
+}
+
+/// On: start it now and at every login (this account's own autostart entry
+/// overrides the system one, which hides it). Off: stop it and remove that entry.
+fn set_kdeconnect(on: bool) -> bool {
+    let entry = kdeconnect_autostart();
+    if on {
+        let text = "[Desktop Entry]\nType=Application\nName=KDE Connect\nExec=/usr/bin/kdeconnectd\n\
+                    StartupNotify=false\nX-KDE-autostart-phase=1\nNoDisplay=true\nHidden=false\n";
+        if let Some(dir) = entry.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if std::fs::write(&entry, text).is_err() {
+            return false;
+        }
+        use std::process::Stdio;
+        Command::new("setsid")
+            .args(["-f", "/usr/bin/kdeconnectd"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    } else {
+        let _ = std::fs::remove_file(&entry);
+        let _ = Command::new("pkill").args(["-x", "kdeconnectd"]).status();
+        // Give it a moment to exit before the switch reads the state back.
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        true
+    }
 }
 
 fn page_updates() -> gtk4::Widget {
