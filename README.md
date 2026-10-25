@@ -182,12 +182,18 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   computer. Tested in a VM (2026-10-25): it started and stopped, port 1716
   opened and closed, and it came back after logging in again. Not tested with a
   real phone.
+- 🌙 **Night light.** Settings › Appearance has a switch for warmer screen
+  colours from 8 pm to 6 am, easier on the eyes in the evening. KDE's own
+  schedule looks up your location by default; this one sets fixed times
+  instead, so the switch asks for no location (read from the schedule library's
+  source, not checked with a network trace). Tested in a VM (2026-10-25): KWin
+  reported Night light running at 4500 K when on and back to 6500 K when off.
 - 🐢 **Reduce motion.** Settings › Appearance has a switch that turns off most
   window, menu and desktop animations. It uses KDE's own animation setting, so
   windows, menus and the shell all follow it, and turning it off returns to
   KDE's normal speed. Tested in a VM (2026-10-25): the setting is written and
-  removed, and Settings shows the real value when reopened. I checked in KWin's
-  source that it watches the setting, but did not time the animations.
+  removed, KDE's change notice is sent on the session bus, and Settings shows
+  the real value when reopened. I did not time the animations.
 - ⛰️ **ArkaOS popups.** Notifications, the volume and brightness popups, the
   calendar, the tray and the launcher have corners cut at 45 degrees, like the
   peaks in the ArkaOS mark and wallpaper, with a thin border and a soft shadow.
