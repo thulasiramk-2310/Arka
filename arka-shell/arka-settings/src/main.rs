@@ -324,6 +324,28 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     });
     motion_group.add(&motion_row);
 
+    // Night light: warmer colours in the evening. KDE's schedule defaults to
+    // finding your location, so this sets fixed times and asks for no location.
+    let night_group = adw::PreferencesGroup::new();
+    night_group.set_title("Night light");
+    let night_row = adw::SwitchRow::new();
+    night_row.set_title("Warmer colours in the evening");
+    night_row.set_subtitle(NIGHT_SUBTITLE);
+    night_row.set_active(night_light_on());
+    night_row.connect_active_notify(|row| {
+        let want = row.is_active();
+        if want == night_light_on() {
+            return; // the change made below, shown back to the switch
+        }
+        let row = row.clone();
+        glib::spawn_future_local(async move {
+            let ok = gtk4::gio::spawn_blocking(move || set_night_light(want)).await.unwrap_or(false);
+            row.set_active(night_light_on());
+            row.set_subtitle(if ok { NIGHT_SUBTITLE } else { "Couldn't change this. Try System Settings > Night Light." });
+        });
+    });
+    night_group.add(&night_row);
+
     // Dock position: Crystal Dock has no menu entry to move an existing dock,
     // so this writes its setting and restarts it.
     let dock_group = adw::PreferencesGroup::new();
@@ -374,9 +396,42 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
 
     b.append(&theme_group);
     b.append(&motion_group);
+    b.append(&night_group);
     b.append(&dock_group);
     b.append(&group);
     b.upcast()
+}
+
+const NIGHT_SUBTITLE: &str =
+    "From 8 pm to 6 am the screen turns warmer and easier on the eyes. Uses no location.";
+
+fn kread(file: &str, group: &str, key: &str) -> String {
+    Command::new("kreadconfig6")
+        .args(["--file", file, "--group", group, "--key", key])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+fn night_light_on() -> bool {
+    kread("kwinrc", "NightColor", "Active") == "true"
+}
+
+fn set_night_light(on: bool) -> bool {
+    let kw = |file: &str, group: &str, key: &str, value: &str| {
+        // --notify tells KWin and the schedule service; without it they keep the old values.
+        run_ok("kwriteconfig6", &["--notify", "--file", file, "--group", group, "--key", key, value])
+    };
+    let mut ok = true;
+    if on {
+        // KDE's schedule defaults to GeoClue; fixed times need no location.
+        ok &= kw("knighttimerc", "General", "Source", "Times");
+        ok &= kw("knighttimerc", "Times", "SunsetStart", "20:00:00");
+        ok &= kw("knighttimerc", "Times", "SunriseStart", "06:00:00");
+        ok &= kw("kwinrc", "NightColor", "Mode", "DarkLight");
+    }
+    ok &= kw("kwinrc", "NightColor", "Active", if on { "true" } else { "false" });
+    ok && run_ok("dbus-send", &["--session", "--type=method_call", "--dest=org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
 }
 
 /// Crystal Dock's two config sets, one per desktop it was started under.
@@ -434,7 +489,8 @@ fn motion_reduced() -> bool {
 }
 
 fn set_motion_reduced(on: bool) -> bool {
-    let mut args = vec!["--file", "kdeglobals", "--group", "KDE", "--key", "AnimationDurationFactor"];
+    // --notify tells KWin and the shell; without it they keep the old speed.
+    let mut args = vec!["--notify", "--file", "kdeglobals", "--group", "KDE", "--key", "AnimationDurationFactor"];
     if on {
         args.push("0");
     } else {
