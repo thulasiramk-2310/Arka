@@ -297,9 +297,60 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
         apply_wallpaper(default, wp_row_ref2.clone());
     });
 
+    // Motion: KDE's own animation setting, which windows, menus and the shell
+    // all follow. 0 turns the animations off; unset means normal speed.
+    let motion_group = adw::PreferencesGroup::new();
+    motion_group.set_title("Motion");
+    let motion_row = adw::SwitchRow::new();
+    motion_row.set_title("Reduce motion");
+    motion_row.set_subtitle("Turns off most window, menu and desktop animations.");
+    motion_row.set_active(motion_reduced());
+    motion_row.connect_active_notify(|row| {
+        let want = row.is_active();
+        if want == motion_reduced() {
+            return; // the change made below, shown back to the switch
+        }
+        let row = row.clone();
+        glib::spawn_future_local(async move {
+            let ok = gtk4::gio::spawn_blocking(move || set_motion_reduced(want)).await.unwrap_or(false);
+            // The switch shows what is now set, not what was asked.
+            row.set_active(motion_reduced());
+            row.set_subtitle(if ok {
+                "Turns off most window, menu and desktop animations."
+            } else {
+                "Couldn't change this. Try System Settings > Animations."
+            });
+        });
+    });
+    motion_group.add(&motion_row);
+
     b.append(&theme_group);
+    b.append(&motion_group);
     b.append(&group);
     b.upcast()
+}
+
+/// KDE's animation speed factor: 0 means no animations.
+fn motion_reduced() -> bool {
+    Command::new("kreadconfig6")
+        .args(["--file", "kdeglobals", "--group", "KDE", "--key", "AnimationDurationFactor"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f64>().map(|v| v == 0.0).unwrap_or(false))
+        .unwrap_or(false)
+}
+
+fn set_motion_reduced(on: bool) -> bool {
+    let mut args = vec!["--file", "kdeglobals", "--group", "KDE", "--key", "AnimationDurationFactor"];
+    if on {
+        args.push("0");
+    } else {
+        args.push("--delete");
+    }
+    if !run_ok("kwriteconfig6", &args) {
+        return false;
+    }
+    // Windows and the shell pick the new value up when KWin is told to reread its settings.
+    run_ok("dbus-send", &["--session", "--type=method_call", "--dest=org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
 }
 
 fn page_privacy() -> gtk4::Widget {
