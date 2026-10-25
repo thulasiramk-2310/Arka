@@ -126,7 +126,11 @@ fn build_ui(app: &adw::Application) {
     let ctl = gtk4::EventControllerKey::new();
     let w = window.clone();
     ctl.connect_key_pressed(move |_, key, _, _| {
-        if key == gtk4::gdk::Key::Escape { w.close(); glib::Propagation::Stop }
+        // Esc in a text box belongs to the box, not to the window.
+        let typing = gtk4::prelude::GtkWindowExt::focus(&w)
+            .map(|f| f.dynamic_cast_ref::<gtk4::Editable>().is_some())
+            .unwrap_or(false);
+        if key == gtk4::gdk::Key::Escape && !typing { w.close(); glib::Propagation::Stop }
         else { glib::Propagation::Proceed }
     });
     window.add_controller(ctl);
@@ -197,6 +201,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
         .unwrap_or_else(|| format!("/usr/share/arka/wallpapers/default-{}.png", current_look()));
 
     let wp_row = adw::ActionRow::new();
+    wp_row.set_use_markup(false); // the subtitle is a file path, which may contain & or <
     wp_row.set_title("Current wallpaper");
     wp_row.set_subtitle(&current_path);
     let wp_img = gtk4::Image::from_icon_name("image-x-generic-symbolic");
@@ -243,15 +248,19 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     theme_group.add(&look_row);
     for (btn, look) in [(&light_btn, "light"), (&dark_btn, "dark")] {
         let wp = wp_row.clone();
+        let (lb, db) = (light_btn.clone(), dark_btn.clone());
         btn.connect_toggled(move |b| {
             if !b.is_active() || current_look() == look { return; }
             let wp = wp.clone();
+            let (lb, db) = (lb.clone(), db.clone());
             glib::spawn_future_local(async move {
                 let ok = gtk4::gio::spawn_blocking(move || {
                     Command::new("/usr/libexec/arka-apply-look").arg(look).status().map(|s| s.success()).unwrap_or(false)
                 }).await.unwrap_or(false);
                 if !ok {
                     wp.set_subtitle("Couldn't switch the look. Try System Settings > Colors & Themes.");
+                    // Show the look that is still in use, not the one that was asked for.
+                    if current_look() == "light" { lb.set_active(true) } else { db.set_active(true) }
                     return;
                 }
                 // Show the wallpaper that is now in use (unless the user picked their own).
@@ -311,10 +320,12 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
             return; // the change made below, shown back to the switch
         }
         let row = row.clone();
+        row.set_sensitive(false);
         glib::spawn_future_local(async move {
             let ok = gtk4::gio::spawn_blocking(move || set_motion_reduced(want)).await.unwrap_or(false);
             // The switch shows what is now set, not what was asked.
             row.set_active(motion_reduced());
+            row.set_sensitive(true);
             row.set_subtitle(if ok {
                 "Turns off most window, menu and desktop animations."
             } else {
@@ -338,9 +349,11 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
             return; // the change made below, shown back to the switch
         }
         let row = row.clone();
+        row.set_sensitive(false);
         glib::spawn_future_local(async move {
             let ok = gtk4::gio::spawn_blocking(move || set_night_light(want)).await.unwrap_or(false);
             row.set_active(night_light_on());
+            row.set_sensitive(true);
             row.set_subtitle(if ok { NIGHT_SUBTITLE } else { "Couldn't change this. Try System Settings > Night Light." });
         });
     });
@@ -376,13 +389,24 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     }
     for (btn, value) in &dock_buttons {
         let (row, value) = (dock_row.clone(), *value);
+        let all = dock_buttons.clone();
         btn.connect_toggled(move |b| {
             if !b.is_active() || dock_position() == value {
                 return;
             }
             let row = row.clone();
+            let all = all.clone();
+            row.set_sensitive(false);
             glib::spawn_future_local(async move {
                 let ok = gtk4::gio::spawn_blocking(move || set_dock_position(value)).await.unwrap_or(false);
+                // The buttons show where the dock is now, not where it was sent.
+                let now = dock_position();
+                for (b, v) in &all {
+                    if *v == now {
+                        b.set_active(true);
+                    }
+                }
+                row.set_sensitive(true);
                 row.set_subtitle(if ok {
                     "Where the dock sits on the screen."
                 } else {
@@ -443,9 +467,9 @@ fn dock_confs() -> Vec<std::path::PathBuf> {
 /// 1 bottom, 2 left, 3 right, as Crystal Dock stores it; bottom if unset.
 fn dock_position() -> u8 {
     dock_confs()
-        .first()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| t.lines().find_map(|l| l.strip_prefix("position=").and_then(|v| v.trim().parse().ok())))
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .find_map(|t| t.lines().find_map(|l| l.strip_prefix("position=").and_then(|v| v.trim().parse().ok())))
         .unwrap_or(1)
 }
 
@@ -564,11 +588,13 @@ fn page_internet() -> gtk4::Widget {
             return; // the result of a change made below, shown back to the switch
         }
         let row = row.clone();
+        row.set_sensitive(false);
         glib::spawn_future_local(async move {
             let ok = gtk4::gio::spawn_blocking(move || set_kdeconnect(want)).await.unwrap_or(false);
             // The switch shows what is running now, not what was asked.
             let now = kdeconnect_running();
             row.set_active(now);
+            row.set_sensitive(true);
             row.set_subtitle(if ok { phone_subtitle(now) } else { "Couldn't change this. Open the KDE Connect app instead." });
         });
     });
@@ -585,7 +611,7 @@ fn phone_subtitle(on: bool) -> &'static str {
         "On, and it starts at login. Phones and computers on the same network can find this computer. \
          Pair them in the KDE Connect app."
     } else {
-        "Off. Nothing on this computer is listening for phones. Turn on to pair a phone with the KDE Connect app."
+        "Off. KDE Connect isn't running and doesn't start at login. Opening the KDE Connect app starts it again."
     }
 }
 
@@ -611,21 +637,32 @@ fn set_kdeconnect(on: bool) -> bool {
             return false;
         }
         use std::process::Stdio;
-        Command::new("setsid")
+        let spawned = Command::new("setsid")
             .args(["-f", "/usr/bin/kdeconnectd"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .map(|s| s.success())
-            .unwrap_or(false)
+            .unwrap_or(false);
+        spawned && wait_for_kdeconnect(true)
     } else {
         let _ = std::fs::remove_file(&entry);
         let _ = Command::new("pkill").args(["-x", "kdeconnectd"]).status();
-        // Give it a moment to exit before the switch reads the state back.
-        std::thread::sleep(std::time::Duration::from_millis(800));
-        true
+        wait_for_kdeconnect(false)
     }
+}
+
+/// Wait up to 5 seconds for the daemon to be running (or gone), so the switch
+/// reads the state after the change, not before it.
+fn wait_for_kdeconnect(running: bool) -> bool {
+    for _ in 0..50 {
+        if kdeconnect_running() == running {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    false
 }
 
 fn page_updates() -> gtk4::Widget {
@@ -771,7 +808,13 @@ fn page_developer() -> gtk4::Widget {
             glib::spawn_future_local(async move {
                 let ok = gtk4::gio::spawn_blocking(move || {
                     let verb = if on { "enable" } else { "disable" };
-                    run_ok("systemctl", &["--user", verb, "--now", "vara-hub.service"])
+                    let ok = run_ok("systemctl", &["--user", verb, "--now", "vara-hub.service"]);
+                    if on && !run_ok("systemctl", &["--user", "is-active", "--quiet", "vara-hub.service"]) {
+                        // Enabled but not running: undo, so the switch and the unit agree.
+                        run_ok("systemctl", &["--user", "disable", "--now", "vara-hub.service"]);
+                        return false;
+                    }
+                    ok
                 }).await.unwrap_or(false);
                 let now = run_ok("systemctl", &["--user", "is-active", "--quiet", "vara-hub.service"]);
                 hub_row.set_active(now);
