@@ -168,6 +168,12 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   VM (2026-10-20) with the mouse and the keyboard, with the Orca screen reader,
   in Light, Dark, at 150% scaling and on two virtual screens; not yet on real
   hardware.
+- 🐢 **Reduce motion.** Settings › Appearance has a switch that turns off most
+  window, menu and desktop animations. It uses KDE's own animation setting, so
+  windows, menus and the shell all follow it, and turning it off returns to
+  KDE's normal speed. Tested in a VM (2026-10-25): the setting is written and
+  removed, and Settings shows the real value when reopened. I checked in KWin's
+  source that it watches the setting, but did not time the animations.
 - ⛰️ **ArkaOS popups.** Notifications, the volume and brightness popups, the
   calendar, the tray and the launcher have corners cut at 45 degrees, like the
   peaks in the ArkaOS mark and wallpaper, with a thin border and a soft shadow.
