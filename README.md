@@ -168,6 +168,20 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   VM (2026-10-20) with the mouse and the keyboard, with the Orca screen reader,
   in Light, Dark, at 150% scaling and on two virtual screens; not yet on real
   hardware.
+- 🪟 **Window snapping.** Press Meta+Left or Meta+Right to put a window on half
+  of the screen, or drag it to a screen edge and a preview shows where it will
+  go. This is KDE's own tiling and works as it ships. Tested in a VM
+  (2026-10-25) with the keyboard and by dragging; not yet on a touchpad.
+- ⚓ **Move the dock.** Settings › Appearance has Bottom, Left and Right for the
+  dock. Crystal Dock has no menu entry for this, so Settings changes its setting
+  and restarts it. Tested in a VM (2026-10-25): each choice moved the dock and
+  one dock kept running.
+- 📱 **Link with your phone.** KDE Connect is off by default. Settings › Internet
+  has a switch that starts it now and at every login, and turns it off again.
+  While it runs, phones and computers on the same network can find this
+  computer. Tested in a VM (2026-10-25): it started and stopped, port 1716
+  opened and closed, and it came back after logging in again. Not tested with a
+  real phone.
 - 🐢 **Reduce motion.** Settings › Appearance has a switch that turns off most
   window, menu and desktop animations. It uses KDE's own animation setting, so
   windows, menus and the shell all follow it, and turning it off returns to
