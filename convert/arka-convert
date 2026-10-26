@@ -8,6 +8,10 @@
     arka-convert split-pdf FILE        save each page of a PDF as its own PDF
     arka-convert trim FILE START END   keep only START to END of a sound or video
                                        (seconds, mm:ss or hh:mm:ss)
+    arka-convert rotate FILE left|right|flip
+    arka-convert crop FILE X Y W H     keep a box of a picture (pixels)
+    arka-convert redact FILE X Y W H [X Y W H ...]   black out boxes of a picture
+    arka-convert background FILE COLOR[-COLOR2] PADDING   put a picture on a colour
 
 The converted file is saved beside the original and never replaces anything:
 a name that is taken gets " (1)", " (2)" and so on. Every converter (ffmpeg,
@@ -355,6 +359,93 @@ def trim_media(path, start, end, on_progress=None):
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def edit_image_worker(op, src, dst, args):
+    """Runs inside the sandbox: one picture edit with Pillow."""
+    from PIL import Image, ImageDraw, ImageOps
+    with Image.open(src) as im:
+        im.seek(0)
+        im = ImageOps.exif_transpose(im)  # edit what is seen, not the raw pixels
+        if op == "rotate":
+            im = im.rotate({"left": 90, "right": -90, "flip": 180}[args[0]], expand=True)
+        elif op == "crop":
+            x, y, w, h = map(int, args)
+            if w < 1 or h < 1 or x < 0 or y < 0 or x + w > im.width or y + h > im.height:
+                raise RuntimeError(f"that box is outside the picture ({im.width} x {im.height})")
+            im = im.crop((x, y, x + w, y + h))
+        elif op == "redact":
+            boxes = [tuple(map(int, args[i:i + 4])) for i in range(0, len(args), 4)]
+            if im.mode in ("P", "LA", "PA"):
+                im = im.convert("RGBA")
+            elif im.mode not in ("RGB", "RGBA", "L"):
+                im = im.convert("RGB")  # CMYK, 16-bit and the rest: "0" would not be black in all of them
+            else:
+                im = im.copy()
+            draw = ImageDraw.Draw(im)
+            black = (0, 0, 0, 255) if im.mode == "RGBA" else (0, 0, 0) if im.mode == "RGB" else 0
+            for x, y, w, h in boxes:
+                if w < 1 or h < 1:
+                    raise RuntimeError("a box has no size")
+                draw.rectangle((x, y, x + w - 1, y + h - 1), fill=black)  # the pixels are replaced, not covered
+        elif op == "background":
+            pad = int(args[1])
+            colors = [tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) for c in args[0].split("-")]
+            fg = im.convert("RGBA")
+            size = (fg.width + 2 * pad, fg.height + 2 * pad)
+            if len(colors) == 1:
+                bg = Image.new("RGBA", size, colors[0] + (255,))
+            else:  # top to bottom
+                bg = Image.new("RGBA", size)
+                top, bottom = colors[0], colors[1]
+                draw = ImageDraw.Draw(bg)
+                for yy in range(size[1]):
+                    t = yy / max(1, size[1] - 1)
+                    draw.line((0, yy, size[0], yy), fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+            bg.alpha_composite(fg, (pad, pad))
+            im = bg
+        fmt = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP"}.get(Path(dst).suffix.lower().lstrip("."), "PNG")
+        if fmt == "JPEG" and im.mode != "RGB":
+            im = im.convert("RGB")
+        im.save(dst, fmt, **({"quality": 92} if fmt in ("JPEG", "WEBP") else {}))
+
+
+def edit_image(op, path, args):
+    """rotate, crop, redact or background on one picture; the copy is saved beside it."""
+    src = Path(path).resolve()
+    ext = src.suffix.lower().lstrip(".")
+    if kind_of(src) != "image":
+        raise RuntimeError("this only works on pictures")
+    if op == "rotate" and args != [a for a in args if a in ("left", "right", "flip")][:1]:
+        raise RuntimeError("rotate needs left, right or flip")
+    if op in ("crop", "redact"):
+        if not args or (op == "crop" and len(args) != 4) or len(args) % 4:
+            raise RuntimeError("a box is four whole numbers: X Y W H")
+        try:
+            vals = [int(a) for a in args]
+        except ValueError:
+            raise RuntimeError("a box is four whole numbers: X Y W H") from None
+        if any(v < 0 for v in vals) or any(vals[i] < 1 for i in range(2, len(vals), 4)) or any(vals[i] < 1 for i in range(3, len(vals), 4)):
+            raise RuntimeError("a box needs a size and can't start before the picture")
+    if op == "background":
+        import re
+        if len(args) != 2 or not re.fullmatch(r"#[0-9a-fA-F]{6}(-#[0-9a-fA-F]{6})?", args[0]) \
+                or not args[1].isdigit() or int(args[1]) > 2000:
+            raise RuntimeError("background needs a colour like #1E90FF (or two joined with -) and a padding of 0 to 2000")
+    out_ext = ext if ext in ("png", "jpg", "jpeg", "webp") else "png"
+    if op == "background" and ext in ("jpg", "jpeg", "webp"):
+        out_ext = ext
+    out_dir = src.parent
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        tmp = scratch / f"out.{out_ext}"
+        run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--edit-worker", op, str(src), str(tmp), *args])
+        label = {"rotate": "rotated", "crop": "cropped", "redact": "redacted", "background": "with background"}[op]
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} ({label})", out_ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def notify(text, body="", replace=None, urgency="normal"):
     """Show a desktop notification. Returns its id, or None."""
     if os.environ.get("ARKA_CONVERT_QUIET") == "1":
@@ -426,18 +517,22 @@ def run_edit(tool, args):
     """merge-pdf, split-pdf and trim: run one, tell the user, refresh Dolphin."""
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
-    wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3)}[tool]
+    wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3), "rotate": (2, 2), "crop": (5, 5),
+              "redact": (5, None), "background": (3, 3)}[tool]
     if len(args) < wanted[0] or (wanted[1] and len(args) > wanted[1]):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
-    title = {"merge-pdf": "Merged", "split-pdf": "Split", "trim": "Trimmed"}[tool]
+    title = {"merge-pdf": "Merged", "split-pdf": "Split", "trim": "Trimmed", "rotate": "Rotated", "crop": "Cropped",
+             "redact": "Hidden parts blacked out", "background": "Background added"}[tool]
     try:
         if tool == "merge-pdf":
             made = merge_pdfs(args)
         elif tool == "split-pdf":
             made = split_pdf(args[0])
-        else:
+        elif tool == "trim":
             made = trim_media(args[0], args[1], args[2])
+        else:
+            made = edit_image(tool, args[0], args[1:])
     except (RuntimeError, OSError) as e:
         notify(f"Couldn't {tool.split('-')[0]}", f"{Path(args[0]).name}: {e}")
         return 1
@@ -453,16 +548,24 @@ def run_edit(tool, args):
 
 
 def main(argv):
+    if len(argv) >= 6 and argv[1] == "--edit-worker":
+        edit_image_worker(argv[2], argv[3], argv[4], argv[5:])
+        return 0
     if len(argv) >= 5 and argv[1] == "--image-worker":
         image_worker(argv[2], argv[3], argv[4])
         return 0
     if len(argv) >= 4 and argv[1] == "--notify-wait":
         notify_wait(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
         return 0
+    if len(argv) == 3 and argv[1] == "--duration":
+        with tempfile.TemporaryDirectory(prefix="arka-convert-") as d:
+            seconds = media_seconds(Path(d), str(Path(argv[2]).resolve()))
+        print(f"{seconds:.3f}" if seconds else "")
+        return 0 if seconds else 1
     if len(argv) == 3 and argv[1] == "--targets":
         print("\n".join(targets_for(argv[2])))
         return 0
-    if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim"):
+    if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim", "rotate", "crop", "redact", "background"):
         return run_edit(argv[1], argv[2:])
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
