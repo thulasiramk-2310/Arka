@@ -1,0 +1,18 @@
+[Unit]
+Description=ArkaOS format wheel
+Documentation=https://github.com/thulasiramk-2310/arkaos
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=dbus
+BusName=org.arkaos.Wheel
+ExecStart=/usr/bin/arka-wheel
+Restart=on-failure
+RestartSec=2
+Environment=QT_QPA_PLATFORM=wayland
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target
