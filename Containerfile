@@ -37,6 +37,9 @@ FROM docker.io/fedora:${FEDORA_VERSION} AS wheel-builder
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q cmake gcc-c++ extra-cmake-modules qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kglobalaccel-devel kf6-kwindowsystem-devel layer-shell-qt-devel
 COPY convert/wheel/ /build/
 RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build/out -j"$(nproc)"
+# The edit window (convert/edit): crop, black out, background, trim.
+COPY convert/edit/ /build-edit/
+RUN cmake -S /build-edit -B /build-edit/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build-edit/out -j"$(nproc)"
 
 # Stage 2d: VARA, version control (github.com/thulasiramk-2310/vara), built
 # from its v0.4.4 release, with the web files of its Hub. The checkout must be
@@ -85,6 +88,11 @@ COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
 COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
 COPY convert/arka-clean.desktop /usr/share/kio/servicemenus/arka-clean.desktop
+COPY convert/arka-edit-image.desktop /usr/share/kio/servicemenus/arka-edit-image.desktop
+COPY convert/arka-edit-pdf.desktop /usr/share/kio/servicemenus/arka-edit-pdf.desktop
+COPY convert/arka-edit-pdf-merge.desktop /usr/share/kio/servicemenus/arka-edit-pdf-merge.desktop
+COPY convert/arka-edit-media.desktop /usr/share/kio/servicemenus/arka-edit-media.desktop
+COPY convert/org.arkaos.edit.desktop /usr/share/applications/org.arkaos.edit.desktop
 COPY convert/org.arkaos.wheel.desktop /usr/share/applications/org.arkaos.wheel.desktop
 COPY convert/arka-wheel-autostart.desktop /etc/xdg/autostart/arka-wheel.desktop
 COPY systemd/vara-hub.service /usr/lib/systemd/user/vara-hub.service
@@ -119,6 +127,7 @@ COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-
 COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
 COPY --from=shell-builder /build/target/release/arka-privacy-dots /usr/bin/arka-privacy-dots
 COPY --from=wheel-builder /build/out/arka-wheel /usr/bin/arka-wheel
+COPY --from=wheel-builder /build-edit/out/arka-edit /usr/bin/arka-edit
 COPY --from=vara-builder /out/vara /usr/bin/vara
 COPY --from=vara-builder /out/hub /usr/share/vara/hub
 

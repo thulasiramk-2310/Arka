@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;
+Actions=crop;redact;background;left;right;
+X-KDE-Submenu=Edit picture
+X-KDE-Priority=TopLevel
+X-KDE-MaxNumberOfUrls=1
+
+[Desktop Action crop]
+Name=Crop...
+Exec=arka-edit crop %f
+Icon=transform-crop
+
+[Desktop Action redact]
+Name=Black out parts...
+Exec=arka-edit redact %f
+Icon=draw-rectangle
+
+[Desktop Action background]
+Name=Add a background...
+Exec=arka-edit background %f
+Icon=color-fill
+
+[Desktop Action left]
+Name=Rotate left
+Exec=arka-convert rotate %f left
+Icon=object-rotate-left
+
+[Desktop Action right]
+Name=Rotate right
+Exec=arka-convert rotate %f right
+Icon=object-rotate-right

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;
+Actions=trim;
+X-KDE-Priority=TopLevel
+X-KDE-MaxNumberOfUrls=1
+
+[Desktop Action trim]
+Name=Trim...
+Exec=arka-edit trim %f
+Icon=cut

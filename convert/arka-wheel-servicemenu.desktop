@@ -1,10 +1,15 @@
 [Desktop Entry]
 Type=Service
 MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;application/pdf;audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;
-Actions=wheel;
+Actions=wheel;editwheel;
 X-KDE-Priority=TopLevel
 
 [Desktop Action wheel]
 Name=Convert with the format wheel
 Exec=arka-wheel --files %F
 Icon=document-export
+
+[Desktop Action editwheel]
+Name=Edit with the edit wheel
+Exec=arka-wheel --edit --files %F
+Icon=document-edit
