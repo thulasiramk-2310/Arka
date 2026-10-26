@@ -185,19 +185,23 @@ Window {
     Item {
         id: stage
         visible: win.picTool
-        anchors { left: parent.left; right: parent.right; top: heading.bottom; bottom: controls.top; margins: 16 }
+        // The stage reaches 16 px past the picture on every side, so a corner
+        // handle that sits on the picture's edge is wholly inside the area that
+        // takes mouse events (Qt delivers none outside an item's parent).
+        anchors { left: parent.left; right: parent.right; top: heading.bottom; bottom: controls.top; topMargin: 0 }
 
         Image {
             id: img
             anchors.fill: parent
+            anchors.margins: 16
             fillMode: Image.PreserveAspectFit
             autoTransform: true
             smooth: true
             source: win.picTool ? edit.fileUrl : ""
         }
         readonly property real sc: win.imgSize.width > 0 ? img.paintedWidth / win.imgSize.width : 1
-        readonly property real ox: (width - img.paintedWidth) / 2
-        readonly property real oy: (height - img.paintedHeight) / 2
+        readonly property real ox: img.x + (img.width - img.paintedWidth) / 2
+        readonly property real oy: img.y + (img.height - img.paintedHeight) / 2
         function px(v) { return (v - ox) / sc }
         function py(v) { return (v - oy) / sc }
 
@@ -246,19 +250,21 @@ Window {
                     return -1
                 }
                 onPressed: (m) => {
-                    mode = hit(m.x, m.y)
-                    if (mode === 4) { gx = stage.px(m.x) - win.cropX; gy = stage.py(m.y) - win.cropY }
+                    const p = mapToItem(cropLayer, m.x, m.y)
+                    mode = hit(p.x, p.y)
+                    if (mode === 4) { gx = stage.px(p.x) - win.cropX; gy = stage.py(p.y) - win.cropY }
                 }
                 onReleased: mode = -1
                 onPositionChanged: (m) => {
+                    const p = mapToItem(cropLayer, m.x, m.y)
                     if (!pressed) {
-                        const h = hit(m.x, m.y)
+                        const h = hit(p.x, p.y)
                         cursorShape = h === 0 || h === 3 ? Qt.SizeFDiagCursor : h === 1 || h === 2 ? Qt.SizeBDiagCursor
                                       : h === 4 ? Qt.OpenHandCursor : Qt.ArrowCursor
                         return
                     }
-                    if (mode >= 0 && mode < 4) win.resizeFrom(mode, stage.px(m.x), stage.py(m.y))
-                    else if (mode === 4) win.setBox(stage.px(m.x) - gx, stage.py(m.y) - gy, win.cropW, win.cropH)
+                    if (mode >= 0 && mode < 4) win.resizeFrom(mode, stage.px(p.x), stage.py(p.y))
+                    else if (mode === 4) win.setBox(stage.px(p.x) - gx, stage.py(p.y) - gy, win.cropW, win.cropH)
                 }
             }
         }
@@ -470,6 +476,19 @@ Window {
                 from: 0; to: 300; value: win.padding
                 onMoved: win.padding = value
                 Accessible.name: "Room around the picture"
+                background: Rectangle {
+                    x: padSlider.leftPadding
+                    y: padSlider.topPadding + padSlider.availableHeight / 2 - height / 2
+                    width: padSlider.availableWidth; height: 4; radius: 2
+                    color: win.line
+                    Rectangle { width: padSlider.visualPosition * parent.width; height: parent.height; radius: 2; color: win.accent }
+                }
+                handle: Rectangle {
+                    x: padSlider.leftPadding + padSlider.visualPosition * (padSlider.availableWidth - width)
+                    y: padSlider.topPadding + padSlider.availableHeight / 2 - height / 2
+                    width: 18; height: 18; radius: 9
+                    color: "white"; border.color: win.accent; border.width: 2
+                }
             }
             Text { text: Math.round(win.padding) + " px"; color: win.ink; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
         }
