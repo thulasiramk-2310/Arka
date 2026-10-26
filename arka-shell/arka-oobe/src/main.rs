@@ -10,7 +10,7 @@
 // second setup.
 //
 // ARKA_OOBE_PREVIEW=<page> opens it windowed at a page for design review
-// (hello, look, name, password, signin, privacy, working, bye) and never
+// (hello, look, name, password, signin, privacy, wheel, working, bye) and never
 // creates an account or reboots. Setup opens in the dark look so the first
 // screens are not a full-brightness white panel in a dim room (reported on real
 // hardware); ARKA_OOBE_THEME=light previews the light look.
@@ -27,6 +27,10 @@ use adw::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
+
+mod motion;
+mod ridge;
+mod tutorial;
 
 const APP_ID: &str = "org.arka.oobe";
 
@@ -165,12 +169,13 @@ window, stack, .oobe-root, .oobe-page {{ background-color: {bg}; color: {fg}; }}
 
 .oobe-brand {{ font-size: 14px; font-weight: 600; color: {fg}; }}
 .oobe-step {{ font-size: 13px; color: {muted}; }}
-.oobe-seg {{ min-width: 30px; min-height: 3px; border-radius: 2px; background-color: {line}; }}
-.oobe-seg.on {{ background-color: {fg}; }}
 
 .oobe-title {{ font-family: 'Noto Serif', serif; font-size: 44px; font-weight: 500; color: {fg}; }}
 .oobe-sub {{ font-size: 17px; color: {muted}; }}
 .oobe-note {{ font-size: 14px; color: {faint}; }}
+.oobe-tstep {{ font-size: 16px; color: {faint}; }}
+.oobe-tstep.now {{ color: {fg}; font-weight: 600; }}
+.oobe-tstep.done {{ color: {muted}; }}
 .oobe-err {{ font-size: 14px; color: {err}; }}
 
 entry.oobe-field, passwordentry.oobe-field {{
@@ -480,28 +485,17 @@ fn build_ui(app: &adw::Application) {
     brand.add_css_class("oobe-brand");
     let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     spacer.set_hexpand(true);
-    let segs_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    segs_box.set_valign(gtk4::Align::Center);
-    let segs: Vec<gtk4::Box> = (0..5)
-        .map(|_| {
-            let s = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-            s.add_css_class("oobe-seg");
-            segs_box.append(&s);
-            s
-        })
-        .collect();
+    let ridge = ridge::Ridge::new(dark.clone());
     top.append(&mark);
     top.append(&brand);
     let step_lbl = gtk4::Label::new(None);
     step_lbl.add_css_class("oobe-step");
-    step_lbl.set_margin_end(12);
     top.append(&spacer);
     top.append(&step_lbl);
-    top.append(&segs_box);
 
     let pages = gtk4::Stack::new();
-    pages.set_transition_type(gtk4::StackTransitionType::SlideLeftRight);
-    pages.set_transition_duration(320);
+    // Pages change through motion.rs (fade out, then build in), not a slide.
+    pages.set_transition_type(gtk4::StackTransitionType::None);
     pages.set_vexpand(true);
 
     // look
@@ -526,8 +520,8 @@ fn build_ui(app: &adw::Application) {
     dark_tile.set_group(Some(&light_tile));
     if dark.get() { dark_tile.set_active(true) } else { light_tile.set_active(true) }
     for (t, d) in [(&light_tile, false), (&dark_tile, true)] {
-        let set_look = set_look.clone();
-        t.connect_toggled(move |b| if b.is_active() { set_look(d) });
+        let (set_look, ridge_area) = (set_look.clone(), ridge.area.clone());
+        t.connect_toggled(move |b| if b.is_active() { set_look(d); ridge_area.queue_draw(); });
     }
     let look_body = gtk4::Box::new(gtk4::Orientation::Horizontal, 20);
     // Keyboard: the arrow keys pick a look, like a radio group, so arrow + Enter
@@ -567,13 +561,13 @@ fn build_ui(app: &adw::Application) {
     // name
     let name_entry = gtk4::Entry::new();
     name_entry.add_css_class("oobe-field");
-    name_entry.set_placeholder_text(Some("your name"));
+    name_entry.set_placeholder_text(Some("username"));
     let name_body = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
     name_body.append(&name_entry);
     name_body.append(&label("Lowercase letters and numbers, like alex or ram.", "oobe-note"));
     pages.add_named(
-        &page(&label("What's your name?", "oobe-title"),
-              &label("It becomes your username on this computer.", "oobe-sub"), &name_body),
+        &page(&label("Choose a username", "oobe-title"),
+              &label("It is the name you sign in with.", "oobe-sub"), &name_body),
         Some("name"),
     );
 
@@ -692,6 +686,54 @@ fn build_ui(app: &adw::Application) {
         Some("privacy"),
     );
 
+    // the format wheel, practised in a window of its own
+    let tut_texts = ["Click a file, or right-click it", "Choose Convert with the format wheel", "Pick a format"];
+    let tut_labels: Vec<gtk4::Label> = tut_texts
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let l = label(&format!("{}   {}", i + 1, s), "oobe-tstep");
+            l.set_wrap(false);
+            l
+        })
+        .collect();
+    let tut_retry = gtk4::Button::with_label("Try it again");
+    tut_retry.add_css_class("oobe-back");
+    tut_retry.set_halign(gtk4::Align::Start);
+    tut_retry.set_visible(false);
+    let on_stage: Rc<dyn Fn(tutorial::Stage)> = {
+        let (labels, retry) = (tut_labels.clone(), tut_retry.clone());
+        Rc::new(move |s: tutorial::Stage| {
+            let n = s.number() as usize;
+            for (i, l) in labels.iter().enumerate() {
+                l.remove_css_class("now");
+                l.remove_css_class("done");
+                if n > labels.len() || i + 1 < n { l.add_css_class("done") } else if i + 1 == n { l.add_css_class("now") }
+            }
+            retry.set_visible(n > labels.len());
+        })
+    };
+    let (tut_area, tut_reset) = tutorial::build(dark.clone(), on_stage.clone());
+    on_stage(tutorial::Stage::Click);
+    {
+        let r = tut_reset.clone();
+        tut_retry.connect_clicked(move |_| r());
+    }
+    let tut_steps = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    for l in &tut_labels {
+        tut_steps.append(l);
+    }
+    let tut_body = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+    tut_body.append(&tut_steps);
+    tut_body.append(&tut_area);
+    tut_body.append(&tut_retry);
+    tut_body.append(&label("Practice only. Your own files are never changed. In your files, right-click one and choose Convert with the format wheel.", "oobe-note"));
+    pages.add_named(
+        &page(&label("Convert with the wheel", "oobe-title"),
+              &label("Three moves to change a picture, sound, video or PDF into another format.", "oobe-sub"), &tut_body),
+        Some("wheel"),
+    );
+
     // working
     let spinner = gtk4::Spinner::new();
     spinner.set_size_request(28, 28);
@@ -713,7 +755,7 @@ fn build_ui(app: &adw::Application) {
     let next = gtk4::Button::with_label("Continue");
     next.add_css_class("oobe-primary");
     let bottom = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    bottom.set_margin_bottom(40);
+    bottom.set_margin_bottom(6);
     bottom.set_margin_start(44);
     bottom.set_margin_end(44);
     let bspace = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -726,10 +768,11 @@ fn build_ui(app: &adw::Application) {
     frame.append(&top);
     frame.append(&pages);
     frame.append(&bottom);
+    frame.append(&ridge.area);
     root.add_named(&frame, Some("setup"));
 
     // ── navigation ────────────────────────────────────────────────────────
-    const ORDER: &[&str] = &["look", "name", "password", "signin", "privacy", "working"];
+    const ORDER: &[&str] = &["look", "name", "password", "signin", "privacy", "wheel", "working"];
     let cur = Rc::new(Cell::new(0usize));
 
     // Privacy rows: Checking… while arkad is asked (it may still be starting),
@@ -842,19 +885,20 @@ fn build_ui(app: &adw::Application) {
         recheck.connect_clicked(move |_| c());
     }
 
+    let motion_on = preview.is_none() || std::env::var("ARKA_OOBE_MOTION").is_ok();
+    let shown_once = Rc::new(Cell::new(false));
+    let show_gen = Rc::new(Cell::new(0u32));
     let show: Rc<dyn Fn(usize)> = {
-        let (cur, pages, segs) = (cur.clone(), pages.clone(), segs.clone());
+        let (cur, pages, ridge) = (cur.clone(), pages.clone(), ridge.clone());
         let (back, next, err, spinner) = (back.clone(), next.clone(), err.clone(), spinner.clone());
         let (name_entry, pass_entry, light_tile, dark_tile, dark) =
             (name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone());
         let (check_privacy, step_lbl, gen) = (check_privacy.clone(), step_lbl.clone(), gen.clone());
+        let (shown_once, show_gen, tut_reset) = (shown_once.clone(), show_gen.clone(), tut_reset.clone());
         Rc::new(move |i: usize| {
+            let from = cur.get();
             cur.set(i);
             let name = ORDER[i];
-            pages.set_visible_child_name(name);
-            for (k, s) in segs.iter().enumerate() {
-                if k <= i { s.add_css_class("on") } else { s.remove_css_class("on") }
-            }
             err.set_visible(false);
             let busy = name == "working";
             step_lbl.set_visible(!busy);
@@ -866,17 +910,46 @@ fn build_ui(app: &adw::Application) {
             gen.set(gen.get().wrapping_add(1));
             next.set_visible(!busy);
             next.set_sensitive(true);
-            next.set_label(if name == "privacy" { "Finish setup" } else { "Continue" });
+            next.set_label(if name == "wheel" { "Finish setup" } else { "Continue" });
             spinner.set_spinning(busy);
-            match name {
-                "look" => { if dark.get() { dark_tile.grab_focus() } else { light_tile.grab_focus() }; }
-                "name" => { name_entry.grab_focus(); }
-                "password" => { pass_entry.grab_focus(); }
-                "privacy" => {
-                    check_privacy();
-                    next.grab_focus();
+            if name == "wheel" {
+                tut_reset();
+            }
+
+            let animate = motion_on && shown_once.get() && i != from && motion::animations_enabled();
+            shown_once.set(true);
+            ridge.go_to(i.min(5), animate);
+            let my = show_gen.get().wrapping_add(1);
+            show_gen.set(my);
+
+            // Switch to the new page and put focus where typing starts. With motion, the
+            // new page's parts are hidden first so they can build in.
+            let switch = {
+                let (pages, name_entry, pass_entry, light_tile, dark_tile, dark, next) =
+                    (pages.clone(), name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone(), next.clone());
+                let check_privacy = check_privacy.clone();
+                move || {
+                    let parts = if animate { pages.child_by_name(name).map(|p| motion::prepare(p.upcast_ref())) } else { None };
+                    pages.set_visible_child_name(name);
+                    if let Some(parts) = parts { motion::play(parts); }
+                    match name {
+                        "look" => { if dark.get() { dark_tile.grab_focus() } else { light_tile.grab_focus() }; }
+                        "name" => { name_entry.grab_focus(); }
+                        "password" => { pass_entry.grab_focus(); }
+                        "privacy" => {
+                            check_privacy();
+                            next.grab_focus();
+                        }
+                        _ => { next.grab_focus(); }
+                    }
                 }
-                _ => { next.grab_focus(); }
+            };
+            match (animate, pages.visible_child()) {
+                (true, Some(old)) => {
+                    let show_gen = show_gen.clone();
+                    motion::exit(&old, move || { if show_gen.get() == my { switch() } });
+                }
+                _ => switch(),
             }
         })
     };
@@ -941,10 +1014,11 @@ fn build_ui(app: &adw::Application) {
                     show(4)
                 }
             }
-            "privacy" => {
+            "privacy" => show(5),
+            "wheel" => {
                 if busy.replace(true) { return; }
                 next_btn.set_sensitive(false);
-                show(5);
+                show(6);
                 let user = name_entry.text().to_string();
                 let (u, p, autologin, d) = (user.clone(), pass_entry.text().to_string(), !ask.is_active(), dark.get());
                 let tools: Vec<&str> = [("vara", vara_cb.is_active()), ("git", git_cb.is_active())]
@@ -967,7 +1041,7 @@ fn build_ui(app: &adw::Application) {
                         Ok(()) => finish(user),
                         Err(e) => {
                             busy.set(false);
-                            show(4);
+                            show(5);
                             fail(&format!("Couldn't create the account: {e}"));
                         }
                     }
@@ -1074,6 +1148,21 @@ fn build_ui(app: &adw::Application) {
         }
     }
     window.present();
+
+    // Preview only: ARKA_OOBE_STEP_AT="1500:2,3000:3" jumps to page 2 at 1.5 s and page 3 at 3 s,
+    // so the motion between pages can be captured.
+    if preview.is_some() {
+        if let Ok(spec) = std::env::var("ARKA_OOBE_STEP_AT") {
+            for part in spec.split(',') {
+                if let Some((ms, idx)) = part.split_once(':') {
+                    if let (Ok(ms), Ok(idx)) = (ms.trim().parse::<u64>(), idx.trim().parse::<usize>()) {
+                        let show = show.clone();
+                        glib::timeout_add_local_once(Duration::from_millis(ms), move || show(idx.min(ORDER.len() - 1)));
+                    }
+                }
+            }
+        }
+    }
 
     if let (Some(_), Ok(path)) = (preview.as_deref(), std::env::var("ARKA_OOBE_SHOT")) {
         let w = window.clone();
