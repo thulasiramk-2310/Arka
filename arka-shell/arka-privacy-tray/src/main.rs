@@ -340,6 +340,6 @@ mod tests {
         let tray = ArkaTray::default();
         assert!(status_line(&tray).starts_with("unknown\tStatus unknown"));
         let up = ArkaTray { arkad_up: true, ..ArkaTray::default() };
-        assert_eq!(status_line(&up), "ok\tConfigured — 0 drifts today");
+        assert_eq!(status_line(&up), "ok\tPrivacy settings are on");
     }
 }

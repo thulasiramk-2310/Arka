@@ -9,7 +9,7 @@
 //! Honesty rules baked in (the project's standing honesty rules):
 //!   * We report enforcement STATE and NOTABLE EVENTS — never per-connection or
 //!     per-domain traffic (that would be a surveillance layer; phase 2 only).
-//!   * The positive default is silence: "Configured — 0 drifts today".
+//!   * The positive default is silence: "Privacy settings are on".
 //!   * Only a real, new drift (warn) or a protection currently DOWN (critical)
 //!     may notify. Routine/info events never do. Notifications are rate-limited
 //!     and coalesced so warning-fatigue can't set in.
@@ -112,9 +112,10 @@ impl Level {
     }
     pub fn header(self, drifts_today: usize) -> String {
         match self {
-            Level::Ok => format!("Configured — {drifts_today} drift{} today", plural(drifts_today)),
-            Level::Warn => format!("Configured after recent drift — {drifts_today} drift{} today", plural(drifts_today)),
-            Level::Critical => "Needs attention — a privacy setting isn't in place".to_string(),
+            Level::Ok if drifts_today == 0 => "Privacy settings are on".to_string(),
+            Level::Ok => format!("Privacy settings are on, {drifts_today} put back today"),
+            Level::Warn => format!("A privacy setting was put back, {drifts_today} today"),
+            Level::Critical => "A privacy setting is off".to_string(),
         }
     }
 }
@@ -405,8 +406,10 @@ mod tests {
     fn icons_and_headers() {
         assert_eq!(Level::Ok.icon_name(), "security-high");
         assert_eq!(Level::Critical.icon_name(), "security-low");
-        assert_eq!(Level::Ok.header(0), "Configured — 0 drifts today");
-        assert_eq!(Level::Ok.header(1), "Configured — 1 drift today");
+        assert_eq!(Level::Ok.header(0), "Privacy settings are on");
+        assert_eq!(Level::Ok.header(2), "Privacy settings are on, 2 put back today");
+        assert_eq!(Level::Warn.header(1), "A privacy setting was put back, 1 today");
+        assert_eq!(Level::Critical.header(0), "A privacy setting is off");
     }
 
     #[test]
