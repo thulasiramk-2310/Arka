@@ -8,8 +8,11 @@ Window {
     color: "transparent"
     visible: false
 
-    readonly property real outerR: 190
-    readonly property real innerR: 70
+    // Sized from the screen, not in fixed pixels: about 30% of the screen height, never bigger than the
+    // 380 px it was drawn at and never so small the labels stop fitting.
+    readonly property real k: Math.max(0.72, Math.min(1.0, Screen.height * 0.30 / 380))
+    readonly property real outerR: 190 * k
+    readonly property real innerR: 70 * k
     property real cx: width / 2
     property real cy: height / 2
     property bool placed: false
@@ -25,7 +28,7 @@ Window {
 
     // A lightly translucent surface with a soft highlight along the top; KWin
     // blurs what is behind the ring. Nothing here needs a GPU.
-    readonly property color surface: dark ? Qt.rgba(29 / 255, 32 / 255, 38 / 255, 0.80) : Qt.rgba(250 / 255, 251 / 255, 252 / 255, 0.82)
+    readonly property color surface: dark ? Qt.rgba(29 / 255, 32 / 255, 38 / 255, 0.93) : Qt.rgba(250 / 255, 251 / 255, 252 / 255, 0.94)
     readonly property color slotFill: dark ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0.07, 0.10, 0.18, 0.07)
     readonly property color hubFill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.62)
     readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
@@ -56,9 +59,15 @@ Window {
     }
     function hubText() {
         if (hover >= 0 && hover < formats.length) return label(formats[hover])
-        return clickMode ? "Pick one" : "Drop on one"
+        return clickMode ? "Pick one" : (files.length ? "Drop on one" : "Drop a file")
     }
 
+    // The dragged files: from the event, or parsed from the raw uri-list when the event leaves them out.
+    function urlsFrom(ev) {
+        if (ev.urls && ev.urls.length) return ev.urls
+        const raw = ev.getDataAsString("text/uri-list")
+        return raw ? raw.split(/\r?\n/).filter(l => l.length && l[0] !== "#") : []
+    }
     function listFor(urls) { return edit ? wheel.toolsFor(urls) : wheel.formatsFor(urls) }
 
     // Over maxSlots entries: the first five in priority order (the order the
@@ -176,7 +185,8 @@ Window {
         onEntered: (drag) => {
             leaveTimer.stop()
             win.place(drag.x, drag.y)
-            if (!win.files.length) { win.files = drag.urls; win.setFormats(win.listFor(drag.urls)) }
+            const urls = win.urlsFrom(drag)
+            if (!win.files.length && urls.length) { win.files = urls; win.setFormats(win.listFor(urls)) }
             win.hover = win.indexAt(drag.x, drag.y)
             drag.accept(Qt.CopyAction)
         }
@@ -184,6 +194,17 @@ Window {
         onExited: leaveTimer.restart()
         onDropped: (drop) => {
             const i = win.indexAt(drop.x, drop.y)
+            if (!win.formats.length) {
+                // Some desktops only hand over the file when it is dropped. Take it, then let the user pick.
+                const urls = win.urlsFrom(drop)
+                drop.accept(Qt.CopyAction)
+                if (urls.length) {
+                    win.files = urls; win.clickMode = true; win.hover = -1
+                    win.setFormats(win.listFor(urls))
+                }
+                if (!win.formats.length) win.close()
+                return
+            }
             if (i >= 0) {
                 drop.accept(Qt.CopyAction)   // copy, so the original file is never moved
                 win.pick(i, drop.urls)
@@ -289,14 +310,14 @@ Window {
                     }
                 }
                 Text {
-                    width: 100
+                    width: Math.max(72, 100 * win.k)
                     x: win.outerR + slotItem.r * Math.cos(slotItem.mid) - width / 2
                     y: slotItem.ym - height / 2
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     text: win.label(slotItem.modelData)
                     color: slotItem.on ? win.accentInk : win.ink
-                    font.pixelSize: win.edit ? 15 : 17
+                    font.pixelSize: Math.max(12, (win.edit ? 15 : 17) * win.k)
                     font.weight: Font.Bold
                     font.letterSpacing: win.edit ? 0.2 : 0.6
                     scale: slotItem.on ? 1.22 : 1
