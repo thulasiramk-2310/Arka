@@ -29,9 +29,11 @@ Window {
     // A lightly translucent surface with a soft highlight along the top; KWin
     // blurs what is behind the ring. Nothing here needs a GPU.
     readonly property color surface: dark ? Qt.rgba(29 / 255, 32 / 255, 38 / 255, 0.93) : Qt.rgba(250 / 255, 251 / 255, 252 / 255, 0.94)
-    readonly property color slotFill: dark ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0.07, 0.10, 0.18, 0.07)
+    readonly property color slotFill: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.07, 0.10, 0.18, 0.10)
+    readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0.07, 0.10, 0.18, 0.28)
     readonly property color hubFill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.62)
-    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.75)
+    // A clear edge on any wallpaper: light on dark, dark on light.
+    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0.07, 0.10, 0.18, 0.40)
     readonly property real gloss: dark ? 0.10 : 0.55
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
@@ -246,7 +248,7 @@ Window {
                 required property int modelData
                 x: -modelData; y: 8 - modelData
                 width: ring.width + 2 * modelData; height: width; radius: width / 2
-                color: Qt.rgba(0, 0, 0, win.dark ? 0.10 : 0.05)
+                color: Qt.rgba(0, 0, 0, win.dark ? 0.16 : 0.09)
             }
         }
 
@@ -255,7 +257,7 @@ Window {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: win.surface; strokeColor: win.rim; strokeWidth: 1
+                fillColor: win.surface; strokeColor: win.rim; strokeWidth: 1.5
                 fillRule: ShapePath.OddEvenFill
                 PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.outerR - 0.5; radiusY: win.outerR - 0.5; startAngle: 0; sweepAngle: 360 }
                 PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.innerR; radiusY: win.innerR; startAngle: 0; sweepAngle: 360; moveToStart: true }
@@ -293,7 +295,8 @@ Window {
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
                     ShapePath {
-                        strokeColor: "transparent"
+                        strokeColor: slotItem.on ? "transparent" : win.slotEdge
+                        strokeWidth: 1
                         fillRule: ShapePath.OddEvenFill
                         fillColor: slotItem.on ? win.accent : win.slotFill
                         PathSvg { path: slotItem.path }
