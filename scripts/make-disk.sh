@@ -9,6 +9,9 @@
 # serial login on machines without a usable serial port, which crash-looped
 # agetty on the Nokia (docs/NOKIA-USB-DIAGNOSIS.md). Pass --serial only for a
 # VM debugging image.
+#
+# The installed system takes its updates from the signed public image
+# (ghcr.io/thulasiramk-2310/arka:latest), not from this machine's local tag.
 set -euo pipefail
 
 OUT=${1:?usage: $0 OUT.raw [SIZE] [--serial]}
@@ -37,5 +40,15 @@ podman machine ssh podman-machine-default \
     "podman run --rm --privileged --pid=host --security-opt label=type:unconfined_t \
        -v /var/lib/containers:/var/lib/containers -v /dev:/dev -v '$mdir':/output \
        localhost/arkaos:dev bootc install to-disk --via-loopback --generic-image \
+       --target-imgref ghcr.io/thulasiramk-2310/arka:latest \
        --filesystem xfs ${KARGS[*]} '/output/$file'"
 echo "make-disk: wrote $out_abs ($( [ -n "$SERIAL" ] && echo 'with' || echo 'without') serial console)"
+cat <<EOF
+make-disk: to put it on a USB stick (check the device first, this erases it):
+  sudo dd if=$out_abs of=/dev/disk/by-id/<your-stick> bs=4M conv=fsync status=progress
+  sudo sgdisk -e /dev/disk/by-id/<your-stick>
+  sudo sgdisk --move-main-table=2 /dev/disk/by-id/<your-stick>
+  sudo sgdisk -v /dev/disk/by-id/<your-stick>   # must say "No problems found"
+The image keeps its main partition table at sector 2016, and firmware such as the Nokia's rejects the stick when that
+table's checksum is bad. Moving it to sector 2 fixes that.
+EOF
