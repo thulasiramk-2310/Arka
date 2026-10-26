@@ -295,14 +295,6 @@ Item {
                             font.weight: categoryButton.current ? Font.DemiBold : Font.Normal
                             Accessible.ignored: true
                         }
-                        PC3.Label {
-                            Layout.rightMargin: Kirigami.Units.largeSpacing
-                            visible: categoryButton.index > 0
-                            text: categoryButton.appCount
-                            opacity: 0.7
-                            font: Kirigami.Theme.smallFont
-                            Accessible.ignored: true
-                        }
                     }
                 }
             }
@@ -464,31 +456,16 @@ Item {
             Layout.bottomMargin: Kirigami.Units.smallSpacing
             spacing: Kirigami.Units.largeSpacing
 
-            // The account picture, or the first letter of the name.
-            Rectangle {
-                readonly property string name: kuser.fullName || kuser.loginName
-
+            // The account picture, only when there is one. No placeholder disc with a letter.
+            Kirigami.ShadowedImage {
+                id: face
                 Layout.preferredWidth: Math.round(full.unit * 1.8)
                 Layout.preferredHeight: Layout.preferredWidth
+                source: kuser.faceIconUrl
                 radius: width / 2
-                color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
+                fillMode: Image.PreserveAspectCrop
+                visible: status === Image.Ready
                 Accessible.ignored: true
-
-                PC3.Label {
-                    anchors.centerIn: parent
-                    visible: face.status !== Image.Ready
-                    text: parent.name.charAt(0).toUpperCase()
-                    Accessible.ignored: true
-                    font.weight: Font.DemiBold
-                }
-                Kirigami.ShadowedImage {
-                    id: face
-                    anchors.fill: parent
-                    source: kuser.faceIconUrl
-                    radius: width / 2
-                    fillMode: Image.PreserveAspectCrop
-                    visible: status === Image.Ready
-                }
             }
 
             PC3.Label {
