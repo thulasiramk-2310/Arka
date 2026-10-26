@@ -4,6 +4,10 @@
     arka-convert FORMAT FILE...        convert each FILE to FORMAT
     arka-convert --targets FILE        list the formats FILE can become
     arka-convert clean FILE...         save a copy without hidden details
+    arka-convert merge-pdf FILE FILE...  join PDFs into one, in the order given
+    arka-convert split-pdf FILE        save each page of a PDF as its own PDF
+    arka-convert trim FILE START END   keep only START to END of a sound or video
+                                       (seconds, mm:ss or hh:mm:ss)
 
 The converted file is saved beside the original and never replaces anything:
 a name that is taken gets " (1)", " (2)" and so on. Every converter (ffmpeg,
@@ -249,7 +253,109 @@ def convert_one(src, fmt, on_progress=None):
         shutil.rmtree(scratch, ignore_errors=True)
 
 
-def notify(text, body="", replace=None):
+def parse_time(text):
+    """'90', '1:30' or '1:02:03.5' as seconds. Raises RuntimeError if it isn't a time."""
+    try:
+        parts = [float(p) for p in text.split(":")]
+    except ValueError:
+        parts = []
+    if not 1 <= len(parts) <= 3 or any(p < 0 or p != p for p in parts) or "inf" in text.lower():
+        raise RuntimeError(f"'{text}' isn't a time. Use seconds, mm:ss or hh:mm:ss")
+    seconds = 0.0
+    for p in parts:
+        seconds = seconds * 60 + p
+    return seconds
+
+
+def edit_done(scratch, made, stems_exts):
+    """Move finished files out of the scratch folder under names that are free."""
+    made = [m for m in made if m.exists() and m.stat().st_size > 0]
+    if not made:
+        raise RuntimeError("the tool made no file")
+    results = []
+    for m, (out_dir, stem, ext) in zip(made, stems_exts):
+        final = free_name(out_dir, stem, ext)
+        m.rename(final)
+        results.append(final)
+    return results
+
+
+def merge_pdfs(paths):
+    """Join PDFs, in the order given, into one saved beside the first."""
+    srcs = [Path(p).resolve() for p in paths]
+    if len(srcs) < 2:
+        raise RuntimeError("merging needs at least two PDFs")
+    for s in srcs:
+        if s.suffix.lower() != ".pdf":
+            raise RuntimeError(f"{s.name} isn't a PDF")
+    out_dir = srcs[0].parent
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        tmp = scratch / "out.pdf"
+        run(scratch, ["pdfunite", *map(str, srcs), str(tmp)])
+        return edit_done(scratch, [tmp], [(out_dir, f"{srcs[0].stem} (merged)", "pdf")])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def split_pdf(path):
+    """Save every page of a PDF as its own PDF beside it."""
+    src = Path(path).resolve()
+    if src.suffix.lower() != ".pdf":
+        raise RuntimeError(f"{src.name} isn't a PDF")
+    out_dir = src.parent
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        run(scratch, ["pdfseparate", str(src), str(scratch / "page-%d.pdf")])
+        pages = sorted(scratch.glob("page-*.pdf"), key=lambda m: int(m.stem.split("-")[1]))
+        if len(pages) < 2:
+            raise RuntimeError("it has only one page")
+        return edit_done(scratch, pages, [(out_dir, f"{src.stem} page {i + 1}", "pdf") for i in range(len(pages))])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def trim_media(path, start, end, on_progress=None):
+    """Keep START to END of a sound or video, re-encoded so the cut is exact."""
+    src = Path(path).resolve()
+    kind = kind_of(src)
+    ext = src.suffix.lower().lstrip(".")
+    t0, t1 = parse_time(start), parse_time(end)
+    if kind not in ("audio", "video"):
+        raise RuntimeError("only sound and video can be trimmed")
+    if t1 <= t0:
+        raise RuntimeError("the end has to be after the start")
+    if kind == "audio" and ext in AUDIO_OPTS:
+        opts = AUDIO_OPTS[ext]
+    elif ext in ("mp4", "mkv"):
+        opts = [o for o in VIDEO_OPTS["mp4"] if o not in ("-movflags", "+faststart")]
+    elif ext == "webm":
+        opts = VIDEO_OPTS["webm"]
+    else:
+        raise RuntimeError(f".{ext} can't be trimmed yet (mp3, wav, flac, ogg, opus, m4a, mp4, mkv, webm can)")
+    out_dir = src.parent
+    if not os.access(out_dir, os.W_OK):
+        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        total = media_seconds(scratch, str(src))
+        if total is not None and t0 >= total:
+            raise RuntimeError("the start is after the end of the file")
+        tmp = scratch / f"out.{ext}"
+        # -ss after -i is slower but frame-exact; -t is the length to keep.
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src),
+                             "-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}", *opts, str(tmp)],
+                   min(t1, total) - t0 if total else t1 - t0, on_progress)
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} (trimmed)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def notify(text, body="", replace=None, urgency="normal"):
     """Show a desktop notification. Returns its id, or None."""
     if os.environ.get("ARKA_CONVERT_QUIET") == "1":
         return None
@@ -257,20 +363,107 @@ def notify(text, body="", replace=None):
     if not exe:
         print(f"{text} {body}".strip(), file=sys.stderr)
         return None
-    cmd = [exe, "-a", "ArkaOS", "-i", "document-export", "-p"]
+    cmd = [exe, "-a", "ArkaOS", "-i", "document-export", "-u", urgency, "-p"]
     if replace:
         cmd += ["-r", str(replace)]
     done = subprocess.run(cmd + [text, body], capture_output=True, text=True)
     return done.stdout.strip() or None
 
 
+def notify_done(text, path, replace=None):
+    """The finished notification, with a "Show in Folder" button. notify-send
+    has to stay alive to hear the click, so it runs in a detached copy of this
+    program that ends when the notification goes away."""
+    if os.environ.get("ARKA_CONVERT_QUIET") == "1" or not shutil.which("notify-send"):
+        return notify(text, f"Saved as {Path(path).name}", replace)
+    cmd = [sys.executable, "-I", os.path.realpath(__file__), "--notify-wait", str(path), text]
+    if replace:
+        cmd.append(str(replace))
+    subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def notify_wait(path, text, replace=None):
+    """--notify-wait: show the notification and open the folder if asked."""
+    # -t: how long it stays up. The timeout is a backstop so this process can
+    # never outlive a notification the desktop forgot to close.
+    cmd = ["notify-send", "-a", "ArkaOS", "-i", "document-export", "-u", "normal", "-t", "10000", "-w",
+           "-A", "show=Show in Folder"]
+    if replace:
+        cmd += ["-r", replace]
+    try:
+        done = subprocess.run(cmd + [text, f"Saved as {Path(path).name}"], capture_output=True, text=True,
+                              timeout=60)
+    except subprocess.TimeoutExpired:
+        return
+    if done.stdout.strip() == "show":
+        show_in_folder(path)
+
+
+def show_in_folder(path):
+    """Ask the file manager (Dolphin) to open the folder with the file selected."""
+    if shutil.which("dbus-send"):
+        subprocess.run(["dbus-send", "--session", "--type=method_call",
+                        "--dest=org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                        "org.freedesktop.FileManager1.ShowItems",
+                        f"array:string:{Path(path).resolve().as_uri()}", "string:arka-convert"],
+                       stdin=subprocess.DEVNULL, capture_output=True)
+
+
+def refresh_folder(paths):
+    """Tell open file managers that these files are new, so Dolphin lists them
+    and makes their thumbnails now instead of waiting for its own watcher."""
+    if not paths or os.environ.get("ARKA_CONVERT_QUIET") == "1" or not shutil.which("dbus-send"):
+        return
+    uris = [Path(p).resolve().as_uri() for p in paths]
+    for member, arg in (("FilesAdded", f"string:{Path(paths[0]).resolve().parent.as_uri()}"),
+                        ("FilesChanged", "array:string:" + ",".join(uris))):
+        subprocess.run(["dbus-send", "--session", "--type=signal", "/", f"org.kde.KDirNotify.{member}", arg],
+                       stdin=subprocess.DEVNULL, capture_output=True)
+
+
+def run_edit(tool, args):
+    """merge-pdf, split-pdf and trim: run one, tell the user, refresh Dolphin."""
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
+    wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3)}[tool]
+    if len(args) < wanted[0] or (wanted[1] and len(args) > wanted[1]):
+        print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
+        return 2
+    title = {"merge-pdf": "Merged", "split-pdf": "Split", "trim": "Trimmed"}[tool]
+    try:
+        if tool == "merge-pdf":
+            made = merge_pdfs(args)
+        elif tool == "split-pdf":
+            made = split_pdf(args[0])
+        else:
+            made = trim_media(args[0], args[1], args[2])
+    except (RuntimeError, OSError) as e:
+        notify(f"Couldn't {tool.split('-')[0]}", f"{Path(args[0]).name}: {e}")
+        return 1
+    except (SystemExit, KeyboardInterrupt):
+        notify(f"{title} stopped", "Files that were not finished were not saved.")
+        raise
+    refresh_folder(made)
+    if len(made) == 1:
+        notify_done(title, made[0])
+    else:
+        notify(title, f"{len(made)} files saved next to the original")
+    return 0
+
+
 def main(argv):
     if len(argv) >= 5 and argv[1] == "--image-worker":
         image_worker(argv[2], argv[3], argv[4])
         return 0
+    if len(argv) >= 4 and argv[1] == "--notify-wait":
+        notify_wait(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
+        return 0
     if len(argv) == 3 and argv[1] == "--targets":
         print("\n".join(targets_for(argv[2])))
         return 0
+    if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim"):
+        return run_edit(argv[1], argv[2:])
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
@@ -282,7 +475,7 @@ def main(argv):
     fmt = "jpg" if fmt == "jpeg" else fmt
     heavy = any(kind_of(f) in ("audio", "video") for f in files)
     nid = notify(f"Converting to {NAMES.get(fmt, fmt)}",
-                 files[0] if len(files) == 1 else f"{len(files)} files") if heavy else None
+                 files[0] if len(files) == 1 else f"{len(files)} files", urgency="low") if heavy else None
     made, failed = [], []
     last = [0.0]
 
@@ -293,7 +486,7 @@ def main(argv):
             if nid and now - last[0] >= 2:
                 last[0] = now
                 where = f" ({index + 1} of {len(files)})" if len(files) > 1 else ""
-                notify(f"Converting to {NAMES.get(fmt, fmt)}", f"{name}{where}: {int(fraction * 100)}%", nid)
+                notify(f"Converting to {NAMES.get(fmt, fmt)}", f"{name}{where}: {int(fraction * 100)}%", nid, "low")
         return update
 
     try:
@@ -305,10 +498,11 @@ def main(argv):
     except (SystemExit, KeyboardInterrupt):
         notify("Conversion stopped", "Files that were not finished were not saved.", nid)
         raise
+    refresh_folder(made)
     if failed:
         notify("Couldn't convert everything", "\n".join(failed[:4]), nid)
     elif len(made) == 1:
-        notify("Removed hidden details" if fmt == "clean" else "Converted", f"Saved as {made[0].name}", nid)
+        notify_done("Removed hidden details" if fmt == "clean" else "Converted", made[0], nid)
     else:
         notify("Converted", f"{len(made)} files saved next to the originals", nid)
     return 1 if failed else 0

@@ -237,6 +237,48 @@ class ArkaConvertTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertTrue((self.dir / "good.jpg").exists())
 
+    def pdf(self, name, pages):
+        from PIL import Image
+        ims = [Image.new("RGB", (80, 60), c) for c in ("white", "black", "red")[:pages]]
+        path = self.dir / name
+        ims[0].save(path, "PDF", save_all=True, append_images=ims[1:])
+        return path
+
+    def pages(self, path):
+        out = subprocess.run(["pdfinfo", str(path)], capture_output=True, text=True).stdout
+        return int(next(l for l in out.splitlines() if l.startswith("Pages:")).split()[1])
+
+    def test_merge_pdf_joins_in_the_order_given_and_keeps_originals(self):
+        a, b = self.pdf("a.pdf", 3), self.pdf("b.pdf", 1)
+        r = convert("merge-pdf", str(a), str(b))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.names(), ["a (merged).pdf", "a.pdf", "b.pdf"])
+        self.assertEqual(self.pages(self.dir / "a (merged).pdf"), 4)
+        self.assertEqual(convert("merge-pdf", str(a)).returncode, 2)          # needs two
+        self.assertEqual(convert("merge-pdf", str(a), str(self.png())).returncode, 1)
+
+    def test_split_pdf_makes_one_file_per_page(self):
+        doc = self.pdf("doc.pdf", 3)
+        r = convert("split-pdf", str(doc))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.names(), ["doc page 1.pdf", "doc page 2.pdf", "doc page 3.pdf", "doc.pdf"])
+        self.assertEqual(self.pages(self.dir / "doc page 2.pdf"), 1)
+        self.assertEqual(convert("split-pdf", str(self.pdf("one.pdf", 1))).returncode, 1)
+
+    def test_trim_keeps_the_asked_length_and_rejects_bad_times(self):
+        src = self.dir / "tone.mp3"
+        ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=10", str(src))
+        r = convert("trim", str(src), "2", "5")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.names(), ["tone (trimmed).mp3", "tone.mp3"])
+        length = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                 str(self.dir / "tone (trimmed).mp3")], capture_output=True, text=True).stdout
+        self.assertAlmostEqual(float(length), 3.0, delta=0.1)
+        for start, end in (("5", "2"), ("abc", "3"), ("-1", "3"), ("nan", "3"), ("1:00", "2:00")):
+            self.assertEqual(convert("trim", str(src), start, end).returncode, 1, (start, end))
+        self.assertEqual(convert("trim", str(self.png()), "1", "2").returncode, 1)
+        self.assertEqual(len(self.names()), 3)                                # nothing else was left behind
+
     def test_refuses_wrong_requests(self):
         pic = self.png()
         self.assertEqual(convert("png", str(pic)).returncode, 1)          # already a PNG
