@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Edit
+Comment=Crop, black out parts, add a background to a picture, or trim sound and video
+Exec=arka-edit
+Icon=document-edit
+NoDisplay=true
