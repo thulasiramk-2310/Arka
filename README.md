@@ -234,12 +234,33 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   picture or sound itself. Pictures are saved again, which can change a JPEG
   slightly. Tested in a VM (2026-10-20): a photo's camera and author, a video's
   GPS position and a PDF's author were gone from the copies.
-- 🎡 **Format wheel.** Drag a file, press Meta+Alt+C, and a ring of the formats
-  that file can become appears at the pointer; drop the file on one to convert
-  it. *Convert with the format wheel* in the right-click menu opens the same
-  ring for clicking. The shortcut can be changed in System Settings › Shortcuts.
-  Tested in a VM with drags from Dolphin, Gwenview and Firefox (2026-10-19); not
-  yet with a real touchpad.
+- 🎡 **Format wheel and edit wheel.** Drag a file, press Meta+Alt+C, and a ring
+  of the formats that file can become appears at the pointer; drop the file on
+  one to convert it. Meta+Alt+E shows a ring of edits instead (see the next
+  item). *Convert with the format wheel* and *Edit with the edit wheel* in the
+  right-click menu open the same rings for clicking. The ring is lightly
+  translucent with a soft highlight, and the choice under the pointer shows in
+  the middle. The shortcuts can be changed in System Settings › Shortcuts.
+  Tested in a VM (2026-10-26) with a real drag from Dolphin: the format wheel
+  converted a picture to WebP and left the original alone, and the edit wheel
+  opened the crop window. Earlier drags from Gwenview and Firefox were tested on
+  2026-10-19. Not yet with a real touchpad.
+- ✂️ **Edit from the right-click menu.** For a picture: *Crop* (drag the corners,
+  or pick 1:1, 16:9, 3:2, 4:3 or 3:4), *Black out parts*, *Add a background* (a
+  colour or gradient, and how much room to leave) and *Rotate left* or *right*.
+  For PDFs: *Merge into one PDF* (select two or more) and *Split into pages*.
+  For sound and video: *Trim* (type a start and an end). The result is a copy
+  next to the original and never replaces a file; the work runs in the same
+  no-network sandbox as converting. *Black out* replaces the pixels in the copy,
+  so what was under a box can't be read back from the copy; it does not touch
+  the file's name or its hidden details (use *Remove hidden details* for those).
+  Tested in a VM (2026-10-26) with a real mouse and keyboard: the menu entries
+  for rotate right and merge; the crop (opened from the edit wheel), add a
+  background and trim (MP3) windows. The other menu entries were seen but not
+  clicked. Split into pages and trimming an MP4 ran in the VM from the command
+  line. Black out's drag was checked in the VM, but its button was only
+  clicked outside it. WebM trimming was checked on the build machine; the other
+  sound and video formats were not tested. Not yet on real hardware.
 - 🧬 **VARA and Git for writing code.** Under *Advanced options*, setup can set
   up [VARA](https://github.com/thulasiramk-2310/vara) (version control with
   built-in undo and integrity checks) and Git with the name and email for your
