@@ -1,3 +1,5 @@
+#[cfg(feature = "adw")]
+pub mod app;
 pub mod commit_identity;
 pub mod dns;
 pub mod sandbox;

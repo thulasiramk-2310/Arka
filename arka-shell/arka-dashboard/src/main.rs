@@ -15,7 +15,7 @@ fn main() {
     let app = adw::Application::builder()
         .application_id(APP_ID)
         .build();
-    app.connect_activate(build_window);
+    arka_shell_common::app::activate_once(&app, build_window);
     std::process::exit(app.run().value());
 }
 

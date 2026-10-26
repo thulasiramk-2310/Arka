@@ -159,7 +159,7 @@ button.cap-get:disabled { color: @text_lo; box-shadow: none; }
 
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(build_ui);
+    arka_shell_common::app::activate_once(&app, build_ui);
     std::process::exit(app.run().value());
 }
 

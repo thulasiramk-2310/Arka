@@ -9,7 +9,7 @@ const APP_ID: &str = "org.arka.update";
 
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(build_ui);
+    arka_shell_common::app::activate_once(&app, build_ui);
     std::process::exit(app.run().value());
 }
 
