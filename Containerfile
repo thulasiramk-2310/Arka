@@ -82,6 +82,8 @@ COPY systemd/greenboot-healthcheck.service.d/10-arkaos-stale-trigger.conf /usr/l
 COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf /usr/lib/systemd/system/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown.conf
 COPY arka-apply-look /usr/libexec/arka-apply-look
 COPY convert/arka-convert /usr/bin/arka-convert
+COPY apps/arka-install /usr/bin/arka
+COPY apps/apps.json /usr/share/arkaos/apps.json
 COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert-image.desktop
 COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
@@ -598,7 +600,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert /usr/bin/arka && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
