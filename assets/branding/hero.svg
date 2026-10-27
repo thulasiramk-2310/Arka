@@ -1,93 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
-  <defs>
-    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="6" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16c784" stop-opacity="0"/>
-      <stop offset="0.5" stop-color="#16c784" stop-opacity="0.6"/>
-      <stop offset="1" stop-color="#16c784" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="1200" height="760" rx="18" fill="#07080e"/>
-  <!-- faint triangle watermark -->
-  <path d="M600 120 L980 640 H220 Z" fill="none" stroke="#16c784" stroke-width="1" opacity="0.06"/>
-
-  <!-- USER -->
-  <text x="600" y="52" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">USER</text>
-  <circle cx="600" cy="78" r="5" fill="#16c784" filter="url(#g)">
-    <animate attributeName="opacity" values="1;0.4;1" dur="2.4s" repeatCount="indefinite"/>
-  </circle>
-
-  <!-- flow lines -->
-  <g stroke="url(#fade)" stroke-width="2">
-    <line x1="600" y1="90" x2="600" y2="128"/>
-    <line x1="600" y1="238" x2="600" y2="276"/>
-    <line x1="600" y1="386" x2="600" y2="424"/>
-    <line x1="600" y1="534" x2="600" y2="572"/>
-    <line x1="600" y1="646" x2="600" y2="676"/>
-  </g>
-
-  <!-- particles -->
-  <g fill="#16c784">
-    <circle r="3.2"><animateMotion path="M600 92 L600 126" dur="1.6s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;1;0" dur="1.6s" repeatCount="indefinite"/></circle>
-    <circle r="3.2"><animateMotion path="M600 240 L600 274" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="0.4s" repeatCount="indefinite"/></circle>
-    <circle r="3.2"><animateMotion path="M600 388 L600 422" dur="1.6s" begin="0.8s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="0.8s" repeatCount="indefinite"/></circle>
-    <circle r="3.2"><animateMotion path="M600 536 L600 570" dur="1.6s" begin="1.2s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="1.2s" repeatCount="indefinite"/></circle>
-  </g>
-
-  <!-- LAYER: Desktop Shell -->
-  <g>
-    <rect x="270" y="130" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <rect x="270" y="130" width="660" height="108" rx="14" fill="none" stroke="#16c784" stroke-width="1.5" opacity="0.5">
-      <animate attributeName="opacity" values="0.5;0.12;0.5" dur="4s" repeatCount="indefinite"/>
-    </rect>
-    <path d="M310 196 L328 164 L346 196 Z" fill="none" stroke="#16c784" stroke-width="3" stroke-linejoin="round"/>
-    <text x="600" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Arka Desktop Shell</text>
-    <text x="600" y="200" text-anchor="middle" font-size="13.5" fill="#9aa4b2">Dock · Launcher · Dashboard · Capsule · Settings</text>
-    <text x="600" y="222" text-anchor="middle" font-size="11.5" fill="#5b6675">KDE Plasma with the ArkaOS look — one design system</text>
-  </g>
-
-  <!-- LAYER: Arka Core -->
-  <g>
-    <rect x="270" y="278" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <rect x="270" y="278" width="660" height="108" rx="14" fill="none" stroke="#16c784" stroke-width="1.5" opacity="0.5">
-      <animate attributeName="opacity" values="0.12;0.5;0.12" dur="4s" repeatCount="indefinite"/>
-    </rect>
-    <circle cx="328" cy="332" r="17" fill="none" stroke="#16c784" stroke-width="3"/>
-    <path d="M321 332 l5 5 9 -10" fill="none" stroke="#16c784" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="600" y="320" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Arka Core</text>
-    <text x="600" y="348" text-anchor="middle" font-size="13.5" fill="#9aa4b2">arkad daemon · Privacy Dashboard · Permissions · Browser Sandbox</text>
-    <text x="600" y="370" text-anchor="middle" font-size="11.5" fill="#5b6675">apply settings at boot → re-check every 60 s → show what was checked</text>
-  </g>
-
-  <!-- LAYER: Immutable Platform -->
-  <g>
-    <rect x="270" y="426" width="660" height="108" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <rect x="270" y="426" width="660" height="108" rx="14" fill="none" stroke="#2e7bff" stroke-width="1.5" opacity="0.4">
-      <animate attributeName="opacity" values="0.4;0.1;0.4" dur="5s" repeatCount="indefinite"/>
-    </rect>
-    <rect x="312" y="462" width="32" height="26" rx="5" fill="none" stroke="#2e7bff" stroke-width="3"/>
-    <path d="M318 462 v-7 a10 10 0 0 1 20 0 v7" fill="none" stroke="#2e7bff" stroke-width="3"/>
-    <text x="600" y="468" text-anchor="middle" font-size="21" font-weight="700" fill="#f5f7fa">Immutable Platform</text>
-    <text x="600" y="496" text-anchor="middle" font-size="13.5" fill="#9aa4b2">bootc · composefs read-only root · atomic updates · rollback</text>
-    <text x="600" y="518" text-anchor="middle" font-size="11.5" fill="#5b6675">the OS is one signed image — the previous version is kept for rollback</text>
-  </g>
-
-  <!-- LAYER: Kernel -->
-  <g>
-    <rect x="270" y="574" width="660" height="72" rx="14" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-    <text x="600" y="606" text-anchor="middle" font-size="18" font-weight="700" fill="#f5f7fa">Linux Kernel</text>
-    <text x="600" y="630" text-anchor="middle" font-size="12.5" fill="#9aa4b2">the Fedora 44 kernel and drivers</text>
-  </g>
-
-  <!-- HARDWARE -->
-  <text x="600" y="708" text-anchor="middle" font-size="15" letter-spacing="6" fill="#5b6675">HARDWARE</text>
-  <line x1="440" y1="726" x2="760" y2="726" stroke="#1e2630" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter, 'Noto Sans', 'Segoe UI', sans-serif">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0.5L7.5 4L0 7.5Z" fill="#8b96a5"/></marker></defs>
+<rect width="1200" height="760" rx="12" fill="#07080e"/>
+<path d="M528.0 44H672.0L680.0 52V80L672.0 88H528.0L520.0 80V52Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="70.5" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">You</text>
+<path d="M600.0 88 L600.0 118" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M258 118H942L950 126V222L942 230H258L250 222V126Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="161.0" text-anchor="middle" font-size="20" font-weight="700" fill="#f5f7fa">Desktop</text>
+<text x="600.0" y="181.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">KDE Plasma on KWin, in the ArkaOS look</text>
+<text x="600.0" y="200.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">Dock · launcher · top bar · Dashboard, Capsule, Permissions, Settings</text>
+<path d="M600.0 230 L600.0 260" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M258 260H942L950 268V364L942 372H258L250 364V268Z" fill="#0f141a" stroke="#16c784" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="303.0" text-anchor="middle" font-size="20" font-weight="700" fill="#f5f7fa">arkad, the privacy daemon</text>
+<text x="600.0" y="323.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">Applies and re-checks MAC randomization, encrypted DNS, hostname, IPv6 and firewall</text>
+<text x="600.0" y="342.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">About every minute. It reports what it checked, not what is protected.</text>
+<path d="M600.0 372 L600.0 402" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M258 402H942L950 410V506L942 514H258L250 506V410Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="445.0" text-anchor="middle" font-size="20" font-weight="700" fill="#f5f7fa">Immutable image</text>
+<text x="600.0" y="465.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">bootc · composefs read-only root · atomic updates · rollback</text>
+<text x="600.0" y="484.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">The OS is one container image, signed in CI. The previous version stays for rollback.</text>
+<path d="M600.0 514 L600.0 544" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M258 544H942L950 552V620L942 628H258L250 620V552Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="582.5" text-anchor="middle" font-size="20" font-weight="700" fill="#f5f7fa">Linux kernel</text>
+<text x="600.0" y="602.9" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">Fedora's kernel, with a few hardening options</text>
+<path d="M600.0 628 L600.0 658" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M528.0 658H672.0L680.0 666V694L672.0 702H528.0L520.0 694V666Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="684.5" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Hardware</text>
 </svg>

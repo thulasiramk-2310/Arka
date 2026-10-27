@@ -1,59 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
-  <defs>
-    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="4" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <rect width="1200" height="560" rx="18" fill="#07080e"/>
-  <text x="600" y="46" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">COMPONENT MAP</text>
-
-  <!-- Shell apps row -->
-  <g font-size="12.5" font-weight="600" fill="#f5f7fa" text-anchor="middle">
-    <rect x="90"  y="80" width="150" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="165" y="106">Dashboard</text><text x="165" y="124" font-size="10" font-weight="400" fill="#9aa4b2">settings · timeline · report</text>
-    <rect x="270" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="340" y="106">Capsule</text><text x="340" y="124" font-size="10" font-weight="400" fill="#9aa4b2">app store</text>
-    <rect x="440" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="510" y="106">Permissions</text><text x="510" y="124" font-size="10" font-weight="400" fill="#9aa4b2">grants · history</text>
-    <rect x="610" y="80" width="140" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="680" y="106">Settings</text><text x="680" y="124" font-size="10" font-weight="400" fill="#9aa4b2">system · privacy</text>
-    <rect x="780" y="80" width="150" height="56" rx="10" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/><text x="855" y="106">WiFi · Sound · Update</text><text x="855" y="124" font-size="10" font-weight="400" fill="#9aa4b2">everyday controls</text>
-    <rect x="960" y="80" width="150" height="56" rx="10" fill="#0f141a" stroke="#16c784" stroke-width="1.5"/><text x="1035" y="106">Firefox</text><text x="1035" y="124" font-size="10" font-weight="400" fill="#16c784">bubblewrap sandbox</text>
-  </g>
-  <text x="60" y="112" font-size="11" letter-spacing="3" fill="#5b6675" transform="rotate(-90 60 112)">APPS</text>
-
-  <!-- Plasma shell band -->
-  <rect x="90" y="176" width="1020" height="70" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-  <path d="M120 226 L134 202 L148 226 Z" fill="none" stroke="#16c784" stroke-width="2.5" stroke-linejoin="round"/>
-  <text x="600" y="205" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Arka Shell — KDE Plasma on KWin, ArkaOS look</text>
-  <text x="600" y="228" text-anchor="middle" font-size="11.5" fill="#9aa4b2">top bar · ArkaOS Dock · full-screen launcher · SDDM login · Plymouth splash · one design system</text>
-
-  <!-- arkad band -->
-  <rect x="90" y="286" width="1020" height="90" rx="12" fill="#0f141a" stroke="#16c784" stroke-width="1.5">
-    <animate attributeName="stroke-opacity" values="1;0.35;1" dur="4s" repeatCount="indefinite"/>
-  </rect>
-  <circle cx="130" cy="331" r="8" fill="#16c784" filter="url(#g)">
-    <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  <text x="600" y="318" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">arkad — the privacy core (Rust, static)</text>
-  <text x="600" y="341" text-anchor="middle" font-size="11.5" fill="#9aa4b2">MAC randomization · encrypted DNS (DoT) · hostname · IPv6 privacy · firewall · browser sandbox check</text>
-  <text x="600" y="362" text-anchor="middle" font-size="11" fill="#5b6675">D-Bus: org.arka.arkad — read-only status properties · EnforceAll() · events → privacy.jsonl</text>
-
-  <!-- D-Bus arrows apps<->arkad -->
-  <g stroke="#2e7bff" stroke-width="1.5" opacity="0.65">
-    <line x1="165" y1="136" x2="165" y2="176"/><line x1="165" y1="246" x2="165" y2="286"/>
-    <line x1="510" y1="136" x2="510" y2="176"/><line x1="510" y1="246" x2="510" y2="286"/>
-  </g>
-  <g fill="#2e7bff">
-    <circle r="2.8"><animateMotion path="M165 286 L165 246" dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite"/></circle>
-    <circle r="2.8"><animateMotion path="M165 176 L165 136" dur="1.8s" begin="0.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.8s" begin="0.3s" repeatCount="indefinite"/></circle>
-    <circle r="2.8"><animateMotion path="M510 136 L510 176" dur="1.8s" begin="0.9s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="1.8s" begin="0.9s" repeatCount="indefinite"/></circle>
-  </g>
-  <text x="185" y="165" font-size="10" fill="#2e7bff" opacity="0.8">D-Bus</text>
-
-  <!-- platform band -->
-  <rect x="90" y="416" width="1020" height="64" rx="12" fill="#0f141a" stroke="#1e2630" stroke-width="1.5"/>
-  <text x="600" y="443" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Immutable platform — bootc · composefs (read-only root) · signed updates · automatic rollback</text>
-  <text x="600" y="466" text-anchor="middle" font-size="11" fill="#9aa4b2">one Containerfile declares the image — built in CI, signed, read-only while running</text>
-
-  <!-- kernel -->
-  <rect x="90" y="500" width="1020" height="40" rx="12" fill="#050609" stroke="#1e2630" stroke-width="1.5"/>
-  <text x="600" y="525" text-anchor="middle" font-size="12.5" fill="#9aa4b2">Linux kernel (Fedora 44) → hardware</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" font-family="Inter, 'Noto Sans', 'Segoe UI', sans-serif">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0.5L7.5 4L0 7.5Z" fill="#8b96a5"/></marker></defs>
+<rect width="1200" height="560" rx="12" fill="#07080e"/>
+<text x="60" y="44" text-anchor="start" font-size="13" letter-spacing="3" fill="#7a8696">HOW THE PIECES FIT</text>
+<text x="60" y="76" text-anchor="start" font-size="11" letter-spacing="2" fill="#7a8696">Apps</text>
+<text x="450" y="76" text-anchor="start" font-size="11" letter-spacing="2" fill="#7a8696">Apps that read arkad's status</text>
+<text x="840" y="76" text-anchor="start" font-size="11" letter-spacing="2" fill="#7a8696">System service</text>
+<path d="M68 88H382L390 96V130L382 138H68L60 130V96Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="225.0" y="108.5" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Capsule</text>
+<text x="225.0" y="126.5" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">app store, installs from Flathub</text>
+<path d="M68 150H382L390 158V192L382 200H68L60 192V158Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="225.0" y="170.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Permissions</text>
+<text x="225.0" y="188.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">Flatpak app permissions</text>
+<path d="M68 212H382L390 220V254L382 262H68L60 254V220Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="225.0" y="232.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Settings · Wi-Fi · Sound · Updates</text>
+<text x="225.0" y="250.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">separate small apps</text>
+<path d="M68 274H382L390 282V316L382 324H68L60 316V282Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="225.0" y="294.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Firefox</text>
+<text x="225.0" y="312.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">runs inside a bubblewrap sandbox</text>
+<path d="M458 88H772L780 96V130L772 138H458L450 130V96Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="615.0" y="108.5" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Privacy Dashboard</text>
+<text x="615.0" y="126.5" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">settings, timeline, weekly report</text>
+<path d="M458 150H772L780 158V192L772 200H458L450 192V158Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="615.0" y="170.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Privacy tray</text>
+<text x="615.0" y="188.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">status icon in the top bar</text>
+<path d="M458 212H772L780 220V254L772 262H458L450 254V220Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="615.0" y="232.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">First-boot setup</text>
+<text x="615.0" y="250.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">shows where each setting stands</text>
+<path d="M848 88H1132L1140 96V394L1132 402H848L840 394V96Z" fill="#0f141a" stroke="#16c784" stroke-width="1.25"/>
+<text x="862" y="124" text-anchor="start" font-size="17" font-weight="700" fill="#f5f7fa">arkad</text>
+<text x="862" y="146" text-anchor="start" font-size="12" font-weight="400" fill="#a3adba">privacy daemon, written in Rust</text>
+<text x="862" y="184" text-anchor="start" font-size="11.5" font-weight="400" fill="#a3adba">Applies and re-checks, about every minute:</text>
+<text x="862" y="210" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">MAC randomization</text>
+<text x="862" y="232" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">Encrypted DNS (DoT)</text>
+<text x="862" y="254" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">Hostname</text>
+<text x="862" y="276" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">IPv6 temporary addresses</text>
+<text x="862" y="298" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">Firewall zone</text>
+<text x="862" y="320" text-anchor="start" font-size="12.5" font-weight="400" fill="#f5f7fa">Browser sandbox</text>
+<text x="862" y="366" text-anchor="start" font-size="11.5" font-weight="400" fill="#a3adba">Publishes read-only status as</text>
+<text x="862" y="384" text-anchor="start" font-size="11.5" font-weight="400" fill="#a3adba">org.arka.arkad on the system bus</text>
+<path d="M840 175.0 L810 175.0" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M810 113.0 L810 237.0" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M810 113.0 L780 113.0" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter" marker-end="url(#a)"/>
+<path d="M810 175.0 L780 175.0" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter" marker-end="url(#a)"/>
+<path d="M810 237.0 L780 237.0" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter" marker-end="url(#a)"/>
+<text x="810" y="103.0" text-anchor="middle" font-size="11" font-weight="400" fill="#7a8696">D-Bus</text>
+<path d="M68 346H772L780 354V394L772 402H68L60 394V354Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="420.0" y="369.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Desktop: KDE Plasma on KWin, in the ArkaOS look</text>
+<text x="420.0" y="387.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">top bar · Crystal Dock (patched) · launcher · SDDM login · boot splash</text>
+<path d="M68 424H1132L1140 432V472L1132 480H68L60 472V432Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="447.4" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Immutable image: bootc, composefs read-only root, atomic updates, rollback</text>
+<text x="600.0" y="465.4" text-anchor="middle" font-size="11.5" font-weight="400" fill="#a3adba">one Containerfile declares it; built and signed in CI</text>
+<path d="M68 502H1132L1140 510V534L1132 542H68L60 534V510Z" fill="#0f141a" stroke="#3a4656" stroke-width="1.25" stroke-linejoin="miter"/>
+<text x="600.0" y="525.9" text-anchor="middle" font-size="13" font-weight="700" fill="#f5f7fa">Linux kernel (Fedora) and hardware</text>
 </svg>

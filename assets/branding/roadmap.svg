@@ -1,53 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" font-family="Inter, -apple-system, 'Segoe UI', sans-serif">
-  <defs>
-    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="5" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <rect width="1200" height="300" rx="18" fill="#07080e"/>
-  <text x="600" y="52" text-anchor="middle" font-size="15" letter-spacing="6" fill="#9aa4b2">ROADMAP</text>
-
-  <!-- track -->
-  <line x1="140" y1="150" x2="1060" y2="150" stroke="#1e2630" stroke-width="3"/>
-  <line x1="140" y1="150" x2="470" y2="150" stroke="#16c784" stroke-width="3"/>
-
-  <!-- DP1 (done) -->
-  <circle cx="140" cy="150" r="13" fill="#16c784" stroke="#16c784" stroke-width="2.5"/>
-  <path d="M133 150 l5 5 9 -11" stroke="#07080e" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="140" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#16c784">DP1</text>
-  <text x="140" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">qcow2 · QEMU</text>
-
-  <!-- DP2 (current) -->
-  <circle cx="370" cy="150" r="16" fill="#07080e" stroke="#16c784" stroke-width="3" filter="url(#g)"/>
-  <circle cx="370" cy="150" r="7" fill="#16c784">
-    <animate attributeName="r" values="7;9;7" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  <text x="370" y="200" text-anchor="middle" font-size="15" font-weight="700" fill="#16c784">DP2</text>
-  <text x="370" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">real hardware · installer · signed updates</text>
-  <text x="370" y="240" text-anchor="middle" font-size="11" fill="#16c784">← you are here</text>
-  <text x="370" y="260" text-anchor="middle" font-size="11" fill="#5b6675">so far: one laptop · installer tested in a VM</text>
-
-  <!-- Beta -->
-  <circle cx="600" cy="150" r="13" fill="#07080e" stroke="#1e2630" stroke-width="2.5"/>
-  <text x="600" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">Beta</text>
-  <text x="600" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">trusted testers · hardware matrix</text>
-  <text x="600" y="240" text-anchor="middle" font-size="11" fill="#5b6675">"use this computer"</text>
-
-  <!-- RC -->
-  <circle cx="830" cy="150" r="13" fill="#07080e" stroke="#1e2630" stroke-width="2.5"/>
-  <text x="830" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">RC</text>
-  <text x="830" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">bugs + polish only</text>
-
-  <!-- 1.0 -->
-  <circle cx="1060" cy="150" r="13" fill="#07080e" stroke="#1e2630" stroke-width="2.5"/>
-  <path d="M1052 150 l6 6 10 -12" stroke="#5b6675" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="1060" y="200" text-anchor="middle" font-size="14" font-weight="700" fill="#f5f7fa">1.0</text>
-  <text x="1060" y="222" text-anchor="middle" font-size="11" fill="#9aa4b2">privacy, effortless</text>
-
-  <!-- traveling pulse -->
-  <circle r="4" fill="#16c784" filter="url(#g)">
-    <animateMotion path="M370 150 H470" dur="2.2s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0;1;0" dur="2.2s" repeatCount="indefinite"/>
-  </circle>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" font-family="Inter, 'Noto Sans', 'Segoe UI', sans-serif">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0.5L7.5 4L0 7.5Z" fill="#8b96a5"/></marker></defs>
+<rect width="1200" height="300" rx="12" fill="#07080e"/>
+<text x="60" y="44" text-anchor="start" font-size="13" letter-spacing="3" fill="#7a8696">ROADMAP</text>
+<path d="M149 110H361" stroke="#8b96a5" stroke-width="1.25" fill="none"/>
+<path d="M383 110H591" stroke="#3a4656" stroke-width="1.25" fill="none"/>
+<path d="M609 110H821" stroke="#3a4656" stroke-width="1.25" fill="none"/>
+<path d="M839 110H1051" stroke="#3a4656" stroke-width="1.25" fill="none"/>
+<circle cx="140" cy="110" r="9" fill="#f5f7fa" stroke="#f5f7fa" stroke-width="1.25"/>
+<circle cx="370" cy="110" r="13" fill="#07080e" stroke="#16c784" stroke-width="1.25"/>
+<circle cx="370" cy="110" r="4.5" fill="#16c784"/>
+<circle cx="600" cy="110" r="9" fill="#07080e" stroke="#3a4656" stroke-width="1.25"/>
+<circle cx="830" cy="110" r="9" fill="#07080e" stroke="#3a4656" stroke-width="1.25"/>
+<circle cx="1060" cy="110" r="9" fill="#07080e" stroke="#3a4656" stroke-width="1.25"/>
+<text x="140" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">DP1</text>
+<text x="140" y="184" text-anchor="middle" font-size="11.5" font-weight="400" fill="#7a8696">released</text>
+<text x="140" y="208" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">qcow2 for QEMU/KVM</text>
+<text x="140" y="226" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">VM only</text>
+<text x="140" y="244" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">exit checklist</text>
+<text x="140" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">not filled in</text>
+<text x="370" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">DP2</text>
+<text x="370" y="184" text-anchor="middle" font-size="11.5" font-weight="400" fill="#16c784">in progress</text>
+<text x="370" y="208" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">real hardware, installer,</text>
+<text x="370" y="226" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">signed updates</text>
+<text x="370" y="244" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">so far: one laptop;</text>
+<text x="370" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">installer tested in a VM</text>
+<text x="600" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">Beta</text>
+<text x="600" y="184" text-anchor="middle" font-size="11.5" font-weight="400" fill="#7a8696">not started</text>
+<text x="600" y="208" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">trusted testers,</text>
+<text x="600" y="226" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">more hardware</text>
+<text x="830" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">RC</text>
+<text x="830" y="184" text-anchor="middle" font-size="11.5" font-weight="400" fill="#7a8696">not started</text>
+<text x="830" y="208" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">bug fixes and polish only</text>
+<text x="1060" y="164" text-anchor="middle" font-size="15" font-weight="700" fill="#f5f7fa">1.0</text>
+<text x="1060" y="184" text-anchor="middle" font-size="11.5" font-weight="400" fill="#7a8696">no date</text>
+<text x="1060" y="208" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">a stable release,</text>
+<text x="1060" y="226" text-anchor="middle" font-size="12" font-weight="400" fill="#a3adba">when it is ready</text>
 </svg>
