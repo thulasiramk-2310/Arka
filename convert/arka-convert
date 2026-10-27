@@ -13,7 +13,8 @@
     arka-convert redact FILE X Y W H [X Y W H ...]   black out boxes of a picture
     arka-convert background FILE COLOR[-COLOR2] PADDING   put a picture on a colour
 
-The converted file is saved beside the original and never replaces anything:
+The converted file is saved beside the original (in Downloads when that folder is
+read-only) and never replaces anything:
 a name that is taken gets " (1)", " (2)" and so on. Every converter (ffmpeg,
 pdftoppm, Ghostscript, Pillow) runs inside a bubblewrap sandbox with no network. The sandbox
 can read your files but can only write into a scratch folder; the finished file
@@ -90,6 +91,25 @@ def targets_for(path):
     ext = Path(path).suffix.lower().lstrip(".")
     ext = "jpg" if ext == "jpeg" else ext
     return [t for t in TARGETS.get(kind, []) if t != ext and (t != "clean" or ext in CLEAN_EXT)]
+
+
+def save_dir(folder):
+    """Where the copy goes: beside the original, or in Downloads when that folder is read-only."""
+    global SAVED_ELSEWHERE
+    if os.access(folder, os.W_OK):
+        return folder
+    fallback = Path.home() / "Downloads"
+    try:
+        fallback.mkdir(exist_ok=True)
+    except OSError:
+        pass
+    if not os.access(fallback, os.W_OK):
+        raise RuntimeError("its folder can't be written to, and neither can Downloads, so there is nowhere to save the copy")
+    SAVED_ELSEWHERE = True
+    return fallback
+
+
+SAVED_ELSEWHERE = False
 
 
 def free_name(directory, stem, ext):
@@ -199,8 +219,7 @@ def convert_one(src, fmt, on_progress=None):
     if fmt not in targets_for(src):
         raise RuntimeError(f"it is already {NAMES.get(fmt, fmt)}")
     out_dir = src.parent
-    if not os.access(out_dir, os.W_OK):
-        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         inp = str(src)
@@ -293,8 +312,7 @@ def merge_pdfs(paths):
         if s.suffix.lower() != ".pdf":
             raise RuntimeError(f"{s.name} isn't a PDF")
     out_dir = srcs[0].parent
-    if not os.access(out_dir, os.W_OK):
-        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         tmp = scratch / "out.pdf"
@@ -310,8 +328,7 @@ def split_pdf(path):
     if src.suffix.lower() != ".pdf":
         raise RuntimeError(f"{src.name} isn't a PDF")
     out_dir = src.parent
-    if not os.access(out_dir, os.W_OK):
-        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         run(scratch, ["pdfseparate", str(src), str(scratch / "page-%d.pdf")])
@@ -342,8 +359,7 @@ def trim_media(path, start, end, on_progress=None):
     else:
         raise RuntimeError(f".{ext} can't be trimmed yet (mp3, wav, flac, ogg, opus, m4a, mp4, mkv, webm can)")
     out_dir = src.parent
-    if not os.access(out_dir, os.W_OK):
-        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         total = media_seconds(scratch, str(src))
@@ -434,8 +450,7 @@ def edit_image(op, path, args):
     if op == "background" and ext in ("jpg", "jpeg", "webp"):
         out_ext = ext
     out_dir = src.parent
-    if not os.access(out_dir, os.W_OK):
-        raise RuntimeError("its folder can't be written to, so there is nowhere to save the copy")
+    out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         tmp = scratch / f"out.{out_ext}"
@@ -543,7 +558,7 @@ def run_edit(tool, args):
     if len(made) == 1:
         notify_done(title, made[0])
     else:
-        notify(title, f"{len(made)} files saved next to the original")
+        notify(title, f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the original"))
     return 0
 
 
@@ -607,7 +622,7 @@ def main(argv):
     elif len(made) == 1:
         notify_done("Removed hidden details" if fmt == "clean" else "Converted", made[0], nid)
     else:
-        notify("Converted", f"{len(made)} files saved next to the originals", nid)
+        notify("Converted", f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the originals"), nid)
     return 1 if failed else 0
 
 
