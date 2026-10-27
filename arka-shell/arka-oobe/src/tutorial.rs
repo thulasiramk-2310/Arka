@@ -56,16 +56,15 @@ struct Palette {
     panel: (f64, f64, f64),
     muted: (f64, f64, f64),
     line: (f64, f64, f64),
-    lift: (f64, f64, f64),
 }
 
 fn palette(dark: bool) -> Palette {
     if dark {
         Palette { fg: (0.945, 0.945, 0.945), bg: (0.063, 0.067, 0.078), panel: (0.098, 0.104, 0.118),
-                  muted: (0.65, 0.65, 0.65), line: (0.231, 0.243, 0.271), lift: (0.19, 0.20, 0.23) }
+                  muted: (0.65, 0.65, 0.65), line: (0.231, 0.243, 0.271) }
     } else {
         Palette { fg: (0.067, 0.067, 0.067), bg: (0.953, 0.949, 0.933), panel: (0.975, 0.972, 0.962),
-                  muted: (0.36, 0.36, 0.36), line: (0.816, 0.812, 0.792), lift: (1.0, 1.0, 1.0) }
+                  muted: (0.36, 0.36, 0.36), line: (0.816, 0.812, 0.792) }
     }
 }
 
@@ -247,44 +246,107 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
         cr.save().ok();
         cr.translate(cx, cy);
         cr.scale(0.82 + 0.18 * k, 0.82 + 0.18 * k);
-        // a soft shadow under the ring, so it lifts off the files behind it
-        for (grow, a) in [(14.0, 0.10), (8.0, 0.14), (3.0, 0.18)] {
-            cr.new_path();
-            cr.set_source_rgba(0.0, 0.0, 0.0, a * k);
-            cr.arc(0.0, 5.0, RING_R + grow, 0.0, TAU);
-            let _ = cr.fill();
-        }
+        // The wheel as it really looks: a flat octagon with 45-degree cuts, hairline slots, an
+        // octagonal middle and one green tick pointing at the slot you are on.
+        let outer = RING_R * 1.04;
+        octagon(cr, outer, 0.0, 0.0);
+        cr.set_source_rgba(p.bg.0, p.bg.1, p.bg.2, k);
+        let _ = cr.fill_preserve();
+        cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.34 * k);
+        cr.set_line_width(1.0);
+        let _ = cr.stroke();
         for (i, name) in SLICES.iter().enumerate() {
-            let a0 = (-150.0 + 120.0 * i as f64 + 3.0) * PI / 180.0;
-            let a1 = (-150.0 + 120.0 * (i + 1) as f64 - 3.0) * PI / 180.0;
+            let a0 = (-150.0 + 120.0 * i as f64 + 4.0) * PI / 180.0;
+            let a1 = (-150.0 + 120.0 * (i + 1) as f64 - 4.0) * PI / 180.0;
             let hot = st.hover == Some(i);
-            cr.new_path();
-            cr.arc(0.0, 0.0, RING_R, a0, a1);
-            cr.arc_negative(0.0, 0.0, HUB_R + 4.0, a1, a0);
-            cr.close_path();
+            slot(cr, outer - 6.5, HUB_R + 6.5, a0, a1);
             if hot {
-                cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, k);
+                cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.12 * k);
+                let _ = cr.fill_preserve();
+                cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.45 * k);
             } else {
-                cr.set_source_rgba(p.lift.0, p.lift.1, p.lift.2, k);
+                cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.16 * k);
             }
-            let _ = cr.fill_preserve();
-            cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.5 * k);
-            cr.set_line_width(1.5);
+            cr.set_line_width(1.0);
             let _ = cr.stroke();
             let m = (a0 + a1) / 2.0;
             let r = (RING_R + HUB_R) / 2.0 + 6.0;
-            text(cr, name, m.cos() * r, m.sin() * r + 4.0, 13.0, if hot { p.bg } else { p.fg }, k, true, true);
+            let (lr, lg, lb) = if hot { p.fg } else { p.muted };
+            text(cr, name, m.cos() * r, m.sin() * r + 4.0, 12.5, (lr, lg, lb), k, true, true);
         }
-        cr.new_path();
+        octagon(cr, HUB_R, 0.0, 0.0);
         cr.set_source_rgba(p.bg.0, p.bg.1, p.bg.2, k);
-        cr.arc(0.0, 0.0, HUB_R, 0.0, TAU);
         let _ = cr.fill_preserve();
-        cr.set_source_rgba(p.line.0, p.line.1, p.line.2, k);
+        cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.34 * k);
+        cr.set_line_width(1.0);
         let _ = cr.stroke();
-        text(cr, "Pick one", 0.0, -2.0, 10.5, p.muted, k, true, true);
-        text(cr, "holiday.jpg", 0.0, 12.0, 9.5, p.muted, k, false, true);
+        if let Some(i) = st.hover {
+            // the green pointer tick, on the middle's edge, facing the slot you are on
+            let m = (-90.0 + 120.0 * i as f64) * PI / 180.0;
+            let edge = oct_edge(HUB_R, m);
+            cr.save().ok();
+            cr.translate(m.cos() * (edge + 6.0), m.sin() * (edge + 6.0));
+            cr.rotate(m);
+            cr.set_source_rgba(0.086, 0.78, 0.518, k);
+            cr.rectangle(-6.0, -1.0, 12.0, 2.0);
+            let _ = cr.fill();
+            cr.restore().ok();
+            text(cr, "JPG", 0.0, -2.0, 10.0, p.muted, k, true, true);
+            text(cr, "holiday.jpg", 0.0, 12.0, 9.5, p.fg, k, false, true);
+        } else {
+            text(cr, "Pick one", 0.0, -2.0, 10.5, p.fg, k, true, true);
+            text(cr, "holiday.jpg", 0.0, 12.0, 9.5, p.muted, k, false, true);
+        }
         cr.restore().ok();
     }
+}
+
+/// Distance from the centre to an octagon's edge (flat sides facing up, down, left, right)
+/// in direction `angle`, for corners at radius `rad`.
+fn oct_edge(rad: f64, angle: f64) -> f64 {
+    let q = PI / 4.0;
+    let phi = (angle / q).round() * q;
+    rad * (PI / 8.0).cos() / (angle - phi).cos()
+}
+
+/// An octagon path centred on (x, y).
+fn octagon(cr: &gtk4::cairo::Context, rad: f64, x: f64, y: f64) {
+    cr.new_path();
+    for q in 0..8 {
+        let a = (22.5 + 45.0 * q as f64) * PI / 180.0;
+        let (px, py) = (x + rad * a.cos(), y + rad * a.sin());
+        if q == 0 { cr.move_to(px, py) } else { cr.line_to(px, py) }
+    }
+    cr.close_path();
+}
+
+/// One slot: the part of the octagonal ring between two angles. The corners of the outer and inner
+/// octagons that fall between the angles are included, so the slot follows the flat sides.
+fn slot(cr: &gtk4::cairo::Context, outer: f64, inner: f64, a0: f64, a1: f64) {
+    // the points of one octagon between the two angles, in order of angle
+    let corners = |rad: f64| -> Vec<(f64, f64)> {
+        let mut mid: Vec<(f64, (f64, f64))> = Vec::new();
+        for q in 0..8 {
+            let mut a = (22.5 + 45.0 * q as f64) * PI / 180.0;
+            while a <= a0 { a += 2.0 * PI; }
+            while a > a0 + 2.0 * PI { a -= 2.0 * PI; }
+            if a < a1 {
+                mid.push((a, (rad * a.cos(), rad * a.sin())));
+            }
+        }
+        mid.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        let mut pts = vec![(oct_edge(rad, a0) * a0.cos(), oct_edge(rad, a0) * a0.sin())];
+        pts.extend(mid.into_iter().map(|m| m.1));
+        pts.push((oct_edge(rad, a1) * a1.cos(), oct_edge(rad, a1) * a1.sin()));
+        pts
+    };
+    let (o, mut i) = (corners(outer), corners(inner));
+    i.reverse();
+    cr.new_path();
+    for (n, p) in o.iter().chain(i.iter()).enumerate() {
+        if n == 0 { cr.move_to(p.0, p.1) } else { cr.line_to(p.0, p.1) }
+    }
+    cr.close_path();
 }
 
 /// Builds the practice window. `on_stage` is told 1 to 4 whenever the tutorial moves on,
