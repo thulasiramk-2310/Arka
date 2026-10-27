@@ -19,3 +19,21 @@ sleep 2
 dbus-send --session --type=method_call --dest=org.kde.plasmashell \
     /PlasmaShell org.kde.PlasmaShell.evaluateScript \
     string:"var arkaKeepPanels = true; $(cat "$LAYOUT")" 2>/dev/null || true
+
+# The top bar shows the spaces (virtual desktops). An account made before the bar
+# had them has one, which leaves nothing to switch between, so give it three, once.
+# An account that already has more than one is left alone, and so is one that
+# later goes back to a single space.
+MARK="$HOME/.config/arka-spaces-done"
+if [ ! -f "$MARK" ]; then
+    COUNT=$(dbus-send --session --print-reply --dest=org.kde.KWin /VirtualDesktopManager \
+        org.freedesktop.DBus.Properties.Get string:org.kde.KWin.VirtualDesktopManager string:count 2>/dev/null |
+        awk '/variant/ {print $3}')
+    if [ "$COUNT" = 1 ]; then
+        for n in 2 3; do
+            dbus-send --session --type=method_call --dest=org.kde.KWin /VirtualDesktopManager \
+                org.kde.KWin.VirtualDesktopManager.createDesktop uint32:$((n - 1)) string:"Desktop $n" 2>/dev/null || true
+        done
+    fi
+    [ -n "$COUNT" ] && : > "$MARK"
+fi

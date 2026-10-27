@@ -1,5 +1,5 @@
 // ArkaOS desktop layout for KDE Plasma — evokes the ArkaOS design:
-//   • a slim top bar (launcher + clock + system tray) on every screen
+//   • a slim top bar (launcher + clock + spaces + system tray) on every screen
 //   • the dock at the bottom is Crystal Dock, started separately
 //   • the ArkaOS launcher (org.arkaos.launcher, plasma-launcher/), a popup
 //     from the top-left button
@@ -20,13 +20,28 @@ function trayItems(tray) {
     return id !== '' ? desktopById(id) : tray;
 }
 
-// --- Top bar (34px) ---------------------------------------------------------
-// launcher | spacer | clock (centred) | spacer | tray
+// --- Top bar (28px) ---------------------------------------------------------
+// launcher | spacer | clock (centred) | spacer | spaces | tray
+// The bar used to be 34px; it is 28 so the screen goes to the windows.
+var BAR_HEIGHT = 28;
+var OLD_BAR_HEIGHT = 34;
+
+// The spaces switcher: the virtual desktops as numbers, the current one marked,
+// a click switches. Numbers only, so a bar stays quiet when there is one window.
+function addSpaces(bar) {
+    var pager = bar.addWidget('org.kde.plasma.pager');
+    pager.currentConfigGroup = ['General'];
+    pager.writeConfig('displayedText', 0);       // Number
+    pager.writeConfig('showWindowIcons', false);
+    pager.writeConfig('showWindowOutlines', false);
+    return pager;
+}
+
 function addBar(screen, launcher) {
     var bar = new Panel;
     bar.screen = screen;
     bar.location = 'top';
-    bar.height = 34;
+    bar.height = BAR_HEIGHT;
     try { bar.floating = false; } catch (e) {}  // flat bar on the screen edge; the dock floats
     bar.addWidget(launcher);
     bar.addWidget('org.kde.plasma.panelspacer');
@@ -41,6 +56,7 @@ function addBar(screen, launcher) {
     // screen edge Plasma's clock otherwise draws them touching ('Oct05:49').
     clock.writeConfig('customDateFormat', 'ddd d MMM ');
     bar.addWidget('org.kde.plasma.panelspacer');
+    addSpaces(bar);
     var tray = bar.addWidget('org.kde.plasma.systemtray');
     // Leave out tray entries a new account doesn't need: KDE Connect (off by
     // default, see Containerfile), Weather (offers to set up a weather service)
@@ -94,6 +110,43 @@ for (var s = 0; s < screenCount; s++) {
     }
     desk.currentConfigGroup = ['General'];
     desk.writeConfig('arkaTopBar', 'added');
+}
+
+// --- Bars made before the 28px bar with spaces ----------------------------------
+// Once per screen: a top bar still at the old 34px becomes 28px (a height the
+// user chose themselves is left alone), and a bar without a spaces switcher gets
+// one just before the tray. The screen's desktop remembers it was done, so a
+// switcher the user removes afterwards stays removed.
+for (var m = 0; keepPanels && m < all.length; m++) {
+    var old = all[m];
+    var oldDesk = desktopForScreen(old.screen);
+    if (old.location != 'top' || !oldDesk) {
+        continue;
+    }
+    oldDesk.currentConfigGroup = ['General'];
+    if (oldDesk.readConfig('arkaBarV2', '') == 'done') {
+        continue;
+    }
+    if (old.height == OLD_BAR_HEIGHT) {
+        old.height = BAR_HEIGHT;
+    }
+    var items = old.widgets();
+    var hasSpaces = items.some(function (w) { return w.type == 'org.kde.plasma.pager'; });
+    if (!hasSpaces) {
+        var added = addSpaces(old);
+        var trayItem = items.filter(function (w) { return w.type == 'org.kde.plasma.systemtray'; })[0];
+        try { if (trayItem) { added.index = trayItem.index; } } catch (e) {}
+    }
+    oldDesk.currentConfigGroup = ['General'];
+    oldDesk.writeConfig('arkaBarV2', 'done');
+}
+// A bar made just now already has it.
+for (var n = 0; keepPanels && n < screenCount; n++) {
+    var madeDesk = desktopForScreen(n);
+    if (madeDesk) {
+        madeDesk.currentConfigGroup = ['General'];
+        madeDesk.writeConfig('arkaBarV2', 'done');
+    }
 }
 
 // --- Dock ---------------------------------------------------------------------
