@@ -7,6 +7,7 @@
 // shows a ring of edits instead: crop, black out, trim and so on. All the work
 // is done by arka-convert, or by arka-edit when the tool needs a window.
 
+#include <cmath>
 #include <QAction>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -182,8 +183,17 @@ public:
     {
         if (!window)
             return;
-        QRegion ring(QRect(cx - outer, cy - outer, 2 * outer, 2 * outer), QRegion::Ellipse);
-        ring -= QRegion(QRect(cx - inner, cy - inner, 2 * inner, 2 * inner), QRegion::Ellipse);
+        // Both outlines are octagons with flat sides facing up, down, left and right.
+        auto octagon = [cx, cy](qreal radius) {
+            QPolygon poly;
+            for (int q = 0; q < 8; ++q) {
+                const qreal angle = (22.5 + q * 45) * M_PI / 180;
+                poly << QPoint(qRound(cx + radius * std::cos(angle)), qRound(cy + radius * std::sin(angle)));
+            }
+            return QRegion(poly);
+        };
+        QRegion ring = octagon(outer);
+        ring -= octagon(inner);
         KWindowEffects::enableBlurBehind(window, true, ring);
     }
 

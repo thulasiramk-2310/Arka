@@ -26,15 +26,16 @@ Window {
     property int hover: -1
     property bool dark: true
 
-    // A lightly translucent surface with a soft highlight along the top; KWin
-    // blurs what is behind the ring. Nothing here needs a GPU.
-    readonly property color surface: dark ? Qt.rgba(29 / 255, 32 / 255, 38 / 255, 0.93) : Qt.rgba(250 / 255, 251 / 255, 252 / 255, 0.94)
-    readonly property color slotFill: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.07, 0.10, 0.18, 0.10)
-    readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0.07, 0.10, 0.18, 0.28)
-    readonly property color hubFill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.62)
+    // The ArkaOS look, as on the wallpaper: a flat field, hairlines, no gloss or glow.
+    // Green appears once, as a short line on the slot you are on.
+    readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 0.97) : Qt.rgba(244 / 255, 243 / 255, 238 / 255, 0.97)
+    readonly property color slotFill: "transparent"
+    readonly property color slotOnFill: dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)
+    readonly property color idleInk: dark ? "#B4B8C2" : "#3F4755"
+    readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.18)
+    readonly property color hubFill: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 1) : Qt.rgba(244 / 255, 243 / 255, 238 / 255, 1)
     // A clear edge on any wallpaper: light on dark, dark on light.
-    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0.07, 0.10, 0.18, 0.40)
-    readonly property real gloss: dark ? 0.10 : 0.55
+    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.34)
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
     readonly property color accent: "#16C784"     // ArkaOS's own colour, not the desktop accent
@@ -112,7 +113,7 @@ Window {
         cx = Math.max(outerR + 8, Math.min(width - outerR - 8, x))
         cy = Math.max(outerR + 8, Math.min(height - outerR - 8, y))
         placed = true
-        wheel.setBlur(cx, cy, outerR, innerR)
+        wheel.setBlur(cx, cy, shapeR, innerR)
         enter.restart()
     }
     function indexAt(x, y) {
@@ -136,25 +137,75 @@ Window {
 
     // One slot of the ring as an SVG path, with its corners cut at 45 degrees
     // like the ArkaOS popups. i is the slot, n the number of slots.
-    function slotPath(i, n) {
-        const c0 = outerR, R = outerR - 4, r = innerR + 4
-        function P(rad, deg) {
-            const a = deg * Math.PI / 180
-            return (c0 + rad * Math.cos(a)).toFixed(2) + " " + (c0 + rad * Math.sin(a)).toFixed(2)
+    // ── Cut-corner geometry ───────────────────────────────────────────────────
+    // The wheel is an octagon, not a circle: flat sides with 45-degree cuts, the shape
+    // the rest of ArkaOS uses. Everything below is in the ring item's own coordinates.
+    readonly property real shapeR: outerR * 1.04      // the outline's corner radius
+
+    function octPoints(rad) {          // eight corners, flat sides facing up/down/left/right
+        const pts = []
+        for (let q = 0; q < 8; q++) {
+            const a = (22.5 + q * 45) * Math.PI / 180
+            pts.push([rad * Math.cos(a), rad * Math.sin(a)])
         }
+        return pts
+    }
+    function octEdge(rad, angle) {     // how far out the octagon's edge is in a direction
+        const q = Math.PI / 4, phi = Math.round(angle / q) * q
+        return rad * Math.cos(Math.PI / 8) / Math.cos(angle - phi)
+    }
+    function svg(pts, dy) {
+        let d = ""
+        for (let q = 0; q < pts.length; q++)
+            d += (q ? " L " : "M ") + (outerR + pts[q][0]).toFixed(2) + " " + (outerR + pts[q][1] + (dy || 0)).toFixed(2)
+        return d + " Z"
+    }
+    function octagonPath(rad, dy) { return svg(octPoints(rad), dy) }
+
+    function clipHalf(pts, nx, ny, c) {   // keep the part where nx*x + ny*y >= c
+        const out = []
+        for (let q = 0; q < pts.length; q++) {
+            const a = pts[q], b = pts[(q + 1) % pts.length]
+            const da = nx * a[0] + ny * a[1] - c, db = nx * b[0] + ny * b[1] - c
+            if (da >= 0) out.push(a)
+            if ((da >= 0) !== (db >= 0)) {
+                const t = da / (da - db)
+                out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+            }
+        }
+        return out
+    }
+    function chain(pts) {   // the boundary part of a clipped octagon, without the sector's tip
+        const far = innerR * 0.5
+        const tip = pts.findIndex(p => Math.hypot(p[0], p[1]) < far)
+        if (tip < 0) return pts
+        return pts.slice(tip + 1).concat(pts.slice(0, tip))
+    }
+    function cutCorners(pts, corners, cut) {
+        const out = []
+        for (let q = 0; q < pts.length; q++) {
+            if (corners.indexOf(q) < 0) { out.push(pts[q]); continue }
+            const v = pts[q], pr = pts[(q + pts.length - 1) % pts.length], nx = pts[(q + 1) % pts.length]
+            const lp = Math.hypot(pr[0] - v[0], pr[1] - v[1]), ln = Math.hypot(nx[0] - v[0], nx[1] - v[1])
+            const cp = Math.min(cut, lp * 0.45), cn = Math.min(cut, ln * 0.45)
+            out.push([v[0] + (pr[0] - v[0]) / lp * cp, v[1] + (pr[1] - v[1]) / lp * cp])
+            out.push([v[0] + (nx[0] - v[0]) / ln * cn, v[1] + (nx[1] - v[1]) / ln * cn])
+        }
+        return out
+    }
+    // One slot: the part of the octagonal ring between two dividing lines. The sides stay
+    // a constant 6 px apart and every corner has the same cut, so neighbours mirror each other.
+    function slotPath(i, n) {
+        const Ro = shapeR - 6.5, Ri = innerR + 6.5   // 6 px from the outline and from the middle, like the 6 px between slots
         if (n <= 1)
-            return "M " + (c0 - R) + " " + c0 + " A " + R + " " + R + " 0 1 1 " + (c0 + R) + " " + c0
-                 + " A " + R + " " + R + " 0 1 1 " + (c0 - R) + " " + c0 + " Z"
-                 + " M " + (c0 - r) + " " + c0 + " A " + r + " " + r + " 0 1 0 " + (c0 + r) + " " + c0
-                 + " A " + r + " " + r + " 0 1 0 " + (c0 - r) + " " + c0 + " Z"
-        const step = 360 / n, mid = -90 + i * step, cut = 14
-        const g = (3 / ((R + r) / 2)) * 180 / Math.PI          // half of a 6 px gap between slots
-        const a0 = mid - step / 2 + g, a1 = mid + step / 2 - g
-        const co = cut / R * 180 / Math.PI, ci = cut / r * 180 / Math.PI
-        return "M " + P(R, a0 + co) + " A " + R + " " + R + " 0 0 1 " + P(R, a1 - co)
-             + " L " + P(R - cut, a1) + " L " + P(r + cut, a1) + " L " + P(r, a1 - ci)
-             + " A " + r + " " + r + " 0 0 0 " + P(r, a0 + ci)
-             + " L " + P(r + cut, a0) + " L " + P(R - cut, a0) + " Z"
+            return svg(octPoints(Ro)) + " " + svg(octPoints(Ri))
+        const step = 360 / n, mid = -90 + i * step, d = 3
+        const b0 = (mid - step / 2) * Math.PI / 180, b1 = (mid + step / 2) * Math.PI / 180
+        const wedge = (pts) => clipHalf(clipHalf(pts, -Math.sin(b0), Math.cos(b0), d), Math.sin(b1), -Math.cos(b1), d)
+        const outer = chain(wedge(octPoints(Ro))), inner = chain(wedge(octPoints(Ri))).reverse()
+        const all = outer.concat(inner)
+        const m = outer.length
+        return svg(cutCorners(all, [0, m - 1, m, all.length - 1], 14 * k))
     }
 
     Connections {
@@ -241,17 +292,6 @@ Window {
         opacity: 0
         transformOrigin: Item.Center
 
-        // A soft shadow: three faint discs, a little lower than the ring.
-        Repeater {
-            model: [10, 22, 36]
-            delegate: Rectangle {
-                required property int modelData
-                x: -modelData; y: 8 - modelData
-                width: ring.width + 2 * modelData; height: width; radius: width / 2
-                color: Qt.rgba(0, 0, 0, win.dark ? 0.16 : 0.09)
-            }
-        }
-
         // The donut, hollow in the middle so nothing is picked by accident.
         Shape {
             anchors.fill: parent
@@ -259,19 +299,8 @@ Window {
             ShapePath {
                 fillColor: win.surface; strokeColor: win.rim; strokeWidth: 1.5
                 fillRule: ShapePath.OddEvenFill
-                PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.outerR - 0.5; radiusY: win.outerR - 0.5; startAngle: 0; sweepAngle: 360 }
-                PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.innerR; radiusY: win.innerR; startAngle: 0; sweepAngle: 360; moveToStart: true }
-            }
-            ShapePath {   // the highlight along the top
-                strokeColor: "transparent"
-                fillRule: ShapePath.OddEvenFill
-                fillGradient: LinearGradient {
-                    x1: 0; y1: 0; x2: 0; y2: win.outerR
-                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, win.dark ? 0.06 : 0.30) }
-                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
-                }
-                PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.outerR - 0.5; radiusY: win.outerR - 0.5; startAngle: 0; sweepAngle: 360 }
-                PathAngleArc { centerX: win.outerR; centerY: win.outerR; radiusX: win.innerR; radiusY: win.innerR; startAngle: 0; sweepAngle: 360; moveToStart: true }
+                PathSvg { path: win.octagonPath(win.shapeR) }
+                PathSvg { path: win.octagonPath(win.innerR) }
             }
         }
 
@@ -287,28 +316,16 @@ Window {
                 readonly property real ym: win.outerR + r * Math.sin(mid)
                 readonly property string path: win.slotPath(index, win.formats.length)
                 anchors.fill: parent
-                // The other slots step back while one is hovered.
-                opacity: win.hover < 0 || on ? 1 : 0.45
-                Behavior on opacity { NumberAnimation { duration: 100 } }
 
                 Shape {
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
                     ShapePath {
-                        strokeColor: slotItem.on ? "transparent" : win.slotEdge
+                        strokeColor: slotItem.on ? (win.dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.45)) : win.slotEdge
                         strokeWidth: 1
+                        joinStyle: ShapePath.MiterJoin
                         fillRule: ShapePath.OddEvenFill
-                        fillColor: slotItem.on ? win.accent : win.slotFill
-                        PathSvg { path: slotItem.path }
-                    }
-                    ShapePath {   // gloss: light from above, fading out by the middle of the slot
-                        strokeColor: "transparent"
-                        fillRule: ShapePath.OddEvenFill
-                        fillGradient: LinearGradient {
-                            x1: 0; y1: slotItem.ym - 56; x2: 0; y2: slotItem.ym + 48
-                            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, slotItem.on ? 0.42 : win.gloss) }
-                            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
-                        }
+                        fillColor: slotItem.on ? win.slotOnFill : win.slotFill
                         PathSvg { path: slotItem.path }
                     }
                 }
@@ -319,54 +336,56 @@ Window {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     text: win.label(slotItem.modelData)
-                    color: slotItem.on ? win.accentInk : win.ink
-                    font.pixelSize: Math.max(12, (win.edit ? 15 : 17) * win.k)
-                    font.weight: Font.Bold
-                    font.letterSpacing: win.edit ? 0.2 : 0.6
-                    scale: slotItem.on ? 1.22 : 1
-                    Behavior on scale { SpringAnimation { spring: 5; damping: 0.4; epsilon: 0.002 } }
+                    color: slotItem.on ? win.ink : win.idleInk
+                    font.pixelSize: Math.max(12, (win.edit ? 13 : 14) * win.k)
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: win.edit ? 0.6 : 1.4
                 }
             }
         }
 
-        // The middle: what is chosen now, and which file.
-        Rectangle {
-            width: 2 * win.innerR - 14; height: width; radius: width / 2
-            x: win.outerR - width / 2; y: win.outerR - height / 2
-            color: win.hubFill
+        // The middle: the file, and a green tick on its edge pointing at the slot you are on.
+        Shape {
+            anchors.fill: parent
             visible: win.formats.length > 0
-            Column {
-                anchors.centerIn: parent
-                spacing: 4
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: pillText.implicitWidth + 24; height: 28; radius: 14
-                    color: win.hover >= 0 ? win.accent : "transparent"
-                    gradient: win.hover >= 0 ? hoverGradient : null
-                    Gradient {
-                        id: hoverGradient
-                        GradientStop { position: 0; color: "#5BE8B2" }
-                        GradientStop { position: 0.6; color: "#16C784" }
-                        GradientStop { position: 1; color: "#10A56C" }
-                    }
-                    Text {
-                        id: pillText
-                        anchors.centerIn: parent
-                        text: win.hubText()
-                        color: win.hover >= 0 ? win.accentInk : win.muted
-                        font.pixelSize: win.hover >= 0 ? 13 : 12
-                        font.weight: Font.Bold
-                        font.letterSpacing: 0.4
-                    }
-                }
-                Text {
-                    width: 2 * win.innerR - 30
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideMiddle
-                    text: win.fileLabel()
-                    color: win.muted
-                    font.pixelSize: 11
-                }
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: win.hubFill; strokeColor: win.rim; strokeWidth: 1
+                PathSvg { path: win.octagonPath(win.innerR) }
+            }
+        }
+        Item {   // the pointer tick, turned to face the hovered slot
+            visible: win.formats.length > 1 && win.hover >= 0
+            readonly property real mid: (-90 + win.hover * 360 / Math.max(1, win.formats.length)) * Math.PI / 180
+            readonly property real edgeR: win.octEdge(win.innerR, mid)   // the octagon's edge in that direction
+            x: win.outerR + (edgeR + 6) * Math.cos(mid) - 6
+            y: win.outerR + (edgeR + 6) * Math.sin(mid) - 1
+            width: 12; height: 2
+            rotation: mid * 180 / Math.PI
+            transformOrigin: Item.Center
+            Rectangle { anchors.fill: parent; color: win.accent }
+        }
+        Column {
+            visible: win.formats.length > 0
+            x: win.outerR - width / 2; y: win.outerR - height / 2
+            width: 2 * win.innerR - 22
+            spacing: 5
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: win.hover >= 0 ? win.ext().toUpperCase() : win.hubText()
+                color: win.hover >= 0 ? win.muted : win.ink
+                font.pixelSize: win.hover >= 0 ? 11 : 13
+                font.weight: Font.DemiBold
+                font.letterSpacing: 1.4
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideMiddle
+                text: win.fileLabel()
+                color: win.hover >= 0 ? win.ink : win.muted
+                font.pixelSize: 12
             }
         }
     }
@@ -377,6 +396,7 @@ Window {
         opacity: ring.opacity
         x: win.cx - width / 2; y: win.cy + win.outerR + 12
         width: hint.implicitWidth + 28; height: 34; radius: 17
+        antialiasing: true
         color: win.surface; border.color: win.rim
         Text {
             id: hint
