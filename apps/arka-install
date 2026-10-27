@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""arka: install apps from Flathub, after showing what each one can reach.
+
+    arka install APP [--yes] [--any]   show what APP can reach, ask, then install it
+    arka remove APP [--data]           remove APP (--data also deletes its saved data)
+    arka search [WORDS]                list the apps ArkaOS suggests
+    arka info APP                      show what APP can reach, change nothing
+    arka list                          list the apps you installed
+
+Apps come from Flathub and install for your account only, so no password is needed
+and nothing in the system image changes. The suggested list (/usr/share/arkaos/apps.json)
+is a selection by ArkaOS, not an audit: nobody here has reviewed these apps' code.
+APP is a name from that list or a Flathub id such as org.videolan.VLC; an id that
+isn't on the list needs --any. Flatpak permissions limit what an app can reach;
+they don't make an app safe.
+"""
+
+import configparser
+import json
+import os
+import subprocess
+import sys
+
+CATALOG = os.environ.get("ARKA_APPS_CATALOG", "/usr/share/arkaos/apps.json")
+REMOTE = "flathub"
+REMOTE_URL = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+# Plain words for what a Flatpak permission lets an app do. "wide" ones are listed
+# apart, because they reach well beyond the app itself.
+SHARED = {
+    "network": ("Connect to the internet", False),
+}
+SOCKETS = {
+    "x11": ("Use X11, an older display system that doesn't keep it apart from other X11 apps", True),
+    "pulseaudio": ("Play sound and use the microphone", False),
+    "ssh-auth": ("Use your SSH keys", True),
+    "pcsc": ("Use smart cards", False),
+    "cups": ("Print", False),
+    "gpg-agent": ("Use your GPG keys", True),
+}
+DEVICES = {
+    "all": ("Use every device, including cameras and USB devices", True),
+    "usb": ("Use USB devices", False),
+    "input": ("Read game controllers and input devices", False),
+    "kvm": ("Run virtual machines", False),
+}
+FEATURES = {
+    "bluetooth": ("Use Bluetooth", False),
+    "devel": ("Use developer features that weaken its sandbox", True),
+    "canbus": ("Use the CAN bus", False),
+}
+FILES = {
+    "host": "all your files",
+    "host-os": "the system's files",
+    "host-etc": "the system's settings in /etc",
+    "home": "your whole home folder",
+    "xdg-download": "your Downloads folder",
+    "xdg-documents": "your Documents folder",
+    "xdg-pictures": "your Pictures folder",
+    "xdg-music": "your Music folder",
+    "xdg-videos": "your Videos folder",
+    "xdg-desktop": "your Desktop folder",
+    "xdg-config": "your settings folder (~/.config)",
+}
+WIDE_FILES = {"host", "host-os", "host-etc", "home", "xdg-config"}
+
+
+def _opts(value):
+    return [v for v in value.split(";") if v] if value else []
+
+
+def parse_permissions(text):
+    """Turn Flatpak's permission text into (wide, narrow): two lists of plain sentences."""
+    cp = configparser.ConfigParser(delimiters=("=",), interpolation=None, strict=False)
+    cp.optionxform = str
+    cp.read_string(text)
+    wide, narrow = [], []
+
+    def add(table, key):
+        if key in table:
+            sentence, is_wide = table[key]
+            (wide if is_wide else narrow).append(sentence)
+
+    ctx = cp["Context"] if cp.has_section("Context") else {}
+    for k in _opts(ctx.get("shared", "")):
+        if not k.startswith("!"):
+            add(SHARED, k)
+    for k in _opts(ctx.get("sockets", "")):
+        if not k.startswith("!"):
+            add(SOCKETS, k)
+    for k in _opts(ctx.get("devices", "")):
+        if not k.startswith("!"):
+            add(DEVICES, k)
+    for k in _opts(ctx.get("features", "")):
+        if not k.startswith("!"):
+            add(FEATURES, k)
+    for f in _opts(ctx.get("filesystems", "")):
+        if f.startswith("!"):
+            continue
+        path, _, mode = f.partition(":")
+        mode = mode or "rw"
+        if path in FILES:
+            what = FILES[path]
+            verb = "Read" if mode == "ro" else "Read and change"
+            (wide if path in WIDE_FILES else narrow).append(f"{verb} {what}")
+        elif path.startswith(("~", "/")):
+            verb = "Read" if mode == "ro" else "Read and change"
+            narrow.append(f"{verb} the folder {path}")
+    for section, where in (("Session Bus Policy", "desktop"), ("System Bus Policy", "system")):
+        if cp.has_section(section):
+            talk = [k for k, v in cp[section].items() if v in ("talk", "own")]
+            if talk:
+                narrow.append(f"Talk to {len(talk)} other service{'s' if len(talk) != 1 else ''} on the {where} bus")
+    return wide, narrow
+
+
+def describe(name, about, text):
+    wide, narrow = parse_permissions(text)
+    lines = [name + (f": {about}" if about else ""), ""]
+    if wide:
+        lines.append("Broad access:")
+        lines += [f"  - {s}" for s in wide]
+    if narrow:
+        lines.append("It can also:")
+        lines += [f"  - {s}" for s in narrow]
+    if not wide and not narrow:
+        lines.append("It asks for no extra access.")
+    lines += ["", "These are what the app asks for now. An update can change them, and the app can",
+              "still ask you through your desktop to open a file or use the camera.",
+              "They limit what the app reaches; they don't make it safe."]
+    return "\n".join(lines)
+
+
+def load_catalog():
+    try:
+        with open(CATALOG, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def find(query, catalog):
+    """Match a catalog entry by id or by name, ignoring case. None when there isn't one."""
+    q = query.lower()
+    for app in catalog:
+        if app["id"].lower() == q or app["name"].lower() == q:
+            return app
+    return None
+
+
+def flatpak(*args, capture=False):
+    cmd = ["flatpak", *args]
+    try:
+        if capture:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            return r.returncode, r.stdout, r.stderr
+        return subprocess.run(cmd).returncode, "", ""
+    except FileNotFoundError:
+        die("Flatpak isn't installed on this system.")
+    except subprocess.TimeoutExpired:
+        die("Flathub didn't answer in time. Check your internet connection and try again.")
+
+
+def die(msg, code=1):
+    print(f"arka: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def ensure_remote():
+    code, _, err = flatpak("remote-add", "--user", "--if-not-exists", REMOTE, REMOTE_URL, capture=True)
+    if code != 0:
+        die("couldn't reach Flathub: " + (err.strip().splitlines() or ["unknown error"])[-1])
+
+
+def resolve(query, any_id):
+    catalog = load_catalog()
+    app = find(query, catalog)
+    if app:
+        return app
+    if "." in query and any_id:
+        return {"id": query, "name": query, "about": "Not on the ArkaOS list; Flathub's own listing."}
+    if "." in query:
+        die(f"{query} isn't on the ArkaOS list. If you know what it is, run it again with --any.")
+    die(f"no app called {query}. Try: arka search")
+
+
+def permissions_text(app_id):
+    ensure_remote()
+    code, out, err = flatpak("remote-info", "--user", "--show-metadata", REMOTE, app_id, capture=True)
+    if code != 0:
+        die(f"couldn't read {app_id} on Flathub: " + (err.strip().splitlines() or ["unknown error"])[-1])
+    return out
+
+
+def cmd_info(args):
+    app = resolve(args[0], "--any" in args)
+    print(describe(app["name"], app["about"], permissions_text(app["id"])))
+
+
+def cmd_install(args):
+    if not args or args[0].startswith("-"):
+        die("usage: arka install APP [--yes] [--any]")
+    app = resolve(args[0], "--any" in args)
+    print(describe(app["name"], app["about"], permissions_text(app["id"])))
+    print(f"\nSource: Flathub, {app['id']}. Installed for your account only.\n")
+    if "--yes" not in args and "-y" not in args:
+        if not sys.stdin.isatty():
+            die("won't install without asking; run it in a terminal or add --yes.")
+        if input(f"Install {app['name']}? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Nothing installed.")
+            return
+    sys.exit(flatpak("install", "--user", "-y", "--noninteractive", REMOTE, app["id"])[0])
+
+
+def cmd_remove(args):
+    if not args or args[0].startswith("-"):
+        die("usage: arka remove APP [--data]")
+    app = find(args[0], load_catalog()) or {"id": args[0], "name": args[0]}
+    flags = ["--delete-data"] if "--data" in args else []
+    sys.exit(flatpak("uninstall", "--user", "-y", *flags, app["id"])[0])
+
+
+def cmd_search(args):
+    words = [w.lower() for w in args if not w.startswith("-")]
+    shown = [a for a in load_catalog() if all(w in (a["name"] + " " + a["about"] + " " + a["category"]).lower() for w in words)]
+    if not shown:
+        die("nothing on the ArkaOS list matches. The list is short on purpose.")
+    for a in shown:
+        print(f"{a['name']:<14} {a['about']}")
+    print("\nA selection by ArkaOS, not an audit. Install with: arka install NAME")
+
+
+def cmd_list(_args):
+    code, out, err = flatpak("list", "--user", "--app", "--columns=name,application", capture=True)
+    if code != 0:
+        die(err.strip() or "couldn't list apps")
+    print(out.strip() or "No apps installed with arka yet.")
+
+
+COMMANDS = {"install": cmd_install, "remove": cmd_remove, "search": cmd_search, "info": cmd_info, "list": cmd_list}
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help") or argv[0] not in COMMANDS:
+        print(__doc__.strip())
+        return 0 if not argv or argv[0] in ("-h", "--help", "help") else 2
+    if argv[0] == "info" and len(argv) < 2:
+        die("usage: arka info APP")
+    COMMANDS[argv[0]](argv[1:])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

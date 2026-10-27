@@ -59,6 +59,8 @@ jobs:
         run: bash -n arkaos-firefox && python3 scripts/test-firefox-wrapper.py
       - name: Test that the format wheel offers only what arka-convert accepts
         run: python3 scripts/test-wheel-formats.py
+      - name: Test arka install (permission wording and the app list)
+        run: python3 -I -m unittest discover -s apps -p 'test_*.py'
 
   rust:
     runs-on: ubuntu-24.04

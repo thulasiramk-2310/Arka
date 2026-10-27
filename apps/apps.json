@@ -1,0 +1,15 @@
+[
+  {"id": "org.videolan.VLC", "name": "VLC", "about": "Plays almost any video or audio file.", "category": "Media"},
+  {"id": "org.kde.kdenlive", "name": "Kdenlive", "about": "Video editor.", "category": "Media"},
+  {"id": "com.obsproject.Studio", "name": "OBS Studio", "about": "Records the screen and streams video.", "category": "Media"},
+  {"id": "org.audacityteam.Audacity", "name": "Audacity", "about": "Records and edits sound.", "category": "Media"},
+  {"id": "org.gimp.GIMP", "name": "GIMP", "about": "Photo editor and painting tool.", "category": "Graphics"},
+  {"id": "org.kde.krita", "name": "Krita", "about": "Digital painting.", "category": "Graphics"},
+  {"id": "org.inkscape.Inkscape", "name": "Inkscape", "about": "Vector drawing.", "category": "Graphics"},
+  {"id": "org.blender.Blender", "name": "Blender", "about": "3D modelling and animation.", "category": "Graphics"},
+  {"id": "org.libreoffice.LibreOffice", "name": "LibreOffice", "about": "Documents, spreadsheets and slides.", "category": "Office"},
+  {"id": "org.onlyoffice.desktopeditors", "name": "ONLYOFFICE", "about": "Documents, spreadsheets and slides, closer to Microsoft Office files.", "category": "Office"},
+  {"id": "org.mozilla.Thunderbird", "name": "Thunderbird", "about": "Email.", "category": "Internet"},
+  {"id": "org.signal.Signal", "name": "Signal", "about": "Private messaging.", "category": "Internet"},
+  {"id": "org.keepassxc.KeePassXC", "name": "KeePassXC", "about": "Password manager that keeps its file on this computer.", "category": "Utilities"}
+]
