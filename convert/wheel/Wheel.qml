@@ -35,7 +35,7 @@ Window {
     readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.18)
     readonly property color hubFill: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 1) : Qt.rgba(244 / 255, 243 / 255, 238 / 255, 1)
     // A clear edge on any wallpaper: light on dark, dark on light.
-    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.34)
+    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.46)
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
     readonly property color accent: "#16C784"     // ArkaOS's own colour, not the desktop accent
