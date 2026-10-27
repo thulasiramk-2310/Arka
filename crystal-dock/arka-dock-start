@@ -19,4 +19,15 @@ if [ -n "${seeded:-}" ] && [ "$(cat "$HOME/.config/arka-look" 2>/dev/null)" = li
         kwriteconfig6 --file "$f" --group General --key inactiveIndicatorColor2D '#3c4148'
     done
 fi
+# Crystal Dock's own application menu (a KDE-logo button) used to be on; the ArkaOS
+# launcher in the top bar replaces it. Turn it off once on accounts that still have it;
+# a user who turns it back on afterwards keeps it.
+MARK=$HOME/.config/crystal-dock/.menu-off
+if [ ! -f "$MARK" ]; then
+    for d in KDE generic; do
+        f=$HOME/.config/crystal-dock/$d/panel_1.conf
+        [ -f "$f" ] && kwriteconfig6 --file "$f" --group General --key showApplicationMenu false
+    done
+    mkdir -p "$HOME/.config/crystal-dock" && : > "$MARK"
+fi
 exec /usr/bin/crystal-dock
