@@ -20,9 +20,12 @@ function trayItems(tray) {
     return id !== '' ? desktopById(id) : tray;
 }
 
-// --- Top bar (28px) ---------------------------------------------------------
+// --- Top bar ----------------------------------------------------------------
 // launcher | spacer | clock (centred) | spacer | spaces | tray
-// The bar used to be 34px; it is 28 so the screen goes to the windows.
+// Plasma will not make a panel thinner than a minimum it works out from the font size
+// (about two grid units): asking for 28 gives the minimum, not 28, and a test session with
+// large fallback fonts showed 48. So this is a request, and the bar's real height follows the
+// font. Setting a height above the minimum (64) does work.
 var BAR_HEIGHT = 28;
 var OLD_BAR_HEIGHT = 34;
 
