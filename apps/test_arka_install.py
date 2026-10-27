@@ -59,6 +59,17 @@ class Catalog(unittest.TestCase):
             self.assertTrue({"id", "name", "about", "category"} <= a.keys())
             self.assertIn(".", a["id"])
 
+    def test_every_capsule_app_is_on_the_list(self):
+        # Capsule installs through arka, so an app on its grid must be on arka's list too.
+        import json, re
+        capsule = os.path.join(HERE, "..", "arka-shell", "arka-capsule", "src", "main.rs")
+        with open(capsule) as f:
+            ids = re.findall(r'CatalogApp \{[^}]*?id: "([^"]+)"', f.read())
+        with open(os.path.join(HERE, "apps.json")) as f:
+            listed = {a["id"] for a in json.load(f)}
+        self.assertGreaterEqual(len(ids), 10)
+        self.assertEqual([i for i in ids if i not in listed], [])
+
     def test_find_by_name_or_id_ignores_case(self):
         cat = [{"id": "org.videolan.VLC", "name": "VLC", "about": "", "category": "Media"}]
         self.assertEqual(arka.find("vlc", cat)["id"], "org.videolan.VLC")

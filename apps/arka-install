@@ -11,7 +11,7 @@ Apps come from Flathub and install for your account only, so no password is need
 and nothing in the system image changes. The suggested list (/usr/share/arkaos/apps.json)
 is a selection by ArkaOS, not an audit: nobody here has reviewed these apps' code.
 APP is a name from that list or a Flathub id such as org.videolan.VLC; an id that
-isn't on the list needs --any. Flatpak permissions limit what an app can reach;
+isn't on the list needs --any. Exit codes: 0 installed, 3 you said no, anything else failed. Flatpak permissions limit what an app can reach;
 they don't make an app safe.
 """
 
@@ -208,7 +208,7 @@ def cmd_install(args):
             die("won't install without asking; run it in a terminal or add --yes.")
         if input(f"Install {app['name']}? [y/N] ").strip().lower() not in ("y", "yes"):
             print("Nothing installed.")
-            return
+            sys.exit(3)   # declined: not a failure, but not a success either
     sys.exit(flatpak("install", "--user", "-y", "--noninteractive", REMOTE, app["id"])[0])
 
 
