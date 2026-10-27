@@ -1,10 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1fbf86"/><stop offset="1" stop-color="#0d8f5f"/></linearGradient></defs>
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27cf95"/><stop offset="1" stop-color="#0c8f5f"/></linearGradient>
+<linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9f0e5"/></linearGradient>
+<!-- The ArkaOS peak is cut out of the shield so the plate shows through; a small dot inside it is the status light. -->
+<mask id="m"><rect width="64" height="64" fill="#fff"/><polygon points="32,22 41.5,41 22.5,41" fill="#000"/><circle cx="32" cy="35.2" r="3.6" fill="#fff"/></mask>
+</defs>
 <rect x="4" y="5.5" width="56" height="56" rx="13" fill="#000" opacity=".16"/>
 <rect x="4" y="4" width="56" height="56" rx="13" fill="url(#g)"/>
 <rect x="4.5" y="4.5" width="55" height="55" rx="12.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
-<!-- A list of settings, each with a status dot: the dashboard shows what is set, so no shield or tick. -->
-<circle cx="19" cy="22" r="3.2" fill="#fff"/><rect x="27" y="20" width="19" height="4.2" rx="2.1" fill="#fff" fill-opacity=".88"/>
-<circle cx="19" cy="32" r="3.2" fill="#fff"/><rect x="27" y="30" width="14" height="4.2" rx="2.1" fill="#fff" fill-opacity=".88"/>
-<circle cx="19" cy="42" r="3.2" fill="#fff"/><rect x="27" y="40" width="17" height="4.2" rx="2.1" fill="#fff" fill-opacity=".88"/>
+<!-- A shield with a flat top and cut corners (the ArkaOS cut), sized like the symbols of the other apps. -->
+<path d="M23 14 H41 L45.5 18.5 V31 C45.5 40.5 39 46.5 32 50.5 C25 46.5 18.5 40.5 18.5 31 V18.5 Z" fill="#000" opacity=".16" transform="translate(0 1.3)"/>
+<path d="M23 14 H41 L45.5 18.5 V31 C45.5 40.5 39 46.5 32 50.5 C25 46.5 18.5 40.5 18.5 31 V18.5 Z" fill="url(#s)" mask="url(#m)"/>
+<path d="M23 14.5 H41 L45 18.5" fill="none" stroke="#fff" stroke-width="1" opacity=".9"/>
 </svg>
