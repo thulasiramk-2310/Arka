@@ -318,6 +318,21 @@ int main(int argc, char **argv)
     KGlobalAccel::self()->setShortcut(editAction, editKeys);
     QObject::connect(editAction, &QAction::triggered, &wheel, &Wheel::showEditForDrag);
 
+    // Meta+/ opens the keyboard shortcuts page. That page keeps a single window, so pressing
+    // the keys again raises it instead of opening a second one. It is its own entry in
+    // System Settings > Shortcuts, so it is not hidden under "Format Wheel".
+    auto *keysAction = new QAction(&app);
+    keysAction->setObjectName(QStringLiteral("show-shortcuts"));
+    keysAction->setText(QStringLiteral("Show the keyboard shortcuts"));
+    keysAction->setProperty("componentName", QStringLiteral("arka-shortcuts"));
+    keysAction->setProperty("componentDisplayName", QStringLiteral("ArkaOS Shortcuts"));
+    const QList<QKeySequence> keysKeys{QKeySequence(Qt::META | Qt::Key_Slash)};
+    KGlobalAccel::self()->setDefaultShortcut(keysAction, keysKeys);
+    KGlobalAccel::self()->setShortcut(keysAction, keysKeys);
+    QObject::connect(keysAction, &QAction::triggered, &app, [] {
+        QProcess::startDetached(QStringLiteral("arka-hotkeys"), {});
+    });
+
     if (clickMode)
         wheel.showPaths(files, editMode);
     return app.exec();
