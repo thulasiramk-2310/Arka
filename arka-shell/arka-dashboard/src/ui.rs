@@ -434,7 +434,7 @@ pub fn build(
     rows_box.add_css_class("dash-rows");
     let dns = SettingRow::new(&rows_box, "Encrypted DNS", "Requires system DNS lookups to be encrypted.");
     let mac = SettingRow::new(&rows_box, "Private network address", "Uses a random hardware address on network connections.");
-    let host = SettingRow::new(&rows_box, "Generic device name", "Uses the generic network name \"arka\" instead of yours.");
+    let host = SettingRow::new(&rows_box, "Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own.");
     let ipv6 = SettingRow::new(&rows_box, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
     let sandbox = SettingRow::new(&rows_box, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");
     let fw = SettingRow::new(&rows_box, "Firewall", "Rejects connections other computers try to open to this one.");

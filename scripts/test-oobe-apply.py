@@ -48,6 +48,9 @@ class ApplyTests(unittest.TestCase):
         for name in ('run', 'etc/sudoers.d', 'var/lib', 'bin'):
             (self.root / name).mkdir(parents=True)
         (self.root / 'accounts').write_text('')
+        (self.root / 'etc/arkad').mkdir()
+        (self.root / 'etc/arkad/arkad.toml').write_text(
+            'check_interval_secs = 60\n\n[dns]\nserver = "9.9.9.9"\n\n[hostname]\nname = "arka"\n')
         (self.root / 'etc/sudoers.d/95-arkaos-oobe').write_text('setup-only grant')
         source = Path(os.environ.get(
             'ARKA_OOBE_HELPER_SOURCE',
@@ -64,10 +67,12 @@ class ApplyTests(unittest.TestCase):
         self.env = dict(os.environ, OOBE_TEST_ROOT=str(self.root))
         self.env['PATH'] = str(self.root / 'bin') + os.pathsep + '/usr/bin:/bin'
 
-    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None):
+    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None, host=None):
         args = ['bash', str(self.helper), user, autologin]
         if look is not None:
             args.append(look)
+        if host is not None or dev is not None:
+            args.append(host or 'arka')
         if dev is not None:
             args.extend(dev)
         return subprocess.run(
@@ -249,6 +254,25 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('could not set the VARA identity', result.stderr)
         self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
+
+    def test_a_chosen_computer_name_goes_into_arkads_settings(self):
+        result = self.run_helper(look='dark', host='ram-pc')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        toml = (self.root / 'etc/arkad/arkad.toml').read_text()
+        self.assertIn('[hostname]\nname = "ram-pc"', toml)
+        self.assertIn('server = "9.9.9.9"', toml)
+
+    def test_the_default_computer_name_leaves_arkads_settings_alone(self):
+        before = (self.root / 'etc/arkad/arkad.toml').read_text()
+        self.assertEqual(self.run_helper(look='dark').returncode, 0)
+        self.assertEqual((self.root / 'etc/arkad/arkad.toml').read_text(), before)
+
+    def test_bad_computer_names_are_rejected_before_account_creation(self):
+        for host in ('1abc', 'a-', 'Abc', 'my pc', 'a_b', 'b' * 31, 'a;rm', '-x'):
+            with self.subTest(host=host):
+                result = self.run_helper(look='dark', host=host)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assert_no_account_changes()
 
 if __name__ == '__main__':
     unittest.main()

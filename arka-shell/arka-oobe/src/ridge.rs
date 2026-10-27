@@ -13,7 +13,7 @@ use libadwaita as adw;
 use adw::prelude::*;
 
 /// Peak heights in px at the nominal strip height; the last one, the summit, is the tallest.
-const PEAKS: [f64; 6] = [14.0, 20.0, 26.0, 20.0, 30.0, 44.0];
+const PEAKS: [f64; 7] = [14.0, 20.0, 26.0, 20.0, 30.0, 24.0, 44.0];
 pub const STRIP_HEIGHT: i32 = 84;
 
 pub struct Ridge {

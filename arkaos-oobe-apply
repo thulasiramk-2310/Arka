@@ -9,23 +9,25 @@
 # set autologin, switch to the graphical target, and mark first-boot done.
 #
 #   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark
-#                            [<tools> <commit-name> <commit-email>]]
-#          (password on stdin; look defaults to dark, the image default)
+#                            [<computer-name> [<tools> <commit-name> <commit-email>]]]
+#          (password on stdin; look defaults to dark, the image default;
+#           the computer name defaults to arka, the privacy default)
 #
 # tools is the optional version control from setup's Advanced options: a comma
 # list of vara and git, each set up with the name and email for commits.
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 6 ] || [ "$#" -eq 4 ] || [ "$#" -eq 5 ]; then
-    echo "arkaos-oobe-apply: expected username, autologin flag, optional look and optional version control" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 7 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
+    echo "arkaos-oobe-apply: expected username, autologin flag, optional look, computer name and version control" >&2
     exit 2
 fi
 user="$1"
 autologin="$2"
 look="${3:-dark}"
-tools="${4:-}"
-commit_name="${5:-}"
-commit_email="${6:-}"
+host="${4:-arka}"
+tools="${5:-}"
+commit_name="${6:-}"
+commit_email="${7:-}"
 
 # Serialize account creation, including retries from the graphical and TUI paths.
 exec 9>/run/arkaos-oobe.lock
@@ -48,6 +50,12 @@ fi
 
 if [[ "$look" != "light" && "$look" != "dark" ]]; then
     echo "arkaos-oobe-apply: invalid look" >&2
+    exit 2
+fi
+
+# A computer name is letters, digits and hyphens, starting with a letter (RFC 1123 label).
+if [[ ! "$host" =~ ^[a-z]([a-z0-9-]{0,28}[a-z0-9])?$ ]]; then
+    echo "arkaos-oobe-apply: invalid computer name" >&2
     exit 2
 fi
 
@@ -136,6 +144,14 @@ for tool in ${tools//,/ }; do
                   echo "arkaos-oobe-apply: warning: could not set the Git identity" >&2 ;;
     esac
 done
+
+# A computer name other than the default goes into arkad's settings, so arkad sets it
+# now and puts it back if anything changes it.
+if [ "$host" != "arka" ]; then
+    sed -i "/^\[hostname\]/,/^\[/ s/^name = .*/name = \"$host\"/" /etc/arkad/arkad.toml
+    grep -q "^name = \"$host\"" /etc/arkad/arkad.toml ||
+        echo "arkaos-oobe-apply: warning: could not save the computer name" >&2
+fi
 
 mkdir -p /etc/sddm.conf.d
 # Login screen follows the chosen look (arkaos-light is built from the same

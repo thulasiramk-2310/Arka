@@ -10,7 +10,7 @@
 // second setup.
 //
 // ARKA_OOBE_PREVIEW=<page> opens it windowed at a page for design review
-// (hello, look, name, password, signin, privacy, wheel, working, bye) and never
+// (hello, look, name, password, computer, signin, privacy, wheel, working, bye) and never
 // creates an account or reboots. Setup opens in the dark look so the first
 // screens are not a full-brightness white panel in a dim room (reported on real
 // hardware); ARKA_OOBE_THEME=light previews the light look.
@@ -48,7 +48,7 @@ fn main() {
 // run useradd directly. The password is passed on stdin, never in argv.
 // `dev` is the optional version control from Advanced options: the tools
 // ("vara", "git" or "vara,git") plus the name and email for commits.
-fn create_account(user: &str, pass: &str, autologin: bool, dark: bool,
+fn create_account(user: &str, pass: &str, autologin: bool, dark: bool, host: &str,
                   dev: Option<(String, String, String)>) -> Result<(), String> {
     use std::io::Write;
     let mut args = vec![
@@ -57,6 +57,7 @@ fn create_account(user: &str, pass: &str, autologin: bool, dark: bool,
         user.to_string(),
         if autologin { "1" } else { "0" }.to_string(),
         if dark { "dark" } else { "light" }.to_string(),
+        host.to_string(),
     ];
     if let Some((tools, name, email)) = dev {
         args.extend([tools, name, email]);
@@ -89,6 +90,17 @@ fn valid_username(u: &str) -> bool {
     u.len() <= 31
         && u.chars()
             .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
+}
+
+/// A computer name: letters, numbers and hyphens, starting with a letter, up to 30 characters.
+/// The same rule arkaos-oobe-apply enforces.
+fn valid_hostname(h: &str) -> bool {
+    let b = h.as_bytes();
+    !b.is_empty()
+        && b.len() <= 30
+        && b[0].is_ascii_lowercase()
+        && b[b.len() - 1] != b'-'
+        && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
 }
 
 // ── live privacy state (read-only, from arkad over the system bus) ────────────
@@ -590,6 +602,73 @@ fn build_ui(app: &adw::Application) {
         Some("password"),
     );
 
+    // computer name: keep the shared default or choose one. The line under it shows how the
+    // terminal prompt will read.
+    let host_keep = gtk4::CheckButton::new();
+    host_keep.add_css_class("oobe-choice");
+    {
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        col.set_margin_start(10);
+        col.append(&label("Use \u{201c}arka\u{201d}", "oobe-choice-title"));
+        col.append(&label("Every ArkaOS computer has this name, so yours doesn't carry your name onto a network.", "oobe-choice-sub"));
+        host_keep.set_child(Some(&col));
+    }
+    let host_own = gtk4::CheckButton::new();
+    host_own.add_css_class("oobe-choice");
+    {
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        col.set_margin_start(10);
+        col.append(&label("Choose my own", "oobe-choice-title"));
+        col.append(&label("Other devices on a network you join can see this name.", "oobe-choice-sub"));
+        host_own.set_child(Some(&col));
+    }
+    host_own.set_group(Some(&host_keep));
+    host_keep.set_active(true);
+    let host_entry = gtk4::Entry::new();
+    host_entry.add_css_class("oobe-field");
+    host_entry.set_placeholder_text(Some("computer name"));
+    host_entry.set_sensitive(false);
+    let host_prompt = label("", "oobe-note");
+    host_prompt.set_halign(gtk4::Align::Start);
+    let host_name = {
+        let (own, entry) = (host_own.clone(), host_entry.clone());
+        Rc::new(move || if own.is_active() { entry.text().trim().to_string() } else { "arka".to_string() })
+    };
+    let host_refresh = {
+        let (host_prompt, host_name, name_entry, host_entry, host_own) =
+            (host_prompt.clone(), host_name.clone(), name_entry.clone(), host_entry.clone(), host_own.clone());
+        Rc::new(move || {
+            host_entry.set_sensitive(host_own.is_active());
+            let user = name_entry.text();
+            let user = if user.is_empty() { "username" } else { user.as_str() };
+            let host = host_name();
+            host_prompt.set_text(&format!("In a terminal this reads  {user}@{}", if host.is_empty() { "computer" } else { &host }));
+        })
+    };
+    for c in [&host_keep, &host_own] {
+        let r = host_refresh.clone();
+        c.connect_toggled(move |_| r());
+        c.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
+    }
+    {
+        let r = host_refresh.clone();
+        host_entry.connect_changed(move |_| r());
+        let r = host_refresh.clone();
+        name_entry.connect_changed(move |_| r());
+    }
+    host_refresh();
+    let host_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    host_body.append(&host_keep);
+    host_body.append(&host_own);
+    host_body.append(&host_entry);
+    host_body.append(&host_prompt);
+    host_body.append(&label("Lowercase letters, numbers and hyphens.", "oobe-note"));
+    pages.add_named(
+        &page(&label("Name this computer", "oobe-title"),
+              &label("It is the name this computer goes by on a network.", "oobe-sub"), &host_body),
+        Some("computer"),
+    );
+
     // sign-in choice
     let choice = |title: &str, sub: &str| -> gtk4::CheckButton {
         let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
@@ -772,7 +851,7 @@ fn build_ui(app: &adw::Application) {
     root.add_named(&frame, Some("setup"));
 
     // ── navigation ────────────────────────────────────────────────────────
-    const ORDER: &[&str] = &["look", "name", "password", "signin", "privacy", "wheel", "working"];
+    const ORDER: &[&str] = &["look", "name", "password", "computer", "signin", "privacy", "wheel", "working"];
     let cur = Rc::new(Cell::new(0usize));
 
     // Privacy rows: Checking… while arkad is asked (it may still be starting),
@@ -790,7 +869,7 @@ fn build_ui(app: &adw::Application) {
             let items: [(&str, &str); 6] = [
                 ("Encrypted DNS", "Requires system DNS lookups to be encrypted."),
                 ("Private network address", "Uses a random hardware address on network connections."),
-                ("Generic device name", "Uses the generic network name \"arka\" instead of yours."),
+                ("Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own."),
                 ("Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time."),
                 ("Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder."),
                 ("Firewall", "Rejects connections other computers try to open to this one."),
@@ -895,6 +974,7 @@ fn build_ui(app: &adw::Application) {
             (name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone());
         let (check_privacy, step_lbl, gen) = (check_privacy.clone(), step_lbl.clone(), gen.clone());
         let (shown_once, show_gen, tut_reset) = (shown_once.clone(), show_gen.clone(), tut_reset.clone());
+        let host_refresh = host_refresh.clone();
         Rc::new(move |i: usize| {
             let from = cur.get();
             cur.set(i);
@@ -918,7 +998,7 @@ fn build_ui(app: &adw::Application) {
 
             let animate = motion_on && shown_once.get() && i != from && motion::animations_enabled();
             shown_once.set(true);
-            ridge.go_to(i.min(5), animate);
+            ridge.go_to(i.min(6), animate);
             let my = show_gen.get().wrapping_add(1);
             show_gen.set(my);
 
@@ -927,7 +1007,7 @@ fn build_ui(app: &adw::Application) {
             let switch = {
                 let (pages, name_entry, pass_entry, light_tile, dark_tile, dark, next) =
                     (pages.clone(), name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone(), next.clone());
-                let check_privacy = check_privacy.clone();
+                let (check_privacy, host_refresh) = (check_privacy.clone(), host_refresh.clone());
                 move || {
                     let parts = if animate { pages.child_by_name(name).map(|p| motion::prepare(p.upcast_ref())) } else { None };
                     pages.set_visible_child_name(name);
@@ -936,6 +1016,7 @@ fn build_ui(app: &adw::Application) {
                         "look" => { if dark.get() { dark_tile.grab_focus() } else { light_tile.grab_focus() }; }
                         "name" => { name_entry.grab_focus(); }
                         "password" => { pass_entry.grab_focus(); }
+                        "computer" => { host_refresh(); }
                         "privacy" => {
                             check_privacy();
                             next.grab_focus();
@@ -983,8 +1064,8 @@ fn build_ui(app: &adw::Application) {
 
     let advance: Rc<dyn Fn()> = {
         let (cur, show, fail, finish) = (cur.clone(), show.clone(), fail.clone(), finish.clone());
-        let (name_entry, pass_entry, conf_entry, ask, dark) =
-            (name_entry.clone(), pass_entry.clone(), conf_entry.clone(), ask.clone(), dark.clone());
+        let (name_entry, pass_entry, conf_entry, ask, dark, host_name) =
+            (name_entry.clone(), pass_entry.clone(), conf_entry.clone(), ask.clone(), dark.clone(), host_name.clone());
         let (vara_cb, git_cb, commit_name, commit_email) =
             (vara_cb.clone(), git_cb.clone(), commit_name.clone(), commit_email.clone());
         let next_btn = next.clone();
@@ -1003,22 +1084,28 @@ fn build_ui(app: &adw::Application) {
                 else if p != c { fail("The passwords don't match.") }
                 else { show(3) }
             }
+            "computer" => {
+                if valid_hostname(&host_name()) { show(4) } else {
+                    fail("Start with a lowercase letter, then use letters, numbers or hyphens, up to 30 characters.");
+                }
+            }
             "signin" => {
                 if !(vara_cb.is_active() || git_cb.is_active()) {
-                    show(4)
+                    show(5)
                 } else if !arka_shell_common::commit_identity::valid_name(&commit_name.text()) {
                     fail("Enter the name to put on your commits.")
                 } else if !arka_shell_common::commit_identity::valid_email(commit_email.text().trim()) {
                     fail("Enter an email for your commits, like you@example.com.")
                 } else {
-                    show(4)
+                    show(5)
                 }
             }
-            "privacy" => show(5),
+            "privacy" => show(6),
             "wheel" => {
                 if busy.replace(true) { return; }
                 next_btn.set_sensitive(false);
-                show(6);
+                show(7);
+                let host = host_name();
                 let user = name_entry.text().to_string();
                 let (u, p, autologin, d) = (user.clone(), pass_entry.text().to_string(), !ask.is_active(), dark.get());
                 let tools: Vec<&str> = [("vara", vara_cb.is_active()), ("git", git_cb.is_active())]
@@ -1033,7 +1120,7 @@ fn build_ui(app: &adw::Application) {
                     let res = if preview {
                         Ok(())
                     } else {
-                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, dev))
+                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, &host, dev))
                             .await
                             .unwrap_or_else(|_| Err("account helper crashed".into()))
                     };
@@ -1041,7 +1128,7 @@ fn build_ui(app: &adw::Application) {
                         Ok(()) => finish(user),
                         Err(e) => {
                             busy.set(false);
-                            show(5);
+                            show(6);
                             fail(&format!("Couldn't create the account: {e}"));
                         }
                     }
@@ -1187,6 +1274,19 @@ mod freshness_tests {
         assert!(super::fresh_privacy_check(100, 189));
         for (last, now) in [(0, 100), (101, 100), (100, 190), (100, 1000)] {
             assert!(!super::fresh_privacy_check(last, now));
+        }
+    }
+}
+
+#[cfg(test)]
+mod hostname_tests {
+    #[test]
+    fn computer_names_follow_the_helper_rule() {
+        for ok in ["arka", "ram-pc", "a", "laptop2"] {
+            assert!(super::valid_hostname(ok), "{ok}");
+        }
+        for bad in ["", "1abc", "a-", "Abc", "my pc", "a_b", &"b".repeat(31)] {
+            assert!(!super::valid_hostname(bad), "{bad}");
         }
     }
 }
