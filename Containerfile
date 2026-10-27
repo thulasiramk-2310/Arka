@@ -300,7 +300,7 @@ RUN printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=/usr/share/arka/
 
 # Keep expensive optional effects off by default on modest graphics hardware.
 # Users can enable them through Plasma Desktop Effects.
-RUN printf '[Plugins]\nwobblywindowsEnabled=false\nmagiclampEnabled=false\nkwin4_effect_scaleEnabled=true\n' \
+RUN printf '[Plugins]\nwobblywindowsEnabled=false\nmagiclampEnabled=false\nkwin4_effect_scaleEnabled=true\n\n[Desktops]\nNumber=3\nRows=1\n' \
       > /etc/skel/.config/kwinrc
 
 # Filename/content indexing is opt-in; desktop search still launches apps.
