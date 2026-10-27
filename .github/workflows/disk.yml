@@ -1,0 +1,111 @@
+name: Stick image
+
+# Builds a raw disk image of the published ArkaOS image, for a fresh install on a
+# USB stick, and keeps it for a few days as a downloadable artifact. Run it by
+# hand (Actions > Stick image > Run workflow). The image must already be
+# published and signed by the Image workflow; this one only turns it into a disk.
+# Doing this here means the 10 GB download and the 20 GB disk file never touch a
+# small laptop drive.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to install (latest, or a sha-xxxxxxx tag)"
+        default: latest
+      size:
+        description: "Disk image size (the stick must be at least this big)"
+        default: 20G
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  IMAGE: ghcr.io/thulasiramk-2310/arka
+
+jobs:
+  disk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Make room
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/containers /var/lib/containers
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Check the image is signed by the ArkaOS key
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "$TOKEN"
+          cosign verify --key cosign.pub "$IMAGE:${{ inputs.tag }}" > /dev/null
+          echo "Signature OK for $IMAGE:${{ inputs.tag }}"
+
+      - name: Pull the image
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman pull "$IMAGE:${{ inputs.tag }}"
+
+      - name: Install into a disk image
+        run: |
+          # No serial console: a forced console=ttyS0 crash-looped agetty on the Nokia.
+          # The installed system takes its updates from the signed public image.
+          sudo truncate -s "${{ inputs.size }}" /mnt/arka-stick.raw
+          sudo podman run --rm --privileged --pid=host --security-opt label=disable \
+            -v /var/lib/containers:/var/lib/containers -v /dev:/dev -v /mnt:/output \
+            "$IMAGE:${{ inputs.tag }}" \
+            bootc install to-disk --via-loopback --generic-image \
+              --target-imgref "$IMAGE:latest" --filesystem xfs /output/arka-stick.raw
+          sudo du -sh --apparent-size /mnt/arka-stick.raw
+          sudo du -sh /mnt/arka-stick.raw
+
+      - name: Compress
+        run: |
+          sudo apt-get install -y zstd >/dev/null
+          sudo zstd -T0 -10 -q /mnt/arka-stick.raw -o /mnt/arka-stick.raw.zst
+          sudo rm /mnt/arka-stick.raw
+          cd /mnt && sudo sha256sum arka-stick.raw.zst | sudo tee arka-stick.raw.zst.sha256
+          ls -lh /mnt/arka-stick.raw.zst
+
+      - name: Keep it
+        uses: actions/upload-artifact@v4
+        with:
+          name: arka-stick-${{ inputs.tag }}
+          path: |
+            /mnt/arka-stick.raw.zst
+            /mnt/arka-stick.raw.zst.sha256
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: How to put it on a stick
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MD'
+          ### Put it on a USB stick
+
+          This erases the stick. Check the device name first (`lsblk`), never use your system disk.
+
+          ```sh
+          gh run download <this run's id> -R ${{ github.repository }} -n arka-stick-${{ inputs.tag }} -D ~/arka-stick
+          cd ~/arka-stick && sha256sum -c arka-stick.raw.zst.sha256
+          zstd -dc arka-stick.raw.zst | sudo dd of=/dev/disk/by-id/<your-stick> bs=4M conv=fsync status=progress
+          sudo sgdisk -e /dev/disk/by-id/<your-stick>
+          sudo sgdisk --move-main-table=2 /dev/disk/by-id/<your-stick>
+          sudo sgdisk -v /dev/disk/by-id/<your-stick>   # must say "No problems found"
+          rm -r ~/arka-stick
+          ```
+
+          The image keeps its main partition table at sector 2016, and some firmware (the Nokia's) rejects the
+          stick when that table's checksum is bad. Moving it to sector 2 fixes that.
+          MD
