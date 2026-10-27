@@ -54,6 +54,13 @@ PlasmoidItem {
         favoritesModel: root.rootModel.favoritesModel
     }
 
+    // Apps opened recently, from Plasma's own usage history, which stays on this
+    // computer. It is only shown when the user turns it on.
+    readonly property Kicker.RecentUsageModel recentModel: Kicker.RecentUsageModel {
+        shownItems: Kicker.RecentUsageModel.OnlyApps
+        ordering: Kicker.RecentUsageModel.Recent
+    }
+
     Kicker.ProcessRunner {
         id: processRunner
     }

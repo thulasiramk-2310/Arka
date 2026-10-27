@@ -10,5 +10,9 @@
       <label>Whether the default pinned apps (/etc/xdg/kicker-extra-favoritesrc) were added</label>
       <default>false</default>
     </entry>
+    <entry name="showRecent" type="Bool">
+      <label>Whether the recently opened apps are shown under the pinned apps</label>
+      <default>false</default>
+    </entry>
   </group>
 </kcfg>

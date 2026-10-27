@@ -75,11 +75,13 @@ Item {
         root.expanded = false;
     }
 
-    function openPinMenu(item, x, y, favoriteId) {
+    function openPinMenu(item, x, y, favoriteId, index, fromPinned) {
         if (!favoriteId) {
             return;
         }
         pinMenu.favoriteId = favoriteId;
+        pinMenu.index = index;
+        pinMenu.fromPinned = fromPinned === true;
         pinMenu.pinned = root.rootModel.favoritesModel.isFavorite(favoriteId);
         pinMenu.visualParent = item;
         pinMenu.open(x, y);
@@ -98,6 +100,9 @@ Item {
         property string favoriteId: ""
         // isFavorite() is not a binding source, so it is read on each open.
         property bool pinned: false
+        // Where the pin sits in the pinned list, when the menu came from there.
+        property int index: -1
+        property bool fromPinned: false
 
         PlasmaExtras.MenuItem {
             text: pinMenu.pinned ? i18nc("@action:inmenu", "Unpin") : i18nc("@action:inmenu", "Pin")
@@ -110,6 +115,20 @@ Item {
                     favorites.addFavorite(pinMenu.favoriteId, -1);
                 }
             }
+        }
+        PlasmaExtras.MenuItem {
+            text: i18nc("@action:inmenu", "Move earlier")
+            icon: "go-previous"
+            visible: pinMenu.pinned && pinMenu.fromPinned
+            enabled: pinMenu.index > 0
+            onClicked: root.rootModel.favoritesModel.moveRow(pinMenu.index, pinMenu.index - 1)
+        }
+        PlasmaExtras.MenuItem {
+            text: i18nc("@action:inmenu", "Move later")
+            icon: "go-next"
+            visible: pinMenu.pinned && pinMenu.fromPinned
+            enabled: pinMenu.index >= 0 && pinMenu.index < pinnedView.count - 1
+            onClicked: root.rootModel.favoritesModel.moveRow(pinMenu.index, pinMenu.index + 1)
         }
     }
 
@@ -327,8 +346,13 @@ Item {
                     Layout.fillHeight: true
                     currentIndex: full.searching ? 2 : (full.category === 0 ? 0 : 1)
 
+                    ColumnLayout {
+                        spacing: 0
+
                     GridView {
                         id: pinnedView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
                         readonly property int columns: 4
                         clip: true
@@ -370,6 +394,78 @@ Item {
                             visible: pinnedView.count === 0
                             text: i18nc("@info", "No pinned apps")
                             explanation: i18nc("@info", "Right-click an app and choose Pin.")
+                        }
+                    }
+
+                        // Recent apps: off until the user turns them on, and only kept on this computer.
+                        ColumnLayout {
+                            id: recentStrip
+
+                            readonly property bool shown: Plasmoid.configuration.showRecent
+
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                                Layout.rightMargin: Kirigami.Units.largeSpacing
+
+                                PC3.Label {
+                                    visible: recentStrip.shown
+                                    text: i18nc("@title recently opened apps", "Recent")
+                                    font.weight: Font.DemiBold
+                                    opacity: 0.75
+                                    Accessible.role: Accessible.Heading
+                                }
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                                PC3.ToolButton {
+                                    visible: recentStrip.shown && recentView.count > 0
+                                    text: i18nc("@action:button forget the recent apps", "Clear")
+                                    PC3.ToolTip.text: i18nc("@info:tooltip", "Forget which apps you opened recently")
+                                    PC3.ToolTip.visible: hovered
+                                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                    onClicked: root.recentModel.trigger(0, "_kicker_forgetAll", null)
+                                }
+                                PC3.ToolButton {
+                                    text: recentStrip.shown ? i18nc("@action:button", "Hide") : i18nc("@action:button", "Show recent apps")
+                                    PC3.ToolTip.text: i18nc("@info:tooltip", "Recent apps are kept only on this computer")
+                                    PC3.ToolTip.visible: hovered
+                                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                    onClicked: Plasmoid.configuration.showRecent = !recentStrip.shown
+                                }
+                            }
+
+                            GridView {
+                                id: recentView
+
+                                visible: recentStrip.shown && count > 0
+                                interactive: false
+                                clip: true
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? cellHeight : 0
+                                leftMargin: Kirigami.Units.largeSpacing
+                                rightMargin: Kirigami.Units.largeSpacing
+                                cellWidth: Math.floor((width - leftMargin - rightMargin) / 4)
+                                cellHeight: Math.round(full.unit * 5.8)
+                                activeFocusOnTab: true
+                                keyNavigationWraps: false
+                                model: root.recentModel
+                                Accessible.name: i18nc("@label", "Recent apps")
+                                Accessible.role: Accessible.List
+
+                                // One row of four is shown.
+                                onCurrentIndexChanged: if (currentIndex > 3) currentIndex = 3
+
+                                Keys.onReturnPressed: full.launch(model, currentIndex)
+                                Keys.onEnterPressed: full.launch(model, currentIndex)
+
+                                delegate: AppTile {
+                                    view: recentView
+                                }
+                            }
                         }
                     }
 
@@ -609,7 +705,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
-            onClicked: mouse => full.openPinMenu(tile, mouse.x, mouse.y, tile.model.favoriteId)
+            onClicked: mouse => full.openPinMenu(tile, mouse.x, mouse.y, tile.model.favoriteId, tile.index, tile.view === pinnedView)
         }
 
         background: CutRect {
@@ -673,7 +769,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
-            onClicked: mouse => full.openPinMenu(row, mouse.x, mouse.y, row.model.favoriteId)
+            onClicked: mouse => full.openPinMenu(row, mouse.x, mouse.y, row.model.favoriteId, -1, false)
         }
 
         background: CutRect {
