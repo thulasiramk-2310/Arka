@@ -5,32 +5,42 @@ use adw::prelude::*;
 
 const APP_ID: &str = "org.arka.hotkeys";
 
-/// KDE Plasma 6 default shortcuts only — ArkaOS adds none of its own yet, so
-/// this sheet must never list a key that doesn't work. (Meta = the Windows /
-/// Super key.) Change these in System Settings > Keyboard > Shortcuts.
+/// Every key here was checked against KDE's own shortcut settings (kglobalshortcutsrc) or is
+/// registered by an ArkaOS component, so this sheet never lists a key that doesn't work. Keys
+/// that could not be checked (Alt + Space for KRunner, Print for Spectacle, Ctrl + Alt + T,
+/// Meta + E) are left out on purpose. Meta is the Windows / Super key. Change the KDE ones in
+/// System Settings > Keyboard > Shortcuts.
 const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
+    ("ArkaOS", &[
+        ("Meta + Alt + C", "Format wheel: convert the selected file"),
+        ("Meta + Alt + E", "Edit wheel: crop, rotate and more on the selected file"),
+        ("Meta + /",       "Show this page"),
+    ]),
     ("Find things", &[
         ("Meta",           "Open the app launcher"),
-        ("Alt + Space",    "Search apps, files and settings (KRunner)"),
+        ("Alt + F1",       "Open the app launcher"),
     ]),
     ("Windows", &[
         ("Alt + Tab",      "Switch between windows"),
-        ("Meta + W",       "Overview of all windows and desktops"),
+        ("Alt + `",        "Switch between windows of the same app"),
+        ("Meta + W",       "Overview of all windows and spaces"),
         ("Meta + D",       "Peek at the desktop"),
-        ("Meta + Left / Right", "Snap a window to the left or right half"),
+        ("Meta + PgUp / PgDn", "Maximise / minimise the window"),
         ("Alt + F4",       "Close the window"),
     ]),
-    ("Apps", &[
-        ("Ctrl + Alt + T", "Open a terminal"),
-        ("Meta + E",       "Open the file manager"),
-        ("Meta + V",       "Clipboard history"),
+    ("Split screen", &[
+        ("Meta + ← / →", "Tile the window on the left or right half"),
+        ("Meta + ↑ / ↓",    "Tile the window on the top or bottom half"),
+        ("Meta + T",       "Edit the tile layout"),
     ]),
-    ("Screenshots", &[
-        ("Print",          "Screenshot tool"),
-        ("Meta + Shift + S", "Screenshot a selected area"),
+    ("Spaces", &[
+        ("Ctrl + F1 – F3", "Go to space 1, 2 or 3"),
+        ("Meta + Ctrl + ← / →", "Go to the previous or next space"),
+        ("Meta + Ctrl + Shift + ← / →", "Move the window to the previous or next space"),
+        ("Meta + G",       "Show all spaces as a grid"),
     ]),
-    ("Desktops", &[
-        ("Ctrl + F1 – F4", "Switch to virtual desktop 1 – 4"),
+    ("Clipboard", &[
+        ("Meta + V",       "Clipboard history, at the pointer"),
     ]),
     ("Session", &[
         ("Meta + L",       "Lock the screen"),
@@ -40,7 +50,7 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
 
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(build_ui);
+    arka_shell_common::app::activate_once(&app, build_ui);
     std::process::exit(app.run().value());
 }
 
@@ -75,7 +85,7 @@ fn build_ui(app: &adw::Application) {
     let title = gtk4::Label::new(Some("Keyboard shortcuts"));
     title.add_css_class("arka-title");
     title.set_xalign(0.0);
-    let sub = gtk4::Label::new(Some("The standard KDE Plasma shortcuts. Meta is the Windows key. Change them in System Settings > Keyboard > Shortcuts."));
+    let sub = gtk4::Label::new(Some("Meta is the Windows key. The ArkaOS shortcuts and KDE\u{2019}s window and space shortcuts are listed here; change them in System Settings > Keyboard > Shortcuts."));
     sub.add_css_class("arka-sub");
     sub.set_xalign(0.0);
     sub.set_wrap(true);
