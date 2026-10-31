@@ -3,7 +3,7 @@
       xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
   <kcfgfile name=""/>
   <group name="General">
-    <entry name="showTagline" type="Bool"><default>true</default></entry>
-    <entry name="tagline" type="String"><default>Your computer is yours.</default></entry>
+    <entry name="showTagline" type="Bool"><default>false</default></entry>
+    <entry name="tagline" type="String"><default></default></entry>
   </group>
 </kcfg>
