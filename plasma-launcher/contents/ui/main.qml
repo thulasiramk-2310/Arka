@@ -65,7 +65,7 @@ PlasmoidItem {
         id: processRunner
     }
 
-    Plasmoid.icon: "start-here-kde"
+    Plasmoid.icon: "arka-start"
     toolTipMainText: Plasmoid.title
     toolTipSubText: ""
 
