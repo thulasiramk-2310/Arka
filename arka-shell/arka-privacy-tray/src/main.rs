@@ -61,6 +61,9 @@ impl ArkaTray {
 }
 
 impl Tray for ArkaTray {
+    // A click on the shield opens the status menu; without this only a right-click did.
+    const MENU_ON_ACTIVATE: bool = true;
+
     fn id(&self) -> String {
         "org.arka.privacy-tray".into()
     }
