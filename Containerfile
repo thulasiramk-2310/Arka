@@ -470,6 +470,10 @@ COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
 COPY arka-layout.js /usr/share/arka/arka-layout.js
 COPY plasma-launcher /usr/share/plasma/plasmoids/org.arkaos.launcher
+COPY plasma-brand /usr/share/plasma/plasmoids/org.arkaos.brand
+COPY plasma-search /usr/share/plasma/plasmoids/org.arkaos.search
+COPY plasma-statuspill /usr/share/plasma/plasmoids/org.arkaos.statuspill
+COPY plasma-spaces /usr/share/plasma/plasmoids/org.arkaos.spaces
 # Apps pinned in the launcher for a new account. Fedora's kde-settings pins
 # Kontact and KWrite through its own kicker-extra-favoritesrc; /etc/xdg comes
 # first in XDG_CONFIG_DIRS, so this list is the one Plasma reads.
