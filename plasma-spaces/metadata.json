@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ArkaOS"
+            }
+        ],
+        "Category": "Windows and Tasks",
+        "Description": "Virtual desktops as a hairline ridge: one peak per desktop, a ring and dot on the current one",
+        "Icon": "view-grid",
+        "Id": "org.arkaos.spaces",
+        "License": "GPL-3.0-or-later",
+        "Name": "ArkaOS Spaces",
+        "Website": "https://github.com/thulasiramk-2310/arka"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
