@@ -6,3 +6,4 @@ Exec=arka-wifi
 Icon=arka-wifi
 Keywords=wifi;wireless;network;internet;connection;hotspot;
 Categories=System;Network;
+NoDisplay=true

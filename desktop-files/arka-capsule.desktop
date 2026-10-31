@@ -4,5 +4,6 @@ Name=Install Apps
 Comment=Install additional applications via Flatpak
 Exec=arka-capsule
 Icon=arka-capsule
-Keywords=install;apps;software;flatpak;store;package;
+Keywords=capsule;install;apps;software;flatpak;store;package;
 Categories=System;PackageManager;
+NoDisplay=true

@@ -6,3 +6,4 @@ Exec=arka-update
 Icon=arka-update
 Keywords=update;upgrade;system;os;patch;bootc;
 Categories=System;
+NoDisplay=true

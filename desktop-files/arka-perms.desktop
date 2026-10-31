@@ -6,3 +6,4 @@ Exec=arka-perms
 Icon=arka-perms
 Keywords=permissions;apps;access;camera;microphone;location;privacy;
 Categories=System;Security;
+NoDisplay=true

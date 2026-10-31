@@ -6,3 +6,4 @@ Exec=arka-sound
 Icon=arka-sound
 Keywords=sound;volume;audio;speaker;microphone;mic;music;media;
 Categories=AudioVideo;Audio;
+NoDisplay=true

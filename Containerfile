@@ -478,7 +478,7 @@ COPY plasma-spaces /usr/share/plasma/plasmoids/org.arkaos.spaces
 # Kontact and KWrite through its own kicker-extra-favoritesrc; /etc/xdg comes
 # first in XDG_CONFIG_DIRS, so this list is the one Plasma reads.
 RUN printf '[General]\nPrepend=%s\nIgnoreDefaults=true\n' \
-      'org.mozilla.firefox.desktop;org.kde.dolphin.desktop;org.kde.konsole.desktop;org.kde.discover.desktop;arka-settings.desktop;arka-dashboard.desktop;libreoffice-writer.desktop;libreoffice-calc.desktop;org.kde.kcalc.desktop;org.kde.okular.desktop;org.kde.gwenview.desktop;org.kde.plasma-systemmonitor.desktop' \
+      'org.mozilla.firefox.desktop;org.kde.dolphin.desktop;org.kde.konsole.desktop;org.kde.discover.desktop;org.arka.settings.desktop;org.arka.dashboard.desktop;libreoffice-writer.desktop;libreoffice-calc.desktop;org.kde.kcalc.desktop;org.kde.okular.desktop;org.kde.gwenview.desktop;org.kde.plasma-systemmonitor.desktop' \
       > /etc/xdg/kicker-extra-favoritesrc
 
 # A top bar on every screen, including one connected later (panels/).

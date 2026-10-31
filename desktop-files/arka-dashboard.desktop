@@ -6,3 +6,4 @@ Exec=arka-dashboard
 Icon=arka-dashboard
 Keywords=privacy;security;dns;tracking;protection;shield;
 Categories=System;Security;
+NoDisplay=true

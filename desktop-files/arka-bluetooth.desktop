@@ -6,3 +6,4 @@ Exec=arka-bluetooth
 Icon=arka-bluetooth
 Keywords=bluetooth;wireless;headphones;speaker;keyboard;mouse;pair;
 Categories=System;Hardware;
+NoDisplay=true

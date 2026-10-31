@@ -6,3 +6,4 @@ Exec=arka-settings-gtk
 Icon=arka-settings
 Keywords=settings;preferences;appearance;wallpaper;display;theme;
 Categories=System;Settings;
+NoDisplay=true

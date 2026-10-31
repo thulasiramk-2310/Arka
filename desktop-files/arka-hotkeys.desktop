@@ -6,3 +6,4 @@ Exec=arka-hotkeys
 Icon=arka-hotkeys
 Keywords=keyboard;shortcuts;hotkeys;keybindings;help;cheat;
 Categories=System;
+NoDisplay=true
