@@ -16,8 +16,17 @@ struct BtDevice {
     paired: bool,
 }
 
+// bluetoothctl waits for bluetoothd without end. On a machine with no Bluetooth service or
+// adapter that would keep the window from ever opening, so every call that is waited for is
+// cut off after two seconds and reads as "nothing found".
+fn btctl() -> Command {
+    let mut c = Command::new("timeout");
+    c.args(["2", "bluetoothctl"]);
+    c
+}
+
 fn bt_powered() -> bool {
-    let out = Command::new("bluetoothctl")
+    let out = btctl()
         .args(["show"])
         .output()
         .ok()
@@ -27,20 +36,20 @@ fn bt_powered() -> bool {
 }
 
 fn bt_set_power(on: bool) {
-    let _ = Command::new("bluetoothctl")
+    let _ = btctl()
         .args(["power", if on { "on" } else { "off" }])
         .output();
 }
 
 fn bt_list_devices() -> Vec<BtDevice> {
-    let paired_out = Command::new("bluetoothctl")
+    let paired_out = btctl()
         .args(["devices", "Paired"])
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_default();
 
-    let conn_out = Command::new("bluetoothctl")
+    let conn_out = btctl()
         .args(["devices", "Connected"])
         .output()
         .ok()
@@ -73,7 +82,7 @@ fn bt_stop_scan() {
 }
 
 fn bt_scan_results() -> Vec<BtDevice> {
-    let out = Command::new("bluetoothctl")
+    let out = btctl()
         .args(["devices"])
         .output()
         .ok()
@@ -147,7 +156,8 @@ fn build_ui(app: &adw::Application) {
     // Power toggle in header
     let power_switch = gtk4::Switch::new();
     power_switch.set_valign(gtk4::Align::Center);
-    power_switch.set_active(bt_powered());
+    let powered = bt_powered();
+    power_switch.set_active(powered);
     hb.pack_end(&power_switch);
 
     // Scan button
@@ -198,7 +208,7 @@ fn build_ui(app: &adw::Application) {
         bt_set_power(sw.is_active());
         content_ref.set_sensitive(sw.is_active());
     });
-    content.set_sensitive(bt_powered());
+    content.set_sensitive(powered);
 
     // Scan button — non-blocking: start scan, show spinner for 5s, read results
     let paired_ref = paired_group.clone();
