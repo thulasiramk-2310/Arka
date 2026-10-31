@@ -106,7 +106,11 @@ Window {
         hover = -1; placed = false
         visible = true
         requestActivate()
-        if (clickMode) placeTimer.restart()   // the pointer may not move: fall back to the middle
+        // The pointer may not move: fall back to the middle. With a file the ring is wanted at once;
+        // without one it waits a little for a drag to start, then appears anyway and says what to do,
+        // instead of leaving an invisible full-screen window.
+        placeTimer.interval = clickMode ? 150 : 700
+        placeTimer.restart()
     }
     function place(x, y) {
         if (placed) return
@@ -390,6 +394,28 @@ Window {
         }
     }
 
+    // The ring is empty: say so in the middle of it, where the eye already is.
+    Column {
+        visible: win.placed && win.formats.length === 0
+        opacity: ring.opacity
+        x: win.cx - width / 2; y: win.cy - height / 2
+        width: 2 * win.innerR - 22
+        spacing: 5
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: win.files.length ? (win.edit ? "No edits" : "No formats") : "Drop a file"
+            color: win.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 1.4
+        }
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideMiddle
+            text: win.files.length ? win.fileLabel() : (win.edit ? "to edit it" : "to convert it")
+            color: win.muted; font.pixelSize: 12
+        }
+    }
+
     // Shown only when there is nothing to pick.
     Rectangle {
         visible: win.placed && win.formats.length === 0
@@ -402,8 +428,9 @@ Window {
             id: hint
             anchors.centerIn: parent
             color: win.ink; font.pixelSize: 13
-            text: win.files.length ? (win.edit ? "This file has no edits yet" : "This file can't be converted yet")
-                                   : "Drag a file onto the wheel"
+            text: win.files.length ? (win.edit ? "Edits work on pictures, PDFs, sound and video"
+                                                : "This file can't be converted yet")
+                                   : "Drag a file onto the wheel, or press Esc"
         }
     }
 }
