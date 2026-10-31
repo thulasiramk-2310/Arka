@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "ArkaOS" }],
+        "Category": "System Information",
+        "Description": "edit-find",
+        "Icon": "",
+        "Id": "org.arkaos.search",
+        "License": "GPL-3.0-or-later",
+        "Name": "A search button that opens KRunner",
+        "Website": "https://github.com/thulasiramk-2310/arka"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

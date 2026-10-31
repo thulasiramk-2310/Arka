@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "ArkaOS" }],
+        "Category": "System Information",
+        "Description": "security-high",
+        "Icon": "",
+        "Id": "org.arkaos.statuspill",
+        "License": "GPL-3.0-or-later",
+        "Name": "How many privacy settings arkad last confirmed, and whether that check is fresh",
+        "Website": "https://github.com/thulasiramk-2310/arka"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

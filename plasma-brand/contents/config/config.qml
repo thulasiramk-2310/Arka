@@ -1,0 +1,6 @@
+import QtQuick
+import org.kde.plasma.configuration
+
+ConfigModel {
+    ConfigCategory { name: i18n("Wordmark"); icon: "preferences-desktop-theme"; source: "configGeneral.qml" }
+}
