@@ -10,7 +10,7 @@
 // second setup.
 //
 // ARKA_OOBE_PREVIEW=<page> opens it windowed at a page for design review
-// (hello, look, name, password, computer, signin, privacy, wheel, working, bye) and never
+// (hello, look, name, password, computer, zone, signin, privacy, wheel, working, bye) and never
 // creates an account or reboots. Setup opens in the dark look so the first
 // screens are not a full-brightness white panel in a dim room (reported on real
 // hardware); ARKA_OOBE_THEME=light previews the light look.
@@ -47,9 +47,10 @@ fn main() {
 // UNPRIVILEGED inside the arkasetup login session, so it must not touch /etc or
 // run useradd directly. The password is passed on stdin, never in argv.
 // `dev` is the optional version control from Advanced options: the tools
-// ("vara", "git" or "vara,git") plus the name and email for commits.
+// ("vara", "git" or "vara,git") plus the name and email for commits. `zone` is the time
+// zone the user picked, a tz database name such as Europe/Berlin.
 fn create_account(user: &str, pass: &str, autologin: bool, dark: bool, host: &str,
-                  dev: Option<(String, String, String)>) -> Result<(), String> {
+                  dev: Option<(String, String, String)>, zone: &str) -> Result<(), String> {
     use std::io::Write;
     let mut args = vec![
         "-n".to_string(),
@@ -59,9 +60,13 @@ fn create_account(user: &str, pass: &str, autologin: bool, dark: bool, host: &st
         if dark { "dark" } else { "light" }.to_string(),
         host.to_string(),
     ];
-    if let Some((tools, name, email)) = dev {
-        args.extend([tools, name, email]);
+    // The helper reads the version control as three arguments, then the time zone, so with
+    // no version control they are passed empty.
+    match dev {
+        Some((tools, name, email)) => args.extend([tools, name, email]),
+        None => args.extend([String::new(), String::new(), String::new()]),
     }
+    args.push(zone.to_string());
     let mut child = std::process::Command::new("sudo")
         .args(&args)
         .stdin(std::process::Stdio::piped())
@@ -101,6 +106,50 @@ fn valid_hostname(h: &str) -> bool {
         && b[0].is_ascii_lowercase()
         && b[b.len() - 1] != b'-'
         && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+}
+
+/// A time zone name as the tz database spells it: one to three parts of letters, digits, `_`,
+/// `+` and `-`, joined by `/` (Europe/Berlin, America/Argentina/Buenos_Aires, Etc/GMT+5).
+/// The same rule arkaos-oobe-apply enforces, which also checks the zone file exists.
+fn valid_zone(z: &str) -> bool {
+    let parts: Vec<&str> = z.split('/').collect();
+    (1..=3).contains(&parts.len())
+        && parts.iter().all(|p| {
+            !p.is_empty() && p.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'+' || c == b'-')
+        })
+}
+
+/// The zone names in the tz database's own table (the third column of zone1970.tab), plus UTC,
+/// sorted. Falls back to UTC alone if the table cannot be read.
+fn parse_zone_table(table: &str) -> Vec<String> {
+    let mut zones: Vec<String> = table
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| l.split('\t').nth(2))
+        .map(|z| z.trim().to_string())
+        .filter(|z| valid_zone(z))
+        .collect();
+    zones.push("UTC".to_string());
+    zones.sort();
+    zones.dedup();
+    zones
+}
+
+fn load_zones() -> Vec<String> {
+    let table = std::fs::read_to_string("/usr/share/zoneinfo/zone1970.tab").unwrap_or_default();
+    parse_zone_table(&table)
+}
+
+/// What the clock reads in a zone right now, for the line under the list. Asks `date`, so
+/// the answer comes from the same tz database the system will use. Nothing leaves the machine.
+fn local_time_in(zone: &str) -> Option<String> {
+    if !valid_zone(zone) { return None; }
+    let out = std::process::Command::new("date")
+        .env("TZ", zone)
+        .arg("+%a %-d %b, %H:%M")
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 // ── live privacy state (read-only, from arkad over the system bus) ────────────
@@ -201,6 +250,16 @@ entry.oobe-field:focus-within, passwordentry.oobe-field:focus-within {{
 entry.oobe-field text, passwordentry.oobe-field text {{ background: none; color: {fg}; caret-color: {fg}; }}
 entry.oobe-field text placeholder, passwordentry.oobe-field text placeholder {{ color: {faint}; }}
 passwordentry.oobe-field image {{ color: {faint}; }}
+dropdown.oobe-field > button {{
+  background: none; background-color: transparent; color: {fg};
+  border: none; border-bottom: 1.5px solid {line}; border-radius: 0;
+  box-shadow: none; outline: none; min-height: 54px; padding: 0 2px;
+}}
+dropdown.oobe-field > button:hover, dropdown.oobe-field > button:focus-visible, dropdown.oobe-field > button:checked {{
+  background: none; background-color: transparent; border-bottom: 1.5px solid {fg}; box-shadow: none; outline: none;
+}}
+dropdown.oobe-field > button label {{ font-size: 24px; font-weight: 400; color: {fg}; }}
+dropdown.oobe-field > button image {{ color: {faint}; }}
 
 button.oobe-primary {{
   background: none; background-color: {fg}; color: {pfg};
@@ -669,6 +728,47 @@ fn build_ui(app: &adw::Application) {
         Some("computer"),
     );
 
+    // time zone: the user's own choice from the tz database's list. Nothing is looked up, so no
+    // third party learns where this computer is. UTC is the neutral start, and the line under the
+    // list shows what the clock would read, so a wrong pick is easy to see.
+    let zones = Rc::new(load_zones());
+    let zone_labels: Vec<&str> = zones.iter().map(|z| z.as_str()).collect();
+    let zone_drop = gtk4::DropDown::from_strings(&zone_labels);
+    zone_drop.set_enable_search(true);
+    zone_drop.set_expression(Some(gtk4::PropertyExpression::new(
+        gtk4::StringObject::static_type(), None::<gtk4::Expression>, "string")));
+    zone_drop.add_css_class("oobe-field");
+    if let Some(i) = zones.iter().position(|z| z == "UTC") { zone_drop.set_selected(i as u32); }
+    let zone_name: Rc<dyn Fn() -> String> = {
+        let (drop, zones) = (zone_drop.clone(), zones.clone());
+        Rc::new(move || zones.get(drop.selected() as usize).cloned().unwrap_or_else(|| "UTC".to_string()))
+    };
+    let zone_clock = label("", "oobe-note");
+    zone_clock.set_halign(gtk4::Align::Start);
+    let zone_refresh = {
+        let (zone_clock, zone_name) = (zone_clock.clone(), zone_name.clone());
+        Rc::new(move || {
+            zone_clock.set_text(&match local_time_in(&zone_name()) {
+                Some(t) => format!("The clock there reads  {t}"),
+                None => String::new(),
+            });
+        })
+    };
+    {
+        let r = zone_refresh.clone();
+        zone_drop.connect_selected_notify(move |_| r());
+    }
+    zone_refresh();
+    let zone_body = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    zone_body.append(&zone_drop);
+    zone_body.append(&zone_clock);
+    zone_body.append(&label("Type to search, for example Berlin or Kolkata. You can change it later in Settings.", "oobe-note"));
+    pages.add_named(
+        &page(&label("Choose your time zone", "oobe-title"),
+              &label("Your clock and the times on your files follow it. Nothing is looked up: you choose.", "oobe-sub"), &zone_body),
+        Some("zone"),
+    );
+
     // sign-in choice
     let choice = |title: &str, sub: &str| -> gtk4::CheckButton {
         let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
@@ -851,7 +951,7 @@ fn build_ui(app: &adw::Application) {
     root.add_named(&frame, Some("setup"));
 
     // ── navigation ────────────────────────────────────────────────────────
-    const ORDER: &[&str] = &["look", "name", "password", "computer", "signin", "privacy", "wheel", "working"];
+    const ORDER: &[&str] = &["look", "name", "password", "computer", "zone", "signin", "privacy", "wheel", "working"];
     let cur = Rc::new(Cell::new(0usize));
 
     // Privacy rows: Checking… while arkad is asked (it may still be starting),
@@ -975,6 +1075,7 @@ fn build_ui(app: &adw::Application) {
         let (check_privacy, step_lbl, gen) = (check_privacy.clone(), step_lbl.clone(), gen.clone());
         let (shown_once, show_gen, tut_reset) = (shown_once.clone(), show_gen.clone(), tut_reset.clone());
         let host_refresh = host_refresh.clone();
+        let (zone_drop, zone_refresh) = (zone_drop.clone(), zone_refresh.clone());
         Rc::new(move |i: usize| {
             let from = cur.get();
             cur.set(i);
@@ -998,7 +1099,7 @@ fn build_ui(app: &adw::Application) {
 
             let animate = motion_on && shown_once.get() && i != from && motion::animations_enabled();
             shown_once.set(true);
-            ridge.go_to(i.min(6), animate);
+            ridge.go_to(i.min(7), animate);
             let my = show_gen.get().wrapping_add(1);
             show_gen.set(my);
 
@@ -1008,6 +1109,7 @@ fn build_ui(app: &adw::Application) {
                 let (pages, name_entry, pass_entry, light_tile, dark_tile, dark, next) =
                     (pages.clone(), name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone(), next.clone());
                 let (check_privacy, host_refresh) = (check_privacy.clone(), host_refresh.clone());
+                let (zone_drop, zone_refresh) = (zone_drop.clone(), zone_refresh.clone());
                 move || {
                     let parts = if animate { pages.child_by_name(name).map(|p| motion::prepare(p.upcast_ref())) } else { None };
                     pages.set_visible_child_name(name);
@@ -1017,6 +1119,7 @@ fn build_ui(app: &adw::Application) {
                         "name" => { name_entry.grab_focus(); }
                         "password" => { pass_entry.grab_focus(); }
                         "computer" => { host_refresh(); }
+                        "zone" => { zone_refresh(); zone_drop.grab_focus(); }
                         "privacy" => {
                             check_privacy();
                             next.grab_focus();
@@ -1066,6 +1169,7 @@ fn build_ui(app: &adw::Application) {
         let (cur, show, fail, finish) = (cur.clone(), show.clone(), fail.clone(), finish.clone());
         let (name_entry, pass_entry, conf_entry, ask, dark, host_name) =
             (name_entry.clone(), pass_entry.clone(), conf_entry.clone(), ask.clone(), dark.clone(), host_name.clone());
+        let zone_name = zone_name.clone();
         let (vara_cb, git_cb, commit_name, commit_email) =
             (vara_cb.clone(), git_cb.clone(), commit_name.clone(), commit_email.clone());
         let next_btn = next.clone();
@@ -1089,23 +1193,27 @@ fn build_ui(app: &adw::Application) {
                     fail("Start with a lowercase letter, then use letters, numbers or hyphens, up to 30 characters.");
                 }
             }
+            "zone" => {
+                if valid_zone(&zone_name()) { show(5) } else { fail("Choose a time zone from the list.") }
+            }
             "signin" => {
                 if !(vara_cb.is_active() || git_cb.is_active()) {
-                    show(5)
+                    show(6)
                 } else if !arka_shell_common::commit_identity::valid_name(&commit_name.text()) {
                     fail("Enter the name to put on your commits.")
                 } else if !arka_shell_common::commit_identity::valid_email(commit_email.text().trim()) {
                     fail("Enter an email for your commits, like you@example.com.")
                 } else {
-                    show(5)
+                    show(6)
                 }
             }
-            "privacy" => show(6),
+            "privacy" => show(7),
             "wheel" => {
                 if busy.replace(true) { return; }
                 next_btn.set_sensitive(false);
-                show(7);
+                show(8);
                 let host = host_name();
+                let zone = zone_name();
                 let user = name_entry.text().to_string();
                 let (u, p, autologin, d) = (user.clone(), pass_entry.text().to_string(), !ask.is_active(), dark.get());
                 let tools: Vec<&str> = [("vara", vara_cb.is_active()), ("git", git_cb.is_active())]
@@ -1120,7 +1228,7 @@ fn build_ui(app: &adw::Application) {
                     let res = if preview {
                         Ok(())
                     } else {
-                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, &host, dev))
+                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, &host, dev, &zone))
                             .await
                             .unwrap_or_else(|_| Err("account helper crashed".into()))
                     };
@@ -1128,7 +1236,7 @@ fn build_ui(app: &adw::Application) {
                         Ok(()) => finish(user),
                         Err(e) => {
                             busy.set(false);
-                            show(6);
+                            show(7);
                             fail(&format!("Couldn't create the account: {e}"));
                         }
                     }
@@ -1287,6 +1395,45 @@ mod hostname_tests {
         }
         for bad in ["", "1abc", "a-", "Abc", "my pc", "a_b", &"b".repeat(31)] {
             assert!(!super::valid_hostname(bad), "{bad}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod zone_tests {
+    #[test]
+    fn zone_names_follow_the_helper_rule() {
+        for ok in ["UTC", "Europe/Berlin", "America/Argentina/Buenos_Aires", "Etc/GMT+5", "America/Port-au-Prince"] {
+            assert!(super::valid_zone(ok), "{ok}");
+        }
+        for bad in ["", "/", "Europe/", "/Europe", "Europe//Berlin", "../etc/passwd", "Europe/../Berlin",
+                    "a/b/c/d", "Europe/Berlin ", "Europe/Berlin\nUTC", "$(id)", "Europe/Berlin;reboot", "Zürich/Mitte"] {
+            assert!(!super::valid_zone(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_zone_table_gives_a_sorted_list_with_utc() {
+        let table = "# comment\nIN\t+2232+08822\tAsia/Kolkata\tIndia\nDE,DK\t+5230+01322\tEurope/Berlin\tmost of Germany\nbad line\n";
+        assert_eq!(super::parse_zone_table(table), vec!["Asia/Kolkata", "Europe/Berlin", "UTC"]);
+    }
+
+    #[test]
+    fn an_unreadable_table_still_offers_utc() {
+        assert_eq!(super::parse_zone_table(""), vec!["UTC"]);
+    }
+
+    #[test]
+    fn a_bad_zone_has_no_local_time() {
+        assert!(super::local_time_in("../etc/passwd").is_none());
+    }
+
+    #[test]
+    fn a_real_zone_reports_a_clock() {
+        // `date` and the tz database exist wherever these tests run.
+        if std::path::Path::new("/usr/share/zoneinfo/Europe/Berlin").exists() {
+            let t = super::local_time_in("Europe/Berlin").expect("a time");
+            assert!(t.contains(':'), "{t}");
         }
     }
 }
