@@ -248,6 +248,8 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
     mkdir -p /usr/share/arka/wallpapers && \
     sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-light.png 3840 2160 light && \
     sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-dark.png 3840 2160 dark && \
+    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-light-blue.png 3840 2160 light blue && \
+    sh /tmp/make-default.sh /usr/share/arka/wallpapers/default-dark-blue.png 3840 2160 dark blue && \
     cp /usr/share/arka/wallpapers/default-dark.png /usr/share/arka/wallpapers/default.png && \
     rm /tmp/make-default.sh && \
     dnf remove -y -q ImageMagick
@@ -260,6 +262,8 @@ COPY desktop-files/ /usr/share/applications/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y rsms-inter-fonts
 COPY ArkaOS.colors /usr/share/color-schemes/ArkaOS.colors
 COPY ArkaOSLight.colors /usr/share/color-schemes/ArkaOSLight.colors
+COPY ArkaOSBlue.colors /usr/share/color-schemes/ArkaOSBlue.colors
+COPY ArkaOSLightBlue.colors /usr/share/color-schemes/ArkaOSLightBlue.colors
 
 # Design-system defaults for every new user (read from /etc/skel on account
 # creation): ArkaOS color scheme, green #16C784 accent, Inter font — applied
@@ -457,12 +461,12 @@ RUN systemctl enable arka-bootc-status.timer arka-bootc-status.path
 # ArkaOS wallpapers as real KDE wallpaper packages, and the system default
 # (plasmarc [Wallpapers] defaultWallpaperTheme): the very first frame of a new
 # desktop is ArkaOS's, instead of KDE's "Next" until a login script swaps it.
-RUN for look in Dark Light; do \
-      l=$(echo $look | tr A-Z a-z); d=/usr/share/wallpapers/ArkaOS-$look; \
+RUN for look in Dark Light; do for acc in "" -Blue; do \
+      l=$(echo $look | tr A-Z a-z); s=$(echo "$acc" | tr A-Z a-z); d=/usr/share/wallpapers/ArkaOS-$look$acc; \
       mkdir -p $d/contents/images && \
-      ln -sf /usr/share/arka/wallpapers/default-$l.png $d/contents/images/3840x2160.png && \
-      printf '{"KPlugin":{"Id":"ArkaOS-%s","Name":"ArkaOS %s","License":"GPL-3.0-or-later","Authors":[{"Name":"ArkaOS"}]}}\n' "$look" "$look" > $d/metadata.json; \
-    done && \
+      ln -sf /usr/share/arka/wallpapers/default-$l$s.png $d/contents/images/3840x2160.png && \
+      printf '{"KPlugin":{"Id":"ArkaOS-%s%s","Name":"ArkaOS %s%s","License":"GPL-3.0-or-later","Authors":[{"Name":"ArkaOS"}]}}\n' "$look" "$acc" "$look" "$(echo "$acc" | tr - ' ')" > $d/metadata.json; \
+    done; done && \
     printf '[Wallpapers]\ndefaultWallpaperTheme=ArkaOS-Dark\ndefaultFileSuffix=.png\ndefaultWidth=3840\ndefaultHeight=2160\n' > /etc/xdg/plasmarc
 
 # Setup helper and first-login script (here so editing them is a cheap rebuild).

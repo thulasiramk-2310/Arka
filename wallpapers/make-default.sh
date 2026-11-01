@@ -4,12 +4,18 @@
 # line carries the brand green. No glow, no gradients to speak of, no text:
 # the wallpaper is scenery, the UI carries the words. Fine grain prevents
 # banding on 8-bit panels.
-# Usage: make-default.sh OUT.png [WIDTH HEIGHT [light|dark]]   (ImageMagick 7)
+# Usage: make-default.sh OUT.png [WIDTH HEIGHT [light|dark [green|blue]]]   (ImageMagick 7)
 set -eu
 OUT=$1
 W=${2:-3840}
 H=${3:-2160}
 LOOK=${4:-dark}
+ACCENT=${5:-green}
+case "$ACCENT" in
+  green) LINE_ACCENT="#16c784" ;;
+  blue)  LINE_ACCENT="#4f86ff" ;;
+  *) echo "make-default: accent must be green or blue" >&2; exit 2 ;;
+esac
 
 if [ "$LOOK" = light ]; then
   TOP="#eceff3"; BOTTOM="#e4e8ed"; LINE="#c9d0d9"; GREEN_A=0.70
@@ -30,7 +36,7 @@ SW=$(( H / 900 + 1 ))
 magick -size "${W}x${H}" gradient:"$TOP"-"$BOTTOM" \
   -fill none -stroke "$LINE" -strokewidth "$SW" \
   -draw "$(tri 120 467)" -draw "$(tri 250 392)" \
-  \( -size "${W}x${H}" xc:none -fill none -stroke "#16c784" -strokewidth "$SW" \
+  \( -size "${W}x${H}" xc:none -fill none -stroke "$LINE_ACCENT" -strokewidth "$SW" \
      -draw "$(tri 380 317)" -channel A -evaluate multiply "$GREEN_A" +channel \) \
   -compose Over -composite \
   \( -size "${W}x${H}" xc:gray50 -attenuate 0.05 +noise Gaussian -colorspace gray \) \
