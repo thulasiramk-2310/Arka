@@ -12,6 +12,20 @@
 
 var keepPanels = typeof arkaKeepPanels !== 'undefined';
 
+// The desktop on a screen, or null. Plasma's own desktopForScreen() wraps whatever it finds, and a
+// plasmashell crash seen at first login ended in that wrapping (Containment::corona(), called from
+// desktopForScreen()), so look in the plain list of desktops instead: it only ever answers a
+// desktop that exists, or nothing.
+function desktopOnScreen(screen) {
+    var all = desktops();
+    for (var i = 0; i < all.length; i++) {
+        if (all[i].screen == screen) {
+            return all[i];
+        }
+    }
+    return null;
+}
+
 // The object that holds a tray's entries: the tray itself on Plasma 6.7,
 // a separate containment named by SystrayContainmentId on older versions.
 function trayItems(tray) {
@@ -104,7 +118,7 @@ for (var i = 0; keepPanels && i < all.length; i++) {
 // someone removes from a screen is not added back.
 var made = [];
 for (var s = 0; s < screenCount; s++) {
-    var desk = desktopForScreen(s);
+    var desk = desktopOnScreen(s);
     if (!desk) {
         continue;
     }
@@ -127,7 +141,7 @@ for (var s = 0; s < screenCount; s++) {
 // switcher the user removes afterwards stays removed.
 for (var m = 0; keepPanels && m < all.length; m++) {
     var old = all[m];
-    var oldDesk = desktopForScreen(old.screen);
+    var oldDesk = desktopOnScreen(old.screen);
     if (old.location != 'top' || !oldDesk) {
         continue;
     }
@@ -150,7 +164,7 @@ for (var m = 0; keepPanels && m < all.length; m++) {
 }
 // A bar made just now already has it.
 for (var n = 0; keepPanels && n < screenCount; n++) {
-    var madeDesk = desktopForScreen(n);
+    var madeDesk = desktopOnScreen(n);
     if (madeDesk) {
         madeDesk.currentConfigGroup = ['General'];
         madeDesk.writeConfig('arkaBarV2', 'done');
@@ -169,7 +183,7 @@ function indexOfType(bar, type) {
 }
 for (var q = 0; keepPanels && q < all.length; q++) {
     var bar3 = all[q];
-    var deskQ = desktopForScreen(bar3.screen);
+    var deskQ = desktopOnScreen(bar3.screen);
     if (bar3.location != 'top' || !deskQ) {
         continue;
     }
@@ -203,7 +217,7 @@ for (var q = 0; keepPanels && q < all.length; q++) {
 }
 // A bar made just now already has them.
 for (var n3 = 0; keepPanels && n3 < screenCount; n3++) {
-    var madeDesk3 = desktopForScreen(n3);
+    var madeDesk3 = desktopOnScreen(n3);
     if (madeDesk3) {
         madeDesk3.currentConfigGroup = ['General'];
         madeDesk3.writeConfig('arkaBarV3', 'done');
