@@ -10,6 +10,7 @@
 import QtQuick
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.plasma5support as P5Support
 import org.kde.plasma.private.kicker as Kicker
 
 PlasmoidItem {
@@ -65,7 +66,17 @@ PlasmoidItem {
         id: processRunner
     }
 
-    Plasmoid.icon: "arka-start"
+    // The ArkaOS accent, saved by arka-apply-look. The panel's own theme colours are Breeze's, so
+    // they cannot tell green from blue; the saved choice can.
+    property string accent: "green"
+    P5Support.DataSource {
+        engine: "executable"
+        connectedSources: ["cat \"$HOME/.config/arka-accent\" 2>/dev/null"]
+        interval: 4000
+        onNewData: (source, data) => { root.accent = String(data["stdout"]).trim() === "blue" ? "blue" : "green" }
+    }
+
+    Plasmoid.icon: root.accent === "blue" ? "arka-start-blue" : "arka-start"
     toolTipMainText: Plasmoid.title
     toolTipSubText: ""
 
