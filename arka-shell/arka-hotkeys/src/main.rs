@@ -7,8 +7,8 @@ const APP_ID: &str = "org.arka.hotkeys";
 
 /// Every key here was checked against KDE's own shortcut settings (kglobalshortcutsrc) or is
 /// registered by an ArkaOS component, so this sheet never lists a key that doesn't work. Keys
-/// that could not be checked (Alt + Space for KRunner, Print for Spectacle, Ctrl + Alt + T,
-/// Meta + E) are left out on purpose. Meta is the Windows / Super key. Change the KDE ones in
+/// that could not be checked (Alt + Space for KRunner, Print for Spectacle, Meta + E) are left out
+/// on purpose. Ctrl + Alt + T was pressed for real in a VM on 2026-11-01 and opened a terminal. Meta is the Windows / Super key. Change the KDE ones in
 /// System Settings > Keyboard > Shortcuts.
 const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
     ("ArkaOS", &[
@@ -19,6 +19,7 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
     ("Find things", &[
         ("Meta",           "Open the app launcher"),
         ("Alt + F1",       "Open the app launcher"),
+        ("Ctrl + Alt + T", "Open a terminal"),
     ]),
     ("Windows", &[
         ("Alt + Tab",      "Switch between windows"),
@@ -30,7 +31,7 @@ const HOTKEYS: &[(&str, &[(&str, &str)])] = &[
     ]),
     ("Split screen", &[
         ("Meta + ← / →", "Tile the window on the left or right half"),
-        ("Meta + ↑ / ↓",    "Tile the window on the top or bottom half"),
+        ("Meta + ↑ / ↓",    "Tile the window up or down (a corner, if it is already on one side)"),
         ("Meta + T",       "Edit the tile layout"),
     ]),
     ("Spaces", &[
