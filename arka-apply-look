@@ -5,7 +5,11 @@
 # changes only that user's settings, and every one stays changeable in
 # System Settings.
 #
-#   arka-apply-look light|dark
+#   arka-apply-look light|dark [green|blue]
+#
+# The accent is green or blue. With no second argument the one saved in
+# ~/.config/arka-accent is used, and green if nothing is saved. The boot splash
+# stays green either way: it is drawn before anyone has signed in.
 #
 # Applies colours, Plasma style and icons only, not a whole global theme, so
 # Arka icons/cursor/sounds stay. A wallpaper the user picked themselves (Settings
@@ -15,7 +19,21 @@
 set -u
 
 LOOK=${1:-}
-case "$LOOK" in light|dark) ;; *) echo "usage: arka-apply-look light|dark" >&2; exit 2 ;; esac
+case "$LOOK" in light|dark) ;; *) echo "usage: arka-apply-look light|dark [green|blue]" >&2; exit 2 ;; esac
+
+# An accent given on the command line must be valid; a saved one that is damaged just means green.
+ACCENT=${2:-}
+case "$ACCENT" in
+    green|blue) ;;
+    "") ACCENT=$(cat "$HOME/.config/arka-accent" 2>/dev/null || true)
+        [ "$ACCENT" = blue ] || ACCENT=green ;;
+    *) echo "usage: arka-apply-look light|dark [green|blue]" >&2; exit 2 ;;
+esac
+if [ "$ACCENT" = blue ]; then
+    SUFFIX=-blue SCHEME_TAIL=Blue ACCENT_RGB="79,134,255"
+else
+    SUFFIX= SCHEME_TAIL= ACCENT_RGB="22,199,132"
+fi
 
 # Remember the current Plasma style and icons: the panel only needs restarting
 # when one of these actually changes (a pre-seeded first login changes neither).
@@ -23,6 +41,7 @@ before="$(kreadconfig6 --file plasmarc --group Theme --key name 2>/dev/null)|$(k
 
 mkdir -p "$HOME/.config"
 printf '%s\n' "$LOOK" > "$HOME/.config/arka-look"
+printf '%s\n' "$ACCENT" > "$HOME/.config/arka-accent"
 
 # Fedora ships the icon switcher in libexec; other distros in lib.
 CHANGEICONS=$(ls /usr/libexec/plasma-changeicons /usr/lib/plasma-changeicons 2>/dev/null | head -1)
@@ -31,17 +50,17 @@ set_icons() {
         kwriteconfig6 --file kdeglobals --group Icons --key Theme "$1"
 }
 
-WALL=/usr/share/arka/wallpapers/default-$LOOK.png
+WALL=/usr/share/arka/wallpapers/default-$LOOK$SUFFIX.png
 CUSTOM=$(cat "$HOME/.config/arkaos/wallpaper" 2>/dev/null || true)
 case "$CUSTOM" in ""|/usr/share/arka/wallpapers/default*) DESK_WALL=$WALL ;; *) DESK_WALL=$CUSTOM ;; esac
 
 if [ "$LOOK" = light ]; then
-    plasma-apply-colorscheme ArkaOSLight >/dev/null 2>&1 || true
+    plasma-apply-colorscheme ArkaOSLight$SCHEME_TAIL >/dev/null 2>&1 || true
     plasma-apply-desktoptheme arkaos-light >/dev/null 2>&1 || true
     set_icons Arka-Light
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.light.desktop
 else
-    plasma-apply-colorscheme ArkaOS >/dev/null 2>&1 || true
+    plasma-apply-colorscheme ArkaOS$SCHEME_TAIL >/dev/null 2>&1 || true
     plasma-apply-desktoptheme arkaos-dark >/dev/null 2>&1 || true
     set_icons Arka
     kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.arkaos.dark.desktop
@@ -69,8 +88,9 @@ if [ -d "$HOME/.config/crystal-dock" ]; then
     fi
 fi
 
-# The ArkaOS accent stays green in both looks (changeable in System Settings).
-kwriteconfig6 --file kdeglobals --group General --key AccentColor "22,199,132"
+# The accent is the one chosen (green by default), the same in both looks. It stays
+# changeable in System Settings.
+kwriteconfig6 --file kdeglobals --group General --key AccentColor "$ACCENT_RGB"
 kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
 
 # The lock screen keeps the dark wallpaper in both looks, as the login screen
