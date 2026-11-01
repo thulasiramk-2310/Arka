@@ -17,6 +17,11 @@ on:
   schedule:
     - cron: "17 3 * * 1"   # weekly, to pick up Fedora security updates
   workflow_dispatch:
+    inputs:
+      fresh:
+        description: "Build from nothing (no cache) and replace the cache; use after a base image or package problem"
+        type: boolean
+        default: false
 
 concurrency:
   group: image-${{ github.ref }}
@@ -28,6 +33,10 @@ permissions:
 
 env:
   IMAGE: ghcr.io/thulasiramk-2310/arka
+  # Build layers are kept here, so a build that changes only a late file reuses the big early
+  # ones (package installs, compiles). It is a cache, never installed: only $IMAGE is signed
+  # and published.
+  CACHE: ghcr.io/thulasiramk-2310/arka-buildcache
 
 jobs:
   build:
@@ -54,8 +63,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRESH: ${{ github.event_name == 'schedule' || inputs.fresh }}
         run: |
-          sudo podman build --pull=newer \
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          # The weekly run (which exists to pick up Fedora security updates) and a manual "fresh"
+          # run ignore the cache and then replace it; every other run reuses it. Reusing a cached
+          # package layer means its packages are as old as that layer, which is why the weekly
+          # run must rebuild them.
+          if [ "$FRESH" = true ]; then OPTS="--no-cache"; else OPTS="--cache-from $CACHE"; fi
+          sudo podman build --pull=newer --layers $OPTS --cache-to "$CACHE" \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             --label org.opencontainers.image.revision=${{ github.sha }} \
             -t localhost/arka:build .
