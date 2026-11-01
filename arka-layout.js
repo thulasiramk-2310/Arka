@@ -162,8 +162,9 @@ for (var m = 0; keepPanels && m < all.length; m++) {
     oldDesk.currentConfigGroup = ['General'];
     oldDesk.writeConfig('arkaBarV2', 'done');
 }
-// A bar made just now already has it.
-for (var n = 0; keepPanels && n < screenCount; n++) {
+// A bar made just now already has it. (This marks it on the first run too: otherwise the next run
+// would take the bar for an old one and add these widgets a second time.)
+for (var n = 0; n < screenCount; n++) {
     var madeDesk = desktopOnScreen(n);
     if (madeDesk) {
         madeDesk.currentConfigGroup = ['General'];
@@ -198,15 +199,21 @@ for (var q = 0; keepPanels && q < all.length; q++) {
     if (bar3.height < BAR_HEIGHT) { bar3.height = BAR_HEIGHT; }
     var li = -1;
     for (var m3 = 0; m3 < launchers.length && li < 0; m3++) { li = indexOfType(bar3, launchers[m3]); }
-    var brand = bar3.addWidget('org.arkaos.brand');
-    try { brand.index = li + 1; } catch (e) {}
+    if (indexOfType(bar3, 'org.arkaos.brand') < 0) {
+        var brand = bar3.addWidget('org.arkaos.brand');
+        try { brand.index = li + 1; } catch (e) {}
+    }
     var anchorAt = indexOfType(bar3, 'org.arkaos.spaces');
     if (anchorAt < 0) { anchorAt = indexOfType(bar3, 'org.kde.plasma.pager'); }
     if (anchorAt < 0) { anchorAt = indexOfType(bar3, 'org.kde.plasma.systemtray'); }
-    var sb = bar3.addWidget('org.arkaos.search');
-    try { sb.index = anchorAt; } catch (e) {}
-    var pill = bar3.addWidget('org.arkaos.statuspill');
-    try { pill.index = anchorAt + 1; } catch (e) {}
+    if (indexOfType(bar3, 'org.arkaos.search') < 0) {
+        var sb = bar3.addWidget('org.arkaos.search');
+        try { sb.index = anchorAt; } catch (e) {}
+    }
+    if (indexOfType(bar3, 'org.arkaos.statuspill') < 0) {
+        var pill = bar3.addWidget('org.arkaos.statuspill');
+        try { pill.index = anchorAt + 1; } catch (e) {}
+    }
     // One flexible spacer is enough now that the clock leaves the middle.
     var sp = bar3.widgets().filter(function (w) { return w.type == 'org.kde.plasma.panelspacer'; });
     for (var z = 1; z < sp.length; z++) { sp[z].remove(); }
@@ -216,11 +223,27 @@ for (var q = 0; keepPanels && q < all.length; q++) {
     deskQ.writeConfig('arkaBarV3', 'done');
 }
 // A bar made just now already has them.
-for (var n3 = 0; keepPanels && n3 < screenCount; n3++) {
+for (var n3 = 0; n3 < screenCount; n3++) {
     var madeDesk3 = desktopOnScreen(n3);
     if (madeDesk3) {
         madeDesk3.currentConfigGroup = ['General'];
         madeDesk3.writeConfig('arkaBarV3', 'done');
+    }
+}
+
+// --- One of each --------------------------------------------------------------------
+// Whatever ran before, a bar never keeps two wordmarks, search buttons or status pills: the first of
+// each stays. This heals bars that an earlier version of this script added them to twice.
+var onceOnly = ['org.arkaos.brand', 'org.arkaos.search', 'org.arkaos.statuspill'];
+for (var dq = 0; keepPanels && dq < all.length; dq++) {
+    if (all[dq].location != 'top') { continue; }
+    for (var oi = 0; oi < onceOnly.length; oi++) {
+        var seenOnce = false;
+        var ws = all[dq].widgets();
+        for (var wi = 0; wi < ws.length; wi++) {
+            if (ws[wi].type != onceOnly[oi]) { continue; }
+            if (seenOnce) { ws[wi].remove(); } else { seenOnce = true; }
+        }
     }
 }
 
