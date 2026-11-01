@@ -48,6 +48,10 @@ class ApplyTests(unittest.TestCase):
         for name in ('run', 'etc/sudoers.d', 'var/lib', 'bin'):
             (self.root / name).mkdir(parents=True)
         (self.root / 'accounts').write_text('')
+        for zone in ('UTC', 'Europe/Berlin', 'Asia/Kolkata', 'America/Argentina/Buenos_Aires', 'Etc/GMT+5'):
+            fake = self.root / 'usr/share/zoneinfo' / zone
+            fake.parent.mkdir(parents=True, exist_ok=True)
+            fake.write_text('TZif')
         (self.root / 'etc/arkad').mkdir()
         (self.root / 'etc/arkad/arkad.toml').write_text(
             'check_interval_secs = 60\n\n[dns]\nserver = "9.9.9.9"\n\n[hostname]\nname = "arka"\n')
@@ -56,25 +60,31 @@ class ApplyTests(unittest.TestCase):
             'ARKA_OOBE_HELPER_SOURCE',
             Path(__file__).resolve().parents[1] / 'arkaos-oobe-apply',
         )).read_text()
-        for prefix in ('/run/', '/etc/', '/var/lib/', '/home/'):
+        for prefix in ('/run/', '/etc/', '/var/lib/', '/home/', '/usr/share/zoneinfo/'):
             source = source.replace(prefix, str(self.root) + prefix)
         self.helper = self.root / 'helper'
         self.helper.write_text(source)
-        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser', 'vara', 'git'):
+        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser', 'vara', 'git', 'timedatectl'):
             command = self.root / 'bin' / name
             command.write_text(MOCK_COMMAND)
             command.chmod(0o755)
         self.env = dict(os.environ, OOBE_TEST_ROOT=str(self.root))
         self.env['PATH'] = str(self.root / 'bin') + os.pathsep + '/usr/bin:/bin'
 
-    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None, host=None):
+    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None, host=None, zone=None):
         args = ['bash', str(self.helper), user, autologin]
+        if look is None and (host is not None or dev is not None or zone is not None):
+            look = 'dark'          # later arguments are positional: the look must come first
         if look is not None:
             args.append(look)
-        if host is not None or dev is not None:
+        if host is not None or dev is not None or zone is not None:
             args.append(host or 'arka')
         if dev is not None:
             args.extend(dev)
+        elif zone is not None:
+            args.extend(['', '', ''])      # no version control, then the time zone
+        if zone is not None:
+            args.append(zone)
         return subprocess.run(
             args, input=password,
             text=True, capture_output=True, env=self.env, timeout=5,
@@ -273,6 +283,47 @@ class ApplyTests(unittest.TestCase):
                 result = self.run_helper(look='dark', host=host)
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assert_no_account_changes()
+    def zone_calls(self):
+        import json
+        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        return [c for c in calls if c[0] == 'timedatectl']
+
+    def test_a_chosen_time_zone_is_set(self):
+        result = self.run_helper(look='dark', zone='Europe/Berlin')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.zone_calls(), [['timedatectl', 'set-timezone', 'Europe/Berlin']])
+
+    def test_deeper_and_signed_zone_names_are_accepted(self):
+        for zone in ('America/Argentina/Buenos_Aires', 'Etc/GMT+5', 'UTC'):
+            with self.subTest(zone=zone):
+                self.setUp()
+                self.assertEqual(self.run_helper(zone=zone).returncode, 0)
+                self.assertEqual(self.zone_calls(), [['timedatectl', 'set-timezone', zone]])
+
+    def test_a_time_zone_chosen_with_version_control_is_set_after_it(self):
+        result = self.run_helper(host='arka', dev=('git', 'Alice', 'alice@example.com'), zone='Asia/Kolkata')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.zone_calls(), [['timedatectl', 'set-timezone', 'Asia/Kolkata']])
+
+    def test_without_a_time_zone_the_image_zone_is_left_alone(self):
+        self.assertEqual(self.run_helper().returncode, 0)
+        self.assertEqual(self.zone_calls(), [])
+
+    def test_bad_time_zones_are_rejected_before_account_creation(self):
+        for zone in ('../etc/passwd', 'Europe/../Berlin', '/etc/passwd', 'Europe/Nowhere', 'Europe/Berlin\nUTC',
+                     'Europe/Berlin; reboot', 'a/b/c/d', 'Europe//Berlin', '$(id)', 'Europe/Berlin ', '.'):
+            with self.subTest(zone=zone):
+                self.setUp()
+                self.assertNotEqual(self.run_helper(zone=zone).returncode, 0)
+                self.assert_no_account_changes()
+                self.assertFalse((self.root / 'calls').exists() and self.zone_calls())
+
+    def test_failed_time_zone_change_does_not_stop_the_account(self):
+        self.env['OOBE_TEST_FAIL'] = 'timedatectl'
+        result = self.run_helper(zone='Europe/Berlin')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'accounts').read_text(), 'alice\n')
+        self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
 
 if __name__ == '__main__':
     unittest.main()

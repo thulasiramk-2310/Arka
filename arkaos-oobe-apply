@@ -9,16 +9,20 @@
 # set autologin, switch to the graphical target, and mark first-boot done.
 #
 #   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark
-#                            [<computer-name> [<tools> <commit-name> <commit-email>]]]
+#                            [<computer-name> [<tools> <commit-name> <commit-email>
+#                            [<time-zone>]]]]]
 #          (password on stdin; look defaults to dark, the image default;
-#           the computer name defaults to arka, the privacy default)
+#           the computer name defaults to arka, the privacy default;
+#           the time zone is a tz database name such as Europe/Berlin, and when
+#           it is left out the image's own zone stays; callers that pick a time
+#           zone but no version control pass three empty strings before it)
 #
 # tools is the optional version control from setup's Advanced options: a comma
 # list of vara and git, each set up with the name and email for commits.
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 7 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
-    echo "arkaos-oobe-apply: expected username, autologin flag, optional look, computer name and version control" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 8 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
+    echo "arkaos-oobe-apply: expected username, autologin flag, optional look, computer name, version control and time zone" >&2
     exit 2
 fi
 user="$1"
@@ -28,6 +32,7 @@ host="${4:-arka}"
 tools="${5:-}"
 commit_name="${6:-}"
 commit_email="${7:-}"
+zone="${8:-}"
 
 # Serialize account creation, including retries from the graphical and TUI paths.
 exec 9>/run/arkaos-oobe.lock
@@ -57,6 +62,16 @@ fi
 if [[ ! "$host" =~ ^[a-z]([a-z0-9-]{0,28}[a-z0-9])?$ ]]; then
     echo "arkaos-oobe-apply: invalid computer name" >&2
     exit 2
+fi
+
+# A time zone is a tz database name: up to three parts of letters, digits, _, + and -
+# (America/Argentina/Buenos_Aires, Etc/GMT+5). No dots, so no path tricks, and the
+# name must be a real zone file.
+if [ -n "$zone" ]; then
+    if [[ ! "$zone" =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$ ]] || [ ! -f "/usr/share/zoneinfo/$zone" ]; then
+        echo "arkaos-oobe-apply: invalid time zone" >&2
+        exit 2
+    fi
 fi
 
 if [ -n "$tools" ]; then
@@ -144,6 +159,14 @@ for tool in ${tools//,/ }; do
                   echo "arkaos-oobe-apply: warning: could not set the Git identity" >&2 ;;
     esac
 done
+
+# The time zone the user chose. A failure is reported but does not stop setup: the
+# account matters more, and the zone can be changed later in Settings.
+if [ -n "$zone" ]; then
+    timedatectl set-timezone "$zone" ||
+        ln -sfn "/usr/share/zoneinfo/$zone" /etc/localtime ||
+        echo "arkaos-oobe-apply: warning: could not set the time zone" >&2
+fi
 
 # A computer name other than the default goes into arkad's settings, so arkad sets it
 # now and puts it back if anything changes it.
