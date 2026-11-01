@@ -303,29 +303,15 @@ Rectangle {
         Behavior on color { ColorAnimation { duration: 120 } }
     }
 
-    // Arka mark: the boot splash's nested triangles, so boot and login connect.
-    component ArkaMark: Shape {
+    // Arka mark: the ArkaOS logo, so boot, login and desktop show the same one. The boot splash is
+    // always green; here it is green or blue to follow the login screen's accent.
+    component ArkaMark: Image {
         id: mk
-        property color tint: c.accentFg
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            strokeColor: mk.tint; strokeWidth: 1.6; fillColor: "transparent"
-            joinStyle: ShapePath.RoundJoin
-            scale: Qt.size(mk.width / 24, mk.height / 24)
-            PathMove { x: 12; y: 6 }
-            PathLine { x: 18; y: 17 }
-            PathLine { x: 6; y: 17 }
-            PathLine { x: 12; y: 6 }
-        }
-        ShapePath {
-            strokeColor: Qt.rgba(mk.tint.r, mk.tint.g, mk.tint.b, 0.45); strokeWidth: 1.2; fillColor: "transparent"
-            joinStyle: ShapePath.RoundJoin
-            scale: Qt.size(mk.width / 24, mk.height / 24)
-            PathMove { x: 12; y: 2 }
-            PathLine { x: 22; y: 20.5 }
-            PathLine { x: 2; y: 20.5 }
-            PathLine { x: 12; y: 2 }
-        }
+        readonly property bool blue: c.accent.hsvHue > 0.52
+        source: blue ? "logo-blue.png" : "logo-green.png"
+        fillMode: Image.PreserveAspectFit
+        smooth: true
+        mipmap: true
     }
 
     // Hidden readers for model roles we need by name.

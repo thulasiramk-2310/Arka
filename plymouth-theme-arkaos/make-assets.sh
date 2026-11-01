@@ -16,12 +16,15 @@ case "$FONT" in
 esac
 G="#16c784"
 
-magick -size 520x460 xc:none -fill none -stroke "$G" -strokewidth 10 \
-  -draw "polygon 260,70 410,350 110,350" tri1.png
-magick -size 520x460 xc:none -fill none -stroke "$G" -strokewidth 6 \
-  -draw "polygon 260,24 456,392 64,392" tri2.png
-magick -size 520x460 xc:none -fill none -stroke "$G" -strokewidth 16 \
-  -draw "polygon 260,24 456,392 64,392" -blur 0x12 tri3.png
+# The logo (logo-src.png, the same green artwork as the start button) sits where the old
+# triangles were. The splash is always green: it is drawn before anyone has signed in, so it
+# cannot know an account's accent. The file names stay tri1..tri3 so arkaos.script is unchanged:
+# tri1 is the logo, tri2 is empty (its staggered fade becomes a no-op), tri3 is a soft glow cut from
+# the logo's own outline that the script pulses.
+magick logo-src.png -background none -filter Lanczos -resize x372 -gravity center -extent 520x460 tri1.png
+magick -size 520x460 xc:none tri2.png
+magick tri1.png -channel A -blur 0x14 +channel -fill "$G" -colorize 100 \
+  -channel A -evaluate multiply 0.85 +channel tri3.png
 magick -size 800x140 xc:none -font "$FONT" -fill "$G" -pointsize 88 \
   -kerning 28 -gravity center -draw "text 0,0 'ARKA'" wordmark.png
 
