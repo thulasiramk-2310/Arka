@@ -291,6 +291,9 @@ checkbutton.oobe-choice radio {{
   min-width: 18px; min-height: 18px; box-shadow: none; color: {pfg};
 }}
 checkbutton.oobe-choice radio:checked {{ background-color: {fg}; border-color: {fg}; }}
+/* Keyboard focus: no coloured pill round the row; a quiet ring on the dot, like the tiles. */
+checkbutton.oobe-choice:focus-visible, checkbutton.oobe-choice:focus {{ outline: none; box-shadow: none; }}
+checkbutton.oobe-choice:focus-visible radio {{ outline: 2px solid {faint}; outline-offset: 3px; }}
 .oobe-choice-title {{ font-size: 18px; font-weight: 600; color: {fg}; }}
 expander.oobe-adv title {{ font-size: 15px; color: {muted}; }}
 expander.oobe-adv arrow {{ color: {muted}; }}
