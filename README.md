@@ -274,6 +274,20 @@ exactly that: we haven't tried it.
   show progress, and stopping one leaves no half-made file behind. Tested in a VM
   (2026-10-19 and 2026-10-20). Not yet on hardware. Dolphin's preview of a very
   short H.264 video (about 2 seconds) can look scrambled. The file itself is fine.
+- **Make files smaller, put them in a ZIP, and turn Word files into PDFs.**
+  *Make smaller* (in Dolphin's right-click menu and on the format wheel) shrinks
+  a JPEG, PNG or WebP picture (scaled down to at most 2560 pixels on its longest
+  side, JPEG and WebP saved at quality 78, camera and location details not copied
+  over), a sound into an MP3, a video into an MP4 no wider than 1280 pixels, or a
+  PDF. A smaller copy is only kept if it really is smaller; otherwise it says so.
+  *ZIP* on the wheel puts any file in its own ZIP. A ZIP bundles a file; it does
+  not make pictures, sound or video smaller. Word, Excel and PowerPoint files (and
+  their OpenDocument twins) become PDFs through LibreOffice. A PDF that has text
+  can become a Word file, but the layout will differ, and a scanned PDF is refused
+  because ArkaOS has no text recognition yet. Everything runs in the same sandbox
+  with no network access. Tested with real files on the development laptop
+  (2026-11-01), not yet in a VM or on hardware. The smaller-video step needs the
+  OpenH264 encoder that ArkaOS ships and that laptop lacks, so it is untested.
 - **Remove hidden details.** Photos, PDFs, sound and video files often carry
   details you can't see: where a photo was taken, the camera, the author's name,
   the software that made a document. *Remove hidden details* in Dolphin's
