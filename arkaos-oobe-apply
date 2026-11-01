@@ -10,19 +10,21 @@
 #
 #   usage: arkaos-oobe-apply <username> <autologin:0|1> [light|dark
 #                            [<computer-name> [<tools> <commit-name> <commit-email>
-#                            [<time-zone>]]]]]
+#                            [<time-zone> [<accent>]]]]]
 #          (password on stdin; look defaults to dark, the image default;
 #           the computer name defaults to arka, the privacy default;
 #           the time zone is a tz database name such as Europe/Berlin, and when
 #           it is left out the image's own zone stays; callers that pick a time
-#           zone but no version control pass three empty strings before it)
+#           zone but no version control pass three empty strings before it;
+#           the accent is green or blue, green when left out, and a caller that
+#           picks one but no time zone passes an empty string for the zone)
 #
 # tools is the optional version control from setup's Advanced options: a comma
 # list of vara and git, each set up with the name and email for commits.
 set -euo pipefail
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 8 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
-    echo "arkaos-oobe-apply: expected username, autologin flag, optional look, computer name, version control and time zone" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 9 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ]; then
+    echo "arkaos-oobe-apply: expected username, autologin flag, optional look, computer name, version control, time zone and accent" >&2
     exit 2
 fi
 user="$1"
@@ -33,6 +35,7 @@ tools="${5:-}"
 commit_name="${6:-}"
 commit_email="${7:-}"
 zone="${8:-}"
+accent="${9:-green}"
 
 # Serialize account creation, including retries from the graphical and TUI paths.
 exec 9>/run/arkaos-oobe.lock
@@ -61,6 +64,11 @@ fi
 # A computer name is letters, digits and hyphens, starting with a letter (RFC 1123 label).
 if [[ ! "$host" =~ ^[a-z]([a-z0-9-]{0,28}[a-z0-9])?$ ]]; then
     echo "arkaos-oobe-apply: invalid computer name" >&2
+    exit 2
+fi
+
+if [[ "$accent" != "green" && "$accent" != "blue" ]]; then
+    echo "arkaos-oobe-apply: invalid accent" >&2
     exit 2
 fi
 
@@ -116,15 +124,19 @@ unset pass
 runuser -u "$user" -- bash -c '
     set -eu
     umask 077
-    home=$1 look=$2
+    home=$1 look=$2 accent=$3
     mkdir -p -- "$home/.config"
     printf "%s\n" "$look" > "$home/.config/arka-look"
+    printf "%s\n" "$accent" > "$home/.config/arka-accent"
     command -v kwriteconfig6 >/dev/null || exit 0
     if [ "$look" = light ]; then
         scheme=ArkaOSLight style=arkaos-light icons=Arka-Light laf=org.arkaos.light.desktop wall=ArkaOS-Light
     else
         scheme=ArkaOS style=arkaos-dark icons=Arka laf=org.arkaos.dark.desktop wall=ArkaOS-Dark
     fi
+    # The accent: the blue schemes and wallpapers have Blue on the end of their names.
+    accent_rgb="22,199,132"
+    if [ "$accent" = blue ]; then scheme=${scheme}Blue wall=${wall}-Blue accent_rgb="79,134,255"; fi
     kg=$home/.config/kdeglobals
     colors=/usr/share/color-schemes/$scheme.colors
     if [ -r "$colors" ]; then
@@ -138,11 +150,12 @@ runuser -u "$user" -- bash -c '
         done < "$colors"
     fi
     kwriteconfig6 --file "$kg" --group General --key ColorScheme "$scheme"
+    kwriteconfig6 --file "$kg" --group General --key AccentColor "$accent_rgb"
     kwriteconfig6 --file "$kg" --group Icons --key Theme "$icons"
     kwriteconfig6 --file "$kg" --group KDE --key LookAndFeelPackage "$laf"
     kwriteconfig6 --file "$home/.config/plasmarc" --group Theme --key name "$style"
     kwriteconfig6 --file "$home/.config/plasmarc" --group Wallpapers --key defaultWallpaperTheme "$wall"
-' arka-setup-look "/home/$user" "$look"
+' arka-setup-look "/home/$user" "$look" "$accent"
 
 # Optional version control. runuser keeps root's HOME and working directory, so
 # give the tools the new account's own (Git looks for a repository in the
@@ -181,6 +194,16 @@ mkdir -p /etc/sddm.conf.d
 # theme with look=light; see Containerfile).
 if [ "$look" = "light" ]; then
     printf '[Theme]\nCurrent=arkaos-light\n' > /etc/sddm.conf.d/30-arka-theme.conf
+fi
+# The login screen takes its accent from the sddm account's colour scheme (see the Containerfile),
+# so a blue choice gives it the blue scheme. A failure here does not stop setup.
+if [ "$accent" = "blue" ]; then
+    scheme=/usr/share/color-schemes/ArkaOSBlue.colors
+    { [ -r "$scheme" ] && mkdir -p /var/lib/sddm/.config &&
+        cp "$scheme" /var/lib/sddm/.config/kdeglobals &&
+        chown sddm:sddm /var/lib/sddm/.config /var/lib/sddm/.config/kdeglobals &&
+        chmod 0644 /var/lib/sddm/.config/kdeglobals; } ||
+        echo "arkaos-oobe-apply: warning: could not give the login screen the blue accent" >&2
 fi
 if [ "$autologin" = "1" ]; then
     printf '[Autologin]\nUser=%s\nSession=plasma.desktop\n' "$user" \

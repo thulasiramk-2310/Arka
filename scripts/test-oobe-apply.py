@@ -52,6 +52,9 @@ class ApplyTests(unittest.TestCase):
             fake = self.root / 'usr/share/zoneinfo' / zone
             fake.parent.mkdir(parents=True, exist_ok=True)
             fake.write_text('TZif')
+        scheme = self.root / 'usr/share/color-schemes/ArkaOSBlue.colors'
+        scheme.parent.mkdir(parents=True, exist_ok=True)
+        scheme.write_text('blue-scheme')
         (self.root / 'etc/arkad').mkdir()
         (self.root / 'etc/arkad/arkad.toml').write_text(
             'check_interval_secs = 60\n\n[dns]\nserver = "9.9.9.9"\n\n[hostname]\nname = "arka"\n')
@@ -60,31 +63,33 @@ class ApplyTests(unittest.TestCase):
             'ARKA_OOBE_HELPER_SOURCE',
             Path(__file__).resolve().parents[1] / 'arkaos-oobe-apply',
         )).read_text()
-        for prefix in ('/run/', '/etc/', '/var/lib/', '/home/', '/usr/share/zoneinfo/'):
+        for prefix in ('/run/', '/etc/', '/var/lib/', '/home/', '/usr/share/zoneinfo/', '/usr/share/color-schemes/'):
             source = source.replace(prefix, str(self.root) + prefix)
         self.helper = self.root / 'helper'
         self.helper.write_text(source)
-        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser', 'vara', 'git', 'timedatectl'):
+        for name in ('id', 'useradd', 'chpasswd', 'chown', 'systemctl', 'runuser', 'vara', 'git', 'timedatectl', 'kwriteconfig6'):
             command = self.root / 'bin' / name
             command.write_text(MOCK_COMMAND)
             command.chmod(0o755)
         self.env = dict(os.environ, OOBE_TEST_ROOT=str(self.root))
         self.env['PATH'] = str(self.root / 'bin') + os.pathsep + '/usr/bin:/bin'
 
-    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None, host=None, zone=None):
+    def run_helper(self, user='alice', autologin='1', password='test-password\n', look=None, dev=None, host=None, zone=None, accent=None):
         args = ['bash', str(self.helper), user, autologin]
-        if look is None and (host is not None or dev is not None or zone is not None):
+        if look is None and (host is not None or dev is not None or zone is not None or accent is not None):
             look = 'dark'          # later arguments are positional: the look must come first
         if look is not None:
             args.append(look)
-        if host is not None or dev is not None or zone is not None:
+        if host is not None or dev is not None or zone is not None or accent is not None:
             args.append(host or 'arka')
         if dev is not None:
             args.extend(dev)
-        elif zone is not None:
+        elif zone is not None or accent is not None:
             args.extend(['', '', ''])      # no version control, then the time zone
-        if zone is not None:
-            args.append(zone)
+        if zone is not None or accent is not None:
+            args.append(zone or '')
+        if accent is not None:
+            args.append(accent)
         return subprocess.run(
             args, input=password,
             text=True, capture_output=True, env=self.env, timeout=5,
@@ -323,6 +328,64 @@ class ApplyTests(unittest.TestCase):
         result = self.run_helper(zone='Europe/Berlin')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'accounts').read_text(), 'alice\n')
+        self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
+    def written_settings(self):
+        import json
+        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        return [c for c in calls if c[0] == 'kwriteconfig6']
+
+    def test_a_blue_accent_is_saved_and_gives_the_blue_scheme(self):
+        result = self.run_helper(look='dark', accent='blue')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'home/alice/.config/arka-accent').read_text(), 'blue\n')
+        flat = [' '.join(c) for c in self.written_settings()]
+        self.assertTrue(any('--key ColorScheme ArkaOSBlue' in c for c in flat), flat)
+        self.assertTrue(any('--key AccentColor 79,134,255' in c for c in flat), flat)
+        self.assertTrue(any('--key defaultWallpaperTheme ArkaOS-Dark-Blue' in c for c in flat), flat)
+
+    def test_the_light_look_with_blue_gives_the_light_blue_scheme(self):
+        self.assertEqual(self.run_helper(look='light', accent='blue').returncode, 0)
+        flat = [' '.join(c) for c in self.written_settings()]
+        self.assertTrue(any('--key ColorScheme ArkaOSLightBlue' in c for c in flat), flat)
+        self.assertTrue(any('--key defaultWallpaperTheme ArkaOS-Light-Blue' in c for c in flat), flat)
+
+    def test_green_is_the_default_accent(self):
+        for kwargs in ({}, {'accent': 'green'}):
+            with self.subTest(**kwargs):
+                self.setUp()
+                self.assertEqual(self.run_helper(look='dark', **kwargs).returncode, 0)
+                self.assertEqual((self.root / 'home/alice/.config/arka-accent').read_text(), 'green\n')
+                flat = [' '.join(c) for c in self.written_settings()]
+                self.assertTrue(any(c.endswith('--key ColorScheme ArkaOS') for c in flat), flat)
+                self.assertFalse(any('Blue' in c for c in flat), flat)
+                self.assertTrue(any('--key AccentColor 22,199,132' in c for c in flat), flat)
+
+    def test_a_bad_accent_is_rejected_before_account_creation(self):
+        for accent in ('red', 'Blue', 'blue\nreboot', 'blue;id', '$(id)', ' blue'):
+            with self.subTest(accent=accent):
+                self.setUp()
+                self.assertNotEqual(self.run_helper(accent=accent).returncode, 0)
+                self.assert_no_account_changes()
+
+    def test_accent_and_time_zone_can_be_given_together(self):
+        result = self.run_helper(look='dark', zone='Europe/Berlin', accent='blue')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.zone_calls(), [['timedatectl', 'set-timezone', 'Europe/Berlin']])
+        self.assertEqual((self.root / 'home/alice/.config/arka-accent').read_text(), 'blue\n')
+    def test_a_blue_choice_gives_the_login_screen_the_blue_scheme(self):
+        result = self.run_helper(look='dark', accent='blue')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'var/lib/sddm/.config/kdeglobals').read_text(), 'blue-scheme')
+
+    def test_green_leaves_the_login_screen_alone(self):
+        self.assertEqual(self.run_helper(look='dark', accent='green').returncode, 0)
+        self.assertFalse((self.root / 'var/lib/sddm/.config/kdeglobals').exists())
+
+    def test_a_missing_blue_scheme_does_not_stop_the_account(self):
+        (self.root / 'usr/share/color-schemes/ArkaOSBlue.colors').unlink()
+        result = self.run_helper(look='dark', accent='blue')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('could not give the login screen the blue accent', result.stderr)
         self.assertTrue((self.root / 'var/lib/arkaos-firstboot-done').exists())
 
 if __name__ == '__main__':
