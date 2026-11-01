@@ -538,20 +538,33 @@ fn build_ui(app: &adw::Application) {
     top.set_margin_top(36);
     top.set_margin_start(44);
     top.set_margin_end(44);
-    let mark = gtk4::DrawingArea::new();
-    mark.set_size_request(18, 18);
-    mark.set_valign(gtk4::Align::Center);
-    mark.set_draw_func(|_, cr, w, h| {
-        let (w, h) = (w as f64, h as f64);
-        cr.set_source_rgb(0.086, 0.78, 0.52);
-        cr.set_line_width(1.8);
-        cr.set_line_join(cairo::LineJoin::Round);
-        cr.move_to(w / 2.0, 1.5);
-        cr.line_to(w - 1.5, h - 2.5);
-        cr.line_to(1.5, h - 2.5);
-        cr.close_path();
-        let _ = cr.stroke();
-    });
+    // The ArkaOS logo in the brand green (logo.png is the same artwork as the start button).
+    // If the picture cannot be decoded the old drawn outline triangle stands in for it.
+    let mark: gtk4::Widget = match gtk4::gdk::Texture::from_bytes(&glib::Bytes::from_static(include_bytes!("logo.png"))) {
+        Ok(tex) => {
+            let img = gtk4::Image::from_paintable(Some(&tex));
+            img.set_pixel_size(26);
+            img.set_valign(gtk4::Align::Center);
+            img.upcast()
+        }
+        Err(_) => {
+            let area = gtk4::DrawingArea::new();
+            area.set_size_request(18, 18);
+            area.set_valign(gtk4::Align::Center);
+            area.set_draw_func(|_, cr, w, h| {
+                let (w, h) = (w as f64, h as f64);
+                cr.set_source_rgb(0.086, 0.78, 0.52);
+                cr.set_line_width(1.8);
+                cr.set_line_join(cairo::LineJoin::Round);
+                cr.move_to(w / 2.0, 1.5);
+                cr.line_to(w - 1.5, h - 2.5);
+                cr.line_to(1.5, h - 2.5);
+                cr.close_path();
+                let _ = cr.stroke();
+            });
+            area.upcast()
+        }
+    };
     let brand = gtk4::Label::new(Some("ArkaOS Setup"));
     brand.add_css_class("oobe-brand");
     let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
