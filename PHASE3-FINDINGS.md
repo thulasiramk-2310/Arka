@@ -2,12 +2,13 @@
 
 ## 1. What's live (verified)
 
-**composefs — read-only, integrity-backed rootfs**
+**composefs — read-only rootfs with a fixed layout**
 - composefs 1.0.8 active as rootfs mount: `composefs on / type overlay (ro,...)`
 - Directory tree is fixed by a `.cfs` erofs image; file data served content-addressed
-  from the ostree object store. This is the bootc-native dm-verity equivalent.
-- Structural immutability confirmed. No fs-verity or dm-verity needed on top of it
-  for the immutable layer — composefs already provides that guarantee.
+  from the ostree object store.
+- Structural immutability confirmed: the layout is fixed and the root is read-only. This is not a
+  cryptographic check of file contents. fs-verity is not available on this XFS root (the kernel refused
+  it when tried on 2026-11-01), and there is no dm-verity, so contents are not verified at boot.
 
 **TPM2 — hardware emulation verified**
 - `swtpm 0.10.1-2` running on Arch host via unix socket

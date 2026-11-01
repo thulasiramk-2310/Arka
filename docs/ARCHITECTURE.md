@@ -128,5 +128,7 @@ Plasma Wayland session → arkad already active (system service since early boot
 
 - PCRs 11–15 / measured UKI boot: needs systemd-boot as active bootloader;
   bootupd on this base has no systemd-boot component. PCRs 0–10 measured today.
-- No fs-verity in el10-era investigation; Fedora 42 kernel has it but per-file
-  verity pinning in composefs isn't wired yet (structural immutability only).
+- No per-file content check at boot. The root filesystem is XFS, and in the booted image (2026-11-01) XFS
+  refused a request to enable fs-verity on a file ("Inappropriate ioctl for device"): the kernel has
+  fs-verity, but XFS does not implement it. So composefs fixes the layout and keeps the root read-only, but
+  nothing checks file contents by digest. Ext4 does support fs-verity; that route has not been tried.
