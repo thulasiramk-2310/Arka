@@ -10,10 +10,11 @@
 // second setup.
 //
 // ARKA_OOBE_PREVIEW=<page> opens it windowed at a page for design review
-// (hello, look, name, password, computer, zone, signin, privacy, wheel, working, bye) and never
+// (hello, look, accent, name, password, computer, zone, signin, privacy, wheel, working, bye) and never
 // creates an account or reboots. Setup opens in the dark look so the first
 // screens are not a full-brightness white panel in a dim room (reported on real
 // hardware); ARKA_OOBE_THEME=light previews the light look.
+// ARKA_OOBE_ACCENT=blue (preview only) starts the preview with the Blue accent chosen.
 // ARKA_OOBE_SHOT=<file.png> (preview only) renders the window to a PNG and
 // quits.
 
@@ -48,9 +49,9 @@ fn main() {
 // run useradd directly. The password is passed on stdin, never in argv.
 // `dev` is the optional version control from Advanced options: the tools
 // ("vara", "git" or "vara,git") plus the name and email for commits. `zone` is the time
-// zone the user picked, a tz database name such as Europe/Berlin.
+// zone the user picked, a tz database name such as Europe/Berlin. `accent` is "green" or "blue".
 fn create_account(user: &str, pass: &str, autologin: bool, dark: bool, host: &str,
-                  dev: Option<(String, String, String)>, zone: &str) -> Result<(), String> {
+                  dev: Option<(String, String, String)>, zone: &str, accent: &str) -> Result<(), String> {
     use std::io::Write;
     let mut args = vec![
         "-n".to_string(),
@@ -67,6 +68,7 @@ fn create_account(user: &str, pass: &str, autologin: bool, dark: bool, host: &st
         None => args.extend([String::new(), String::new(), String::new()]),
     }
     args.push(zone.to_string());
+    args.push(accent.to_string());
     let mut child = std::process::Command::new("sudo")
         .args(&args)
         .stdin(std::process::Stdio::piped())
@@ -538,16 +540,21 @@ fn build_ui(app: &adw::Application) {
     top.set_margin_top(36);
     top.set_margin_start(44);
     top.set_margin_end(44);
-    // The ArkaOS logo in the brand green (logo.png is the same artwork as the start button).
-    // If the picture cannot be decoded the old drawn outline triangle stands in for it.
-    let mark: gtk4::Widget = match gtk4::gdk::Texture::from_bytes(&glib::Bytes::from_static(include_bytes!("logo.png"))) {
-        Ok(tex) => {
-            let img = gtk4::Image::from_paintable(Some(&tex));
-            img.set_pixel_size(26);
-            img.set_valign(gtk4::Align::Center);
-            img.upcast()
-        }
-        Err(_) => {
+    // The ArkaOS logo, green or blue to follow the accent (logo.png and logo-blue.png are the same
+    // artwork as the start button). If the pictures cannot be decoded, the old drawn outline
+    // triangle stands in for them.
+    let load_logo = |bytes: &'static [u8]| gtk4::gdk::Texture::from_bytes(&glib::Bytes::from_static(bytes)).ok();
+    let green_logo = load_logo(include_bytes!("logo.png"));
+    let blue_logo = load_logo(include_bytes!("logo-blue.png"));
+    let mark_img: Option<gtk4::Image> = green_logo.as_ref().map(|tex| {
+        let img = gtk4::Image::from_paintable(Some(tex));
+        img.set_pixel_size(26);
+        img.set_valign(gtk4::Align::Center);
+        img
+    });
+    let mark: gtk4::Widget = match &mark_img {
+        Some(img) => img.clone().upcast(),
+        None => {
             let area = gtk4::DrawingArea::new();
             area.set_size_request(18, 18);
             area.set_valign(gtk4::Align::Center);
@@ -739,6 +746,65 @@ fn build_ui(app: &adw::Application) {
         &page(&label("Name this computer", "oobe-title"),
               &label("It is the name this computer goes by on a network.", "oobe-sub"), &host_body),
         Some("computer"),
+    );
+
+    // accent: green (the ArkaOS default) or blue. It colours selections, buttons and the logo on
+    // the desktop and can be changed later in Settings; the boot splash stays green either way,
+    // because it is drawn before anyone has signed in. The logo in this header follows the choice.
+    let swatch = |rgb: (f64, f64, f64)| {
+        let area = gtk4::DrawingArea::new();
+        area.set_size_request(26, 26);
+        area.set_valign(gtk4::Align::Center);
+        area.set_draw_func(move |_, cr, w, h| {
+            cr.set_source_rgb(rgb.0, rgb.1, rgb.2);
+            cr.arc(w as f64 / 2.0, h as f64 / 2.0, (w.min(h) as f64) / 2.0 - 1.0, 0.0, std::f64::consts::TAU);
+            let _ = cr.fill();
+        });
+        area
+    };
+    let accent_choice = |title: &str, sub: &str, rgb: (f64, f64, f64)| -> gtk4::CheckButton {
+        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
+        row.set_margin_start(10);
+        row.append(&swatch(rgb));
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        col.append(&label(title, "oobe-choice-title"));
+        col.append(&label(sub, "oobe-choice-sub"));
+        row.append(&col);
+        let b = gtk4::CheckButton::new();
+        b.add_css_class("oobe-choice");
+        b.set_child(Some(&row));
+        b
+    };
+    let accent_green = accent_choice("Green", "The ArkaOS green.", (0.086, 0.78, 0.52));
+    let accent_blue = accent_choice("Blue", "The blue of the ArkaOS logo.", (0.31, 0.525, 1.0));
+    accent_blue.set_group(Some(&accent_green));
+    accent_green.set_active(true);
+    for c in [&accent_green, &accent_blue] {
+        c.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
+    }
+    let accent_name: Rc<dyn Fn() -> &'static str> = {
+        let blue = accent_blue.clone();
+        Rc::new(move || if blue.is_active() { "blue" } else { "green" })
+    };
+    if let Some(img) = mark_img.clone() {
+        let (green, blue) = (green_logo.clone(), blue_logo.clone());
+        accent_blue.connect_toggled(move |b| {
+            if let Some(tex) = if b.is_active() { blue.as_ref() } else { green.as_ref() } {
+                img.set_paintable(Some(tex));
+            }
+        });
+    }
+    // Design review only: ARKA_OOBE_ACCENT=blue starts the preview on Blue.
+    if preview.is_some() && std::env::var("ARKA_OOBE_ACCENT").as_deref() == Ok("blue") {
+        accent_blue.set_active(true);
+    }
+    let accent_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    accent_body.append(&accent_green);
+    accent_body.append(&accent_blue);
+    pages.add_named(
+        &page(&label("Choose your accent", "oobe-title"),
+              &label("The colour of selections, buttons and the logo. You can change it any time in Settings.", "oobe-sub"), &accent_body),
+        Some("accent"),
     );
 
     // time zone: the user's own choice from the tz database's list. Nothing is looked up, so no
@@ -964,7 +1030,7 @@ fn build_ui(app: &adw::Application) {
     root.add_named(&frame, Some("setup"));
 
     // ── navigation ────────────────────────────────────────────────────────
-    const ORDER: &[&str] = &["look", "name", "password", "computer", "zone", "signin", "privacy", "wheel", "working"];
+    const ORDER: &[&str] = &["look", "accent", "name", "password", "computer", "zone", "signin", "privacy", "wheel", "working"];
     let cur = Rc::new(Cell::new(0usize));
 
     // Privacy rows: Checking… while arkad is asked (it may still be starting),
@@ -1089,6 +1155,7 @@ fn build_ui(app: &adw::Application) {
         let (shown_once, show_gen, tut_reset) = (shown_once.clone(), show_gen.clone(), tut_reset.clone());
         let host_refresh = host_refresh.clone();
         let (zone_drop, zone_refresh) = (zone_drop.clone(), zone_refresh.clone());
+        let (accent_green, accent_blue) = (accent_green.clone(), accent_blue.clone());
         Rc::new(move |i: usize| {
             let from = cur.get();
             cur.set(i);
@@ -1112,7 +1179,7 @@ fn build_ui(app: &adw::Application) {
 
             let animate = motion_on && shown_once.get() && i != from && motion::animations_enabled();
             shown_once.set(true);
-            ridge.go_to(i.min(7), animate);
+            ridge.go_to(i.min(8), animate);
             let my = show_gen.get().wrapping_add(1);
             show_gen.set(my);
 
@@ -1123,6 +1190,7 @@ fn build_ui(app: &adw::Application) {
                     (pages.clone(), name_entry.clone(), pass_entry.clone(), light_tile.clone(), dark_tile.clone(), dark.clone(), next.clone());
                 let (check_privacy, host_refresh) = (check_privacy.clone(), host_refresh.clone());
                 let (zone_drop, zone_refresh) = (zone_drop.clone(), zone_refresh.clone());
+                let (accent_green, accent_blue) = (accent_green.clone(), accent_blue.clone());
                 move || {
                     let parts = if animate { pages.child_by_name(name).map(|p| motion::prepare(p.upcast_ref())) } else { None };
                     pages.set_visible_child_name(name);
@@ -1133,6 +1201,7 @@ fn build_ui(app: &adw::Application) {
                         "password" => { pass_entry.grab_focus(); }
                         "computer" => { host_refresh(); }
                         "zone" => { zone_refresh(); zone_drop.grab_focus(); }
+                        "accent" => { if accent_blue.is_active() { accent_blue.grab_focus() } else { accent_green.grab_focus() }; }
                         "privacy" => {
                             check_privacy();
                             next.grab_focus();
@@ -1183,6 +1252,7 @@ fn build_ui(app: &adw::Application) {
         let (name_entry, pass_entry, conf_entry, ask, dark, host_name) =
             (name_entry.clone(), pass_entry.clone(), conf_entry.clone(), ask.clone(), dark.clone(), host_name.clone());
         let zone_name = zone_name.clone();
+        let accent_name = accent_name.clone();
         let (vara_cb, git_cb, commit_name, commit_email) =
             (vara_cb.clone(), git_cb.clone(), commit_name.clone(), commit_email.clone());
         let next_btn = next.clone();
@@ -1190,8 +1260,9 @@ fn build_ui(app: &adw::Application) {
         let busy = Rc::new(Cell::new(false));
         Rc::new(move || match ORDER[cur.get()] {
             "look" => show(1),
+            "accent" => show(2),
             "name" => {
-                if valid_username(&name_entry.text()) { show(2) } else {
+                if valid_username(&name_entry.text()) { show(3) } else {
                     fail("Start with a lowercase letter, then use letters, numbers, _ or -.");
                 }
             }
@@ -1199,34 +1270,35 @@ fn build_ui(app: &adw::Application) {
                 let (p, c) = (pass_entry.text().to_string(), conf_entry.text().to_string());
                 if p.chars().count() < 8 { fail("Use at least 8 characters.") }
                 else if p != c { fail("The passwords don't match.") }
-                else { show(3) }
+                else { show(4) }
             }
             "computer" => {
-                if valid_hostname(&host_name()) { show(4) } else {
+                if valid_hostname(&host_name()) { show(5) } else {
                     fail("Start with a lowercase letter, then use letters, numbers or hyphens, up to 30 characters.");
                 }
             }
             "zone" => {
-                if valid_zone(&zone_name()) { show(5) } else { fail("Choose a time zone from the list.") }
+                if valid_zone(&zone_name()) { show(6) } else { fail("Choose a time zone from the list.") }
             }
             "signin" => {
                 if !(vara_cb.is_active() || git_cb.is_active()) {
-                    show(6)
+                    show(7)
                 } else if !arka_shell_common::commit_identity::valid_name(&commit_name.text()) {
                     fail("Enter the name to put on your commits.")
                 } else if !arka_shell_common::commit_identity::valid_email(commit_email.text().trim()) {
                     fail("Enter an email for your commits, like you@example.com.")
                 } else {
-                    show(6)
+                    show(7)
                 }
             }
-            "privacy" => show(7),
+            "privacy" => show(8),
             "wheel" => {
                 if busy.replace(true) { return; }
                 next_btn.set_sensitive(false);
-                show(8);
+                show(9);
                 let host = host_name();
                 let zone = zone_name();
+                let accent = accent_name();
                 let user = name_entry.text().to_string();
                 let (u, p, autologin, d) = (user.clone(), pass_entry.text().to_string(), !ask.is_active(), dark.get());
                 let tools: Vec<&str> = [("vara", vara_cb.is_active()), ("git", git_cb.is_active())]
@@ -1241,7 +1313,7 @@ fn build_ui(app: &adw::Application) {
                     let res = if preview {
                         Ok(())
                     } else {
-                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, &host, dev, &zone))
+                        gio::spawn_blocking(move || create_account(&u, &p, autologin, d, &host, dev, &zone, accent))
                             .await
                             .unwrap_or_else(|_| Err("account helper crashed".into()))
                     };
@@ -1249,7 +1321,7 @@ fn build_ui(app: &adw::Application) {
                         Ok(()) => finish(user),
                         Err(e) => {
                             busy.set(false);
-                            show(7);
+                            show(8);
                             fail(&format!("Couldn't create the account: {e}"));
                         }
                     }
