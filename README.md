@@ -251,8 +251,11 @@ exactly that: we haven't tried it.
   not run a full install. Not tested in a VM or on hardware.
 - **Keyboard shortcuts page.** Meta+/ opens a list of the ArkaOS shortcuts and
   KDE's window, split-screen and space shortcuts. Each key on it was checked
-  against KDE's shortcut settings or is set by an ArkaOS component. Not tested
-  with real key presses.
+  against KDE's shortcut settings or is set by an ArkaOS component. In a VM
+  (2026-11-01) we pressed most of them for real and the result matched the page;
+  Alt+`, Ctrl+F3 and Meta+Ctrl+Shift+arrows were not pressed, and two more were
+  pressed without checking the result. The list is in
+  [docs/SHORTCUTS.md](docs/SHORTCUTS.md). Not yet on hardware.
 - **Three spaces.** New accounts start with three virtual desktops and the top bar
   shows KDE's space switcher. Older accounts get two more once, at login. We have
   not seen the switcher working: our test session has no window manager. Not
