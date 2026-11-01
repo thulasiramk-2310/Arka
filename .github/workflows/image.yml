@@ -65,18 +65,30 @@ jobs:
       - name: Build
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
           FRESH: ${{ github.event_name == 'schedule' || inputs.fresh }}
+          SOURCE_URL: https://github.com/${{ github.repository }}
+          REVISION: ${{ github.sha }}
         run: |
-          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
           # The weekly run (which exists to pick up Fedora security updates) and a manual "fresh"
           # run ignore the cache and then replace it; every other run reuses it. Reusing a cached
           # package layer means its packages are as old as that layer, which is why the weekly
           # run must rebuild them.
           if [ "$FRESH" = true ]; then OPTS="--no-cache"; else OPTS="--cache-from $CACHE"; fi
-          sudo podman build --pull=newer --layers $OPTS --cache-to "$CACHE" \
-            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
-            --label org.opencontainers.image.revision=${{ github.sha }} \
-            -t localhost/arka:build .
+          # The build runs in a current podman: the one on the Ubuntu runner (4.9) fails to push
+          # build cache ("image not known"). The layers still go into the host's /var/lib/containers.
+          sudo podman run --rm --privileged --user root --security-opt label=disable \
+            -v /var/lib/containers:/var/lib/containers -v "$PWD":/src -w /src \
+            -e TOKEN -e ACTOR -e OPTS="$OPTS" -e CACHE -e SOURCE_URL -e REVISION \
+            quay.io/podman/stable:latest sh -c '
+              set -eu
+              podman version | head -2
+              echo "$TOKEN" | podman login ghcr.io -u "$ACTOR" --password-stdin
+              podman build --pull=newer --layers $OPTS --cache-to "$CACHE" \
+                --label "org.opencontainers.image.source=$SOURCE_URL" \
+                --label "org.opencontainers.image.revision=$REVISION" \
+                -t localhost/arka:build .
+            '
 
       - name: Split into small layers
         run: |
