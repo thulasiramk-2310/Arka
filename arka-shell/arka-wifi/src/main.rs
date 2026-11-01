@@ -27,7 +27,7 @@ fn build_ui(app: &adw::Application) {
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .title("WiFi Networks")
+        .title("Wi-Fi")
         .default_width(420)
         .default_height(520)
         .build();
@@ -111,7 +111,7 @@ fn do_scan(list: &gtk4::ListBox, networks: &Rc<RefCell<Vec<net::Network>>>) {
             _ => {
                 networks.borrow_mut().clear();
                 while let Some(child) = list.first_child() { list.remove(&child); }
-                let label = gtk4::Label::new(Some("WiFi scan unavailable. Check your adapter and retry."));
+                let label = gtk4::Label::new(Some("Wi-Fi scan unavailable. Check your adapter and retry."));
                 list.append(&label);
             }
         }
@@ -124,7 +124,7 @@ fn rebuild_rows(list: &gtk4::ListBox, networks: &[net::Network]) {
 
     if networks.is_empty() {
         let row = gtk4::ListBoxRow::new();
-        let lbl = gtk4::Label::new(Some("No WiFi networks found"));
+        let lbl = gtk4::Label::new(Some("No Wi-Fi networks found"));
         lbl.set_margin_top(20); lbl.set_margin_bottom(20);
         row.set_child(Some(&lbl));
         row.set_activatable(false);

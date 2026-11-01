@@ -254,7 +254,7 @@ if [[ $COLS -ge 80 ]]; then
         "" \
         "   ${G}*${E} ${B}Browser sandbox${E}" \
         "     ${D}Firefox runs isolated. It cannot read your home folder,${E}" \
-        "     ${D}WiFi passwords, or system configuration files.${E}"
+        "     ${D}Wi-Fi passwords, or system configuration files.${E}"
 else
     draw_narrow "CONFIGURING" "" "   Setting up your account..." ""
 fi

@@ -11,7 +11,7 @@ pub fn scan() -> Result<Vec<Network>, String> {
         .args(["--kill-after=2", "15", "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list"])
         .output()
         .map_err(|e| e.to_string())?;
-    if !out.status.success() { return Err("WiFi scan failed or timed out".into()); }
+    if !out.status.success() { return Err("Wi-Fi scan failed or timed out".into()); }
     let text = String::from_utf8_lossy(&out.stdout);
 
     let mut nets: Vec<Network> = text.lines().filter_map(parse_line).collect();
