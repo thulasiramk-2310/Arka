@@ -814,6 +814,8 @@ fn build_ui(app: &adw::Application) {
     let zone_labels: Vec<&str> = zones.iter().map(|z| z.as_str()).collect();
     let zone_drop = gtk4::DropDown::from_strings(&zone_labels);
     zone_drop.set_enable_search(true);
+    // Match anywhere in the name, so "Berlin" finds Europe/Berlin (the default only matches the start).
+    zone_drop.set_search_match_mode(gtk4::StringFilterMatchMode::Substring);
     zone_drop.set_expression(Some(gtk4::PropertyExpression::new(
         gtk4::StringObject::static_type(), None::<gtk4::Expression>, "string")));
     zone_drop.add_css_class("oobe-field");
