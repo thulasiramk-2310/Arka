@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/jpeg;image/png;image/webp;application/pdf;audio/mpeg;audio/x-wav;audio/flac;audio/x-flac;audio/ogg;audio/x-opus+ogg;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;
+Actions=smaller;
+X-KDE-Priority=TopLevel
+
+[Desktop Action smaller]
+Name=Make smaller
+Exec=arka-convert smaller %F
+Icon=application-x-compressed

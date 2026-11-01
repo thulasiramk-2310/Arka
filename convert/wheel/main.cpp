@@ -42,17 +42,25 @@ static QStringList formatsForFile(const QString &path)
     static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"};
     static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
     static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
+    static const QStringList office{"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"};
     QString ext = QFileInfo(path).suffix().toLower();
     QStringList out;
     if (image.contains(ext))
-        out = {"png", "jpg", "webp", "pdf"};
+        out = {"png", "jpg", "webp", "pdf", "smaller-image", "zip"};
     else if (audio.contains(ext))
-        out = {"mp3", "wav", "flac", "ogg", "m4a"};
+        out = {"mp3", "smaller-audio", "wav", "flac", "ogg", "m4a", "zip"};
     else if (video.contains(ext))
-        out = {"mp4", "mkv", "webm", "mp3"};
+        out = {"mp4", "smaller-video", "mkv", "webm", "mp3", "zip"};
     else if (ext == "pdf")
-        out = {"png", "smaller-pdf"};
+        out = {"png", "smaller-pdf", "docx", "zip"};
+    else if (office.contains(ext))
+        out = {"pdf", "zip"};
+    else if (QFileInfo(path).isFile())
+        out = {"zip"}; // any other file can still be put in a ZIP
     out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext); // not the format it already is
+    // Only these pictures can be made smaller; animated and old formats are left alone.
+    if (ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp")
+        out.removeAll(QStringLiteral("smaller-image"));
     return out;
 }
 

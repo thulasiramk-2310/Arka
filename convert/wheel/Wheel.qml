@@ -43,7 +43,9 @@ Window {
 
     readonly property var names: ({ png: "PNG", jpg: "JPEG", webp: "WEBP", pdf: "PDF", mp3: "MP3", wav: "WAV",
                                     flac: "FLAC", ogg: "OGG", opus: "OPUS", m4a: "M4A", mp4: "MP4", mkv: "MKV",
-                                    webm: "WEBM", "smaller-pdf": "SMALLER PDF", more: "MORE",
+                                    webm: "WEBM", "smaller-pdf": "SMALLER PDF", "smaller-image": "SMALLER",
+                                    "smaller-audio": "SMALLER", "smaller-video": "SMALLER", zip: "ZIP",
+                                    docx: "WORD (ROUGH)", more: "MORE",
                                     crop: "Crop", redact: "Black out", background: "Background", "rotate-left": "Rotate left",
                                     "rotate-right": "Rotate right", split: "Split pages", merge: "Merge PDFs", trim: "Trim" })
 
