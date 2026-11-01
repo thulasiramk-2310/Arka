@@ -62,8 +62,12 @@ class ArkaConvertTest(unittest.TestCase):
     def test_targets_leave_out_the_source_format(self):
         pic = self.png()
         got = convert("--targets", str(pic)).stdout.split()
-        self.assertEqual(got, ["jpg", "webp", "pdf", "clean"])
-        self.assertEqual(convert("--targets", str(self.dir / "x.txt")).stdout.split(), [])
+        self.assertEqual(got, ["jpg", "webp", "pdf", "smaller-image", "clean", "zip"])
+        # any other file can still be zipped, and nothing else
+        self.assertEqual(convert("--targets", str(self.dir / "x.txt")).stdout.split(), ["zip"])
+        # a GIF cannot be made smaller; a ZIP cannot be zipped again
+        self.assertNotIn("smaller-image", convert("--targets", str(self.dir / "x.gif")).stdout.split())
+        self.assertEqual(convert("--targets", str(self.dir / "x.zip")).stdout.split(), [])
 
     def test_image_to_each_format_keeps_original(self):
         pic = self.png()
@@ -358,15 +362,30 @@ class ArkaConvertTest(unittest.TestCase):
         pic = self.png("pic.png")
         target = ro / "pic.png"
         target.write_bytes(pic.read_bytes())
+        # Downloads is the fallback when a folder is read-only, so this test points HOME at a
+        # read-only folder too: it must never write into a real Downloads folder.
+        home = self.dir / "home"
+        home.mkdir()
         ro.chmod(0o555)
+        home.chmod(0o555)
         try:
             mod = load_script()
-            with self.assertRaises(RuntimeError) as caught:
-                mod.convert_one(str(target), "jpg")
+            old_home = os.environ.get("HOME")
+            os.environ["HOME"] = str(home)
+            try:
+                with self.assertRaises(RuntimeError) as caught:
+                    mod.convert_one(str(target), "jpg")
+            finally:
+                if old_home is None:
+                    os.environ.pop("HOME", None)
+                else:
+                    os.environ["HOME"] = old_home
             self.assertIn("can't be written to", str(caught.exception))
             self.assertEqual(sorted(os.listdir(ro)), ["pic.png"])
+            self.assertEqual(os.listdir(home), [])
         finally:
             ro.chmod(0o755)
+            home.chmod(0o755)
 
     def test_unicode_and_spaces_in_names(self):
         pic = self.png("ünïcödé фото 写真.png")
@@ -409,6 +428,161 @@ class ArkaConvertTest(unittest.TestCase):
         ok = subprocess.run(prefix + ["sh", "-c", f"echo x > '{scratch}/inside.txt'"], capture_output=True)
         self.assertEqual(ok.returncode, 0)
 
+    def noisy(self, name, fmt, size=(1600, 1200)):
+        from PIL import Image
+        path = self.dir / name
+        Image.effect_noise(size, 40).convert("RGB").save(path, fmt, **({"quality": 95} if fmt == "JPEG" else {}))
+        return path
+
+    def test_smaller_picture_is_smaller_and_keeps_the_original(self):
+        from PIL import Image
+        for name, fmt in (("photo.jpg", "JPEG"), ("shot.png", "PNG"), ("snap.webp", "WEBP")):
+            with self.subTest(name=name):
+                src = self.noisy(name, fmt)
+                before = src.read_bytes()
+                r = convert("smaller-image", str(src))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                out = self.dir / f"{src.stem} (smaller){src.suffix}"
+                self.assertTrue(out.exists(), self.names())
+                self.assertLess(out.stat().st_size, src.stat().st_size)
+                self.assertEqual(src.read_bytes(), before)
+                with Image.open(out) as im:
+                    self.assertEqual(im.format, fmt)
+
+    def test_smaller_picture_does_not_carry_camera_or_location_details(self):
+        from PIL import Image
+        for name, fmt in (("geo.jpg", "JPEG"), ("geo.webp", "WEBP")):
+            with self.subTest(name=name):
+                im = Image.effect_noise((1600, 1200), 40).convert("RGB")
+                exif = Image.Exif()
+                exif[0x010F] = "TestCameraMaker"
+                gps = exif.get_ifd(0x8825)
+                gps[1], gps[2], gps[3], gps[4] = "N", (12.0, 58.0, 30.0), "E", (77.0, 35.0, 10.0)
+                src = self.dir / name
+                im.save(src, fmt, quality=95, exif=exif)
+                self.assertEqual(Image.open(src).getexif().get(0x010F), "TestCameraMaker")  # it was there
+                self.assertEqual(convert("smaller-image", str(src)).returncode, 0)
+                after = Image.open(self.dir / f"geo (smaller){src.suffix}").getexif()
+                self.assertIsNone(after.get(0x010F))
+                self.assertEqual(len(after.get_ifd(0x8825)), 0)
+
+    def test_a_big_picture_is_scaled_down_to_2560(self):
+        from PIL import Image
+        src = self.noisy("huge.jpg", "JPEG", (3200, 2400))
+        convert("smaller-image", str(src))
+        with Image.open(self.dir / "huge (smaller).jpg") as im:
+            self.assertEqual(im.size, (2560, 1920))
+
+    def test_smaller_picture_that_cannot_shrink_is_refused_not_copied(self):
+        from PIL import Image
+        src = self.dir / "flat.png"
+        Image.new("RGB", (8, 8), "white").save(src, optimize=True)
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "already as small"):
+            mod.convert_one(src, "smaller-image")
+        self.assertEqual(self.names(), ["flat.png"])
+
+    def test_smaller_picks_the_right_action_for_each_kind(self):
+        pic = self.noisy("photo.jpg", "JPEG")
+        txt = self.dir / "notes.txt"
+        txt.write_text("hello\n" * 20)
+        r = convert("smaller", str(pic), str(txt))
+        self.assertEqual(r.returncode, 1)                       # the text file cannot be made smaller
+        self.assertIn("photo (smaller).jpg", self.names())
+        self.assertNotIn("notes (smaller).txt", self.names())
+
+    def test_zip_any_file_leaves_the_original_and_tests_clean(self):
+        import zipfile
+        odd = self.dir / "weird name (1).data"
+        odd.write_bytes(b"x" * 5000)
+        before = odd.read_bytes()
+        r = convert("zip", str(odd))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(odd.read_bytes(), before)
+        with zipfile.ZipFile(self.dir / "weird name (1).zip") as z:
+            self.assertEqual(z.namelist(), ["weird name (1).data"])
+            self.assertIsNone(z.testzip())
+            self.assertEqual(z.read("weird name (1).data"), before)
+
+    def test_zip_never_overwrites_and_refuses_folders_and_zips(self):
+        src = self.dir / "a.txt"
+        src.write_text("hi")
+        (self.dir / "a.zip").write_bytes(b"mine")
+        convert("zip", str(src))
+        self.assertEqual((self.dir / "a.zip").read_bytes(), b"mine")
+        self.assertIn("a (1).zip", self.names())
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "isn't a file"):
+            mod.convert_one(self.dir, "zip")
+        with self.assertRaisesRegex(RuntimeError, "already a ZIP"):
+            mod.convert_one(self.dir / "a (1).zip", "zip")
+
+    @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
+    def test_word_to_pdf_and_pdf_back_to_word(self):
+        import re
+        import zipfile
+        txt = self.dir / "doc.txt"
+        txt.write_text("ArkaOS test document\n\nA paragraph of real text that should survive the trip.\n")
+        subprocess.run(["soffice", "--headless", "--convert-to", "docx", "--outdir", str(self.dir), str(txt)],
+                       capture_output=True, check=True)
+        docx = self.dir / "doc.docx"
+        self.assertTrue(docx.exists())
+        r = convert("pdf", str(docx))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        pdf = self.dir / "doc.pdf"
+        self.assertTrue(pdf.read_bytes().startswith(b"%PDF"))
+        text = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout
+        self.assertIn("real text that should survive", " ".join(text.split()))
+        docx.unlink()
+        r = convert("docx", str(pdf))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        xml = zipfile.ZipFile(self.dir / "doc.docx").read("word/document.xml").decode()
+        self.assertIn("real text that should survive", " ".join(re.sub(r"<[^>]+>", " ", xml).split()))
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in self.names()))
+
+    @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
+    def test_a_scanned_pdf_is_refused_to_word_with_a_plain_reason(self):
+        from PIL import Image
+        scan = self.dir / "scan.pdf"
+        Image.new("RGB", (600, 800), "white").save(scan, "PDF")
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "looks scanned"):
+            mod.convert_one(scan, "docx")
+        self.assertEqual(self.names(), ["scan.pdf"])
+
+    @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
+    def test_a_spreadsheet_becomes_a_pdf(self):
+        csv = self.dir / "data.csv"
+        csv.write_text("name,score\nana,9\nravi,7\n")
+        subprocess.run(["soffice", "--headless", "--convert-to", "xlsx", "--outdir", str(self.dir), str(csv)],
+                       capture_output=True, check=True)
+        r = convert("pdf", str(self.dir / "data.xlsx"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((self.dir / "data.pdf").read_bytes().startswith(b"%PDF"))
+
+    @unittest.skipUnless("libmp3lame" in encoders(), "this ffmpeg has no MP3 encoder (ArkaOS's does)")
+    def test_smaller_sound_is_an_mp3_and_a_small_mp3_is_refused(self):
+        wav = self.dir / "tone.wav"
+        ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=3", str(wav))
+        r = convert("smaller-audio", str(wav))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = self.dir / "tone (smaller).mp3"
+        self.assertLess(out.stat().st_size, wav.stat().st_size)
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "already as small"):
+            mod.convert_one(out, "smaller-audio")
+
+    @unittest.skipUnless("libopenh264" in encoders(), "this ffmpeg has no H.264 encoder (ArkaOS's does)")
+    def test_smaller_video_is_an_mp4_no_wider_than_1280(self):
+        src = self.dir / "clip.mkv"
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=24:duration=2", "-c:v", "mpeg4", "-q:v", "1", str(src))
+        r = convert("smaller-video", str(src))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = self.dir / "clip (smaller).mp4"
+        self.assertTrue(out.exists(), self.names())
+        width = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=width", "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(width, "1280")
 
 if __name__ == "__main__":
     unittest.main()

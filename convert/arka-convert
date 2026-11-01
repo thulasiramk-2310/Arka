@@ -12,6 +12,8 @@
     arka-convert crop FILE X Y W H     keep a box of a picture (pixels)
     arka-convert redact FILE X Y W H [X Y W H ...]   black out boxes of a picture
     arka-convert background FILE COLOR[-COLOR2] PADDING   put a picture on a colour
+    arka-convert smaller FILE...       make each picture, sound, video or PDF smaller
+    arka-convert zip FILE...           put each file in its own ZIP (any kind of file)
 
 The converted file is saved beside the original (in Downloads when that folder is
 read-only) and never replaces anything:
@@ -34,12 +36,18 @@ import time
 IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"}
 AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
 VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
+# Word, Excel and PowerPoint files, and their open-format twins. LibreOffice turns them into PDFs.
+OFFICE = {"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"}
+# Pictures that "smaller" can shrink. Animated and old formats are left alone.
+SMALLER_IMAGE = {"png", "jpg", "jpeg", "webp"}
 
+# "zip" works for any file, including the kinds nothing else is offered for.
 TARGETS = {
-    "image": ["png", "jpg", "webp", "pdf", "clean"],
-    "pdf": ["png", "smaller-pdf", "clean"],
-    "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a", "clean"],
-    "video": ["mp4", "mkv", "webm", "mp3", "clean"],
+    "image": ["png", "jpg", "webp", "pdf", "smaller-image", "clean", "zip"],
+    "pdf": ["png", "smaller-pdf", "docx", "clean", "zip"],
+    "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a", "smaller-audio", "clean", "zip"],
+    "video": ["mp4", "mkv", "webm", "mp3", "smaller-video", "clean", "zip"],
+    "office": ["pdf", "zip"],
 }
 
 # "clean" (mat2) removes hidden details such as location, camera, author and
@@ -50,7 +58,10 @@ CLEAN_EXT = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "pdf",
 NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "pdf": "PDF", "mp3": "MP3",
          "flac": "FLAC", "wav": "WAV", "ogg": "Ogg Vorbis", "opus": "Opus",
          "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM",
-         "smaller-pdf": "a smaller PDF", "clean": "a copy without hidden details"}
+         "smaller-pdf": "a smaller PDF", "smaller-image": "a smaller picture",
+         "smaller-audio": "a smaller MP3", "smaller-video": "a smaller MP4",
+         "docx": "Word (layout may differ)", "zip": "a ZIP file",
+         "clean": "a copy without hidden details"}
 
 # ffmpeg output options for each target. -vn drops any cover art or video.
 AUDIO_OPTS = {
@@ -61,6 +72,11 @@ AUDIO_OPTS = {
     "opus": ["-vn", "-c:a", "libopus", "-b:a", "128k"],
     "m4a": ["-vn", "-c:a", "aac", "-b:a", "192k"],
 }
+# "Smaller" for sound and video: a lower bit rate in the format uploads accept almost everywhere.
+SMALLER_AUDIO_OPTS = ["-vn", "-c:a", "libmp3lame", "-q:a", "5"]
+SMALLER_VIDEO_OPTS = ["-map", "0:v:0", "-map", "0:a:0?", "-sn",
+                      "-vf", "scale=w='min(1280,iw)':h=-2", "-c:v", "libopenh264", "-b:v", "1500k",
+                      "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart"]
 VIDEO_OPTS = {
     "mp4": ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-c:v", "libopenh264",
             "-b:v", "5M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
@@ -83,6 +99,8 @@ def kind_of(path):
         return "audio"
     if ext in VIDEO:
         return "video"
+    if ext in OFFICE:
+        return "office"
     return None
 
 
@@ -90,7 +108,8 @@ def targets_for(path):
     kind = kind_of(path)
     ext = Path(path).suffix.lower().lstrip(".")
     ext = "jpg" if ext == "jpeg" else ext
-    return [t for t in TARGETS.get(kind, []) if t != ext and (t != "clean" or ext in CLEAN_EXT)]
+    return [t for t in TARGETS.get(kind, ["zip"])
+            if t != ext and (t != "clean" or ext in CLEAN_EXT) and (t != "smaller-image" or ext in SMALLER_IMAGE)]
 
 
 def save_dir(folder):
@@ -122,8 +141,9 @@ def free_name(directory, stem, ext):
     return candidate
 
 
-def sandbox_prefix(scratch):
-    """The bubblewrap command that runs a converter with no network."""
+def sandbox_prefix(scratch, private_tmp=False):
+    """The bubblewrap command that runs a converter with no network. private_tmp gives it an empty
+    /tmp of its own (LibreOffice insists on one and ignores TMPDIR); the real /tmp is not visible then."""
     if os.environ.get("ARKA_CONVERT_UNSANDBOXED") == "1":  # tests only
         return []
     bwrap = shutil.which("bwrap")
@@ -131,14 +151,18 @@ def sandbox_prefix(scratch):
         raise RuntimeError("the sandbox (bubblewrap) is not installed")
     return [bwrap, "--unshare-net", "--unshare-pid", "--unshare-ipc", "--die-with-parent",
             "--new-session", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
-            "--tmpfs", "/run/user", "--bind", str(scratch), str(scratch),
+            "--tmpfs", "/run/user", *(["--tmpfs", "/tmp"] if private_tmp else []),
+            "--bind", str(scratch), str(scratch),
             "--chdir", str(scratch), "--setenv", "HOME", str(scratch),
             "--setenv", "TMPDIR", str(scratch)]
 
 
-def run(scratch, cmd):
-    done = subprocess.run(sandbox_prefix(scratch) + cmd, stdin=subprocess.DEVNULL,
-                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+def run(scratch, cmd, timeout=None, private_tmp=False):
+    try:
+        done = subprocess.run(sandbox_prefix(scratch, private_tmp) + cmd, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"{cmd[0]} took too long and was stopped") from None
     if done.returncode != 0:
         lines = [l for l in done.stderr.strip().splitlines() if l.strip()]
         raise RuntimeError(lines[-1] if lines else f"{cmd[0]} failed")
@@ -205,14 +229,47 @@ def image_worker(src, dst, fmt):
         im.save(dst, names[fmt], **extra)
 
 
+def image_smaller_worker(src, dst, ext):
+    """Runs inside the sandbox: save a smaller copy of one picture with Pillow. A picture wider or
+    taller than 2560 px is scaled down to that. JPEG and WebP are saved at quality 78; PNG is saved as
+    small as it goes without losing anything. Camera and location details are not copied over."""
+    from PIL import Image, ImageOps
+    with Image.open(src) as im:
+        im.seek(0)
+        im = ImageOps.exif_transpose(im)  # keeps the picture turned the right way up
+        if max(im.size) > 2560:
+            im.thumbnail((2560, 2560), Image.LANCZOS)
+        if ext == "jpg":
+            if im.mode in ("RGBA", "LA", "P", "PA"):
+                im = im.convert("RGBA")
+                flat = Image.new("RGB", im.size, "white")
+                flat.paste(im, mask=im.split()[-1])
+                im = flat
+            elif im.mode != "RGB":
+                im = im.convert("RGB")
+            im.save(dst, "JPEG", quality=78, optimize=True, progressive=True)
+        elif ext == "webp":
+            im.save(dst, "WEBP", quality=78, method=6)
+        else:
+            im.save(dst, "PNG", optimize=True)
+
+
+def must_be_smaller(made, src):
+    """A "smaller" result that is not smaller is an error, not a copy that wastes space."""
+    if made.exists() and made.stat().st_size >= src.stat().st_size:
+        raise RuntimeError("it is already as small as this makes it")
+
+
 def convert_one(src, fmt, on_progress=None):
     """Convert src to fmt. Returns the list of files made. For sound and video,
     on_progress(fraction) is called as ffmpeg works through the file."""
     src = Path(src).resolve()
     kind = kind_of(src)
-    if kind is None:
+    if not src.is_file():
+        raise RuntimeError("it isn't a file")
+    if kind is None and fmt != "zip":
         raise RuntimeError("this kind of file can't be converted yet")
-    if fmt not in TARGETS[kind]:
+    if fmt not in TARGETS.get(kind, ["zip"]):
         raise RuntimeError(f"{NAMES.get(fmt, fmt)} isn't available for this kind of file")
     if fmt == "clean" and src.suffix.lower().lstrip(".") not in CLEAN_EXT:
         raise RuntimeError("hidden details can't be removed from this kind of file yet")
@@ -231,10 +288,55 @@ def convert_one(src, fmt, on_progress=None):
             shutil.copyfile(src, work)
             run(scratch, ["mat2", work.name])
             made = [scratch / f"in.cleaned{ext}"]
+        elif fmt == "zip":
+            # Plain archiving: the file is read and stored, nothing in it is opened or run.
+            import zipfile
+            tmp = scratch / "out.zip"
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+                archive.write(src, arcname=src.name)
+            made = [tmp]
+        elif fmt == "smaller-image":
+            ext = "jpg" if src.suffix.lower() == ".jpeg" else src.suffix.lower().lstrip(".")
+            tmp = scratch / f"out.{ext}"
+            run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
+                          "--image-smaller-worker", inp, str(tmp), ext])
+            must_be_smaller(tmp, src)
+            made = [tmp]
         elif kind == "image":
             tmp = scratch / f"out.{fmt}"
             run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
                           "--image-worker", inp, str(tmp), fmt])
+            made = [tmp]
+        elif kind == "office":
+            # LibreOffice does the work, inside the same sandbox, on a copy with a plain name.
+            work = scratch / f"in{src.suffix.lower()}"
+            shutil.copyfile(src, work)
+            run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
+                          "--norestore", "--convert-to", "pdf", "--outdir", str(scratch), str(work)],
+                timeout=240, private_tmp=True)
+            made = [scratch / "in.pdf"]
+        elif fmt == "docx":
+            # Word from a PDF carries the text over; the layout will differ, and a scanned PDF
+            # has no text to carry (there is no text recognition yet), so that is said plainly.
+            text = subprocess.run(sandbox_prefix(scratch) + ["pdftotext", "-l", "10", inp, "-"],
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout
+            if len(text.strip()) < 20:
+                raise RuntimeError("this PDF has no text to carry over (it looks scanned), and ArkaOS "
+                                   "can't read scanned pages yet")
+            work = scratch / "in.pdf"
+            shutil.copyfile(src, work)
+            run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
+                          "--norestore", "--infilter=writer_pdf_import", "--convert-to",
+                          "docx:MS Word 2007 XML", "--outdir", str(scratch), str(work)],
+                timeout=240, private_tmp=True)
+            made = [scratch / "in.docx"]
+        elif fmt in ("smaller-audio", "smaller-video"):
+            ext = "mp3" if fmt == "smaller-audio" else "mp4"
+            tmp = scratch / f"out.{ext}"
+            opts = SMALLER_AUDIO_OPTS if fmt == "smaller-audio" else SMALLER_VIDEO_OPTS
+            run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", inp, *opts, str(tmp)],
+                       media_seconds(scratch, inp), on_progress)
+            must_be_smaller(tmp, src)
             made = [tmp]
         elif fmt == "smaller-pdf":
             # Ghostscript's "ebook" setting: pictures at 150 dpi, text untouched.
@@ -261,13 +363,15 @@ def convert_one(src, fmt, on_progress=None):
         for i, m in enumerate(made):
             if fmt == "clean":
                 stem = f"{src.stem} (cleaned)"
-            elif fmt == "smaller-pdf":
+            elif fmt == "smaller-pdf" or fmt.startswith("smaller-"):
                 stem = f"{src.stem} (smaller)"
-            elif kind == "pdf":
+            elif kind == "pdf" and fmt == "png":
                 stem = src.stem if len(made) == 1 else f"{src.stem}-{i + 1}"
             else:
                 stem = src.stem
-            ext = {"smaller-pdf": "pdf", "clean": src.suffix.lstrip(".")}.get(fmt, fmt)
+            ext = {"smaller-pdf": "pdf", "smaller-image": "jpg" if src.suffix.lower() == ".jpeg" else src.suffix.lower().lstrip("."),
+                   "smaller-audio": "mp3", "smaller-video": "mp4",
+                   "clean": src.suffix.lstrip(".")}.get(fmt, fmt)
             final = free_name(out_dir, stem, ext)
             m.rename(final)
             results.append(final)
@@ -569,6 +673,9 @@ def main(argv):
     if len(argv) >= 5 and argv[1] == "--image-worker":
         image_worker(argv[2], argv[3], argv[4])
         return 0
+    if len(argv) >= 5 and argv[1] == "--image-smaller-worker":
+        image_smaller_worker(argv[2], argv[3], argv[4])
+        return 0
     if len(argv) >= 4 and argv[1] == "--notify-wait":
         notify_wait(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
         return 0
@@ -591,8 +698,10 @@ def main(argv):
         signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
     fmt, files = argv[1].lower(), argv[2:]
     fmt = "jpg" if fmt == "jpeg" else fmt
-    heavy = any(kind_of(f) in ("audio", "video") for f in files)
-    nid = notify(f"Converting to {NAMES.get(fmt, fmt)}",
+    # "smaller" means the smaller-... action that fits each file, so one menu entry covers a mixed selection.
+    per_file = {"image": "smaller-image", "pdf": "smaller-pdf", "audio": "smaller-audio", "video": "smaller-video"}
+    heavy = any(kind_of(f) in ("audio", "video", "office") for f in files) or fmt == "docx"
+    nid = notify("Making smaller" if fmt == "smaller" else f"Converting to {NAMES.get(fmt, fmt)}",
                  files[0] if len(files) == 1 else f"{len(files)} files", urgency="low") if heavy else None
     made, failed = [], []
     last = [0.0]
@@ -610,7 +719,10 @@ def main(argv):
     try:
         for i, f in enumerate(files):
             try:
-                made += convert_one(f, fmt, progress_for(i, Path(f).name))
+                one = per_file.get(kind_of(f), "") if fmt == "smaller" else fmt
+                if not one:
+                    raise RuntimeError("this kind of file can't be made smaller yet")
+                made += convert_one(f, one, progress_for(i, Path(f).name))
             except Exception as e:  # one bad file does not stop the rest
                 failed.append(f"{Path(f).name}: {e}")
     except (SystemExit, KeyboardInterrupt):
@@ -620,7 +732,8 @@ def main(argv):
     if failed:
         notify("Couldn't convert everything", "\n".join(failed[:4]), nid)
     elif len(made) == 1:
-        notify_done("Removed hidden details" if fmt == "clean" else "Converted", made[0], nid)
+        title = {"clean": "Removed hidden details", "smaller": "Made smaller", "zip": "Zipped"}.get(fmt, "Converted")
+        notify_done(title, made[0], nid)
     else:
         notify("Converted", f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the originals"), nid)
     return 1 if failed else 0
