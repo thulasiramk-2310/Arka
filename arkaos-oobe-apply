@@ -190,10 +190,14 @@ if [ "$host" != "arka" ]; then
 fi
 
 mkdir -p /etc/sddm.conf.d
-# Login screen follows the chosen look (arkaos-light is built from the same
-# theme with look=light; see Containerfile).
-if [ "$look" = "light" ]; then
-    printf '[Theme]\nCurrent=arkaos-light\n' > /etc/sddm.conf.d/30-arka-theme.conf
+# Login screen follows the chosen look and accent. Each combination is its own copy of the theme,
+# built into the image (arkaos, arkaos-light, arkaos-blue, arkaos-light-blue; see Containerfile),
+# because the login screen cannot read the accent from a user's files.
+theme=arkaos
+[ "$look" = "light" ] && theme=arkaos-light
+[ "$accent" = "blue" ] && theme="$theme-blue"
+if [ "$theme" != "arkaos" ]; then
+    printf '[Theme]\nCurrent=%s\n' "$theme" > /etc/sddm.conf.d/30-arka-theme.conf
 fi
 # The login screen takes its accent from the sddm account's colour scheme (see the Containerfile),
 # so a blue choice gives it the blue scheme. A failure here does not stop setup.

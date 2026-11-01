@@ -620,6 +620,17 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
            /usr/share/sddm/themes/arkaos-light/theme.conf && \
     sed -i -e 's/^Name=.*/Name=ArkaOS Light/' -e 's/^Theme-Id=.*/Theme-Id=arkaos-light/' \
            /usr/share/sddm/themes/arkaos-light/metadata.desktop && \
+    for t in arkaos:dark arkaos-light:light; do \
+      base=${t%%:*}; look=${t##*:}; blue=$base-blue; \
+      if [ $base = arkaos-light ]; then blue=arkaos-light-blue; fi; \
+      cp -a /usr/share/sddm/themes/$base /usr/share/sddm/themes/$blue && \
+      sed -i -e 's/^accent=.*/accent=#4f86ff/' \
+             -e "s|^background=.*|background=/usr/share/arka/wallpapers/default-$look-blue.png|" \
+             /usr/share/sddm/themes/$blue/theme.conf && \
+      grep -q '^accent=#4f86ff' /usr/share/sddm/themes/$blue/theme.conf && \
+      sed -i -e "s/^Name=.*/Name=ArkaOS $look blue/" -e "s/^Theme-Id=.*/Theme-Id=$blue/" \
+             /usr/share/sddm/themes/$blue/metadata.desktop || exit 1; \
+    done && \
     mv /usr/bin/firefox /usr/bin/firefox-unwrapped && \
     ln -sf firefox-sandbox /usr/bin/firefox && \
     for v in dark light; do \

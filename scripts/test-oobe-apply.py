@@ -377,6 +377,23 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'var/lib/sddm/.config/kdeglobals').read_text(), 'blue-scheme')
 
+    def login_theme(self, look, accent):
+        self.assertEqual(self.run_helper(look=look, accent=accent).returncode, 0)
+        return (self.root / 'etc/sddm.conf.d/30-arka-theme.conf').read_text()
+
+    def test_dark_blue_selects_the_blue_login_theme(self):
+        self.assertEqual(self.login_theme('dark', 'blue'), '[Theme]\nCurrent=arkaos-blue\n')
+
+    def test_light_blue_selects_the_light_blue_login_theme(self):
+        self.assertEqual(self.login_theme('light', 'blue'), '[Theme]\nCurrent=arkaos-light-blue\n')
+
+    def test_light_green_keeps_the_light_login_theme(self):
+        self.assertEqual(self.login_theme('light', 'green'), '[Theme]\nCurrent=arkaos-light\n')
+
+    def test_dark_green_keeps_the_image_login_theme_even_with_an_accent_argument(self):
+        self.assertEqual(self.run_helper(look='dark', accent='green').returncode, 0)
+        self.assertFalse((self.root / 'etc/sddm.conf.d/30-arka-theme.conf').exists())
+
     def test_green_leaves_the_login_screen_alone(self):
         self.assertEqual(self.run_helper(look='dark', accent='green').returncode, 0)
         self.assertFalse((self.root / 'var/lib/sddm/.config/kdeglobals').exists())
