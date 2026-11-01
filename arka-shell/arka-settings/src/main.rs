@@ -187,8 +187,20 @@ fn current_look() -> &'static str {
     if std::fs::read_to_string(p).map(|s| s.trim() == "light").unwrap_or(false) { "light" } else { "dark" }
 }
 
+/// The accent saved by arka-apply-look: "blue", or "green" when nothing (or something else) is saved.
+fn current_accent() -> &'static str {
+    let p = gtk4::glib::user_config_dir().join("arka-accent");
+    if std::fs::read_to_string(p).map(|s| s.trim() == "blue").unwrap_or(false) { "blue" } else { "green" }
+}
+
+/// The default ArkaOS wallpaper for a look and an accent (the blue ones have -blue on the end).
+fn default_wallpaper(look: &str, accent: &str) -> String {
+    let tail = if accent == "blue" { "-blue" } else { "" };
+    format!("/usr/share/arka/wallpapers/default-{look}{tail}.png")
+}
+
 fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
-    let b = page_box("Appearance", "Light or dark, and your wallpaper. Everything here stays yours to change.");
+    let b = page_box("Appearance", "Light or dark, green or blue, and your wallpaper. Everything here stays yours to change.");
 
     let group = adw::PreferencesGroup::new();
     group.set_title("Wallpaper");
@@ -198,7 +210,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
         .join("arkaos").join("wallpaper");
     let current_path = std::fs::read_to_string(&saved_wp)
         .ok()
-        .unwrap_or_else(|| format!("/usr/share/arka/wallpapers/default-{}.png", current_look()));
+        .unwrap_or_else(|| default_wallpaper(current_look(), current_accent()));
 
     let wp_row = adw::ActionRow::new();
     wp_row.set_use_markup(false); // the subtitle is a file path, which may contain & or <
@@ -246,6 +258,48 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     look_box.append(&dark_btn);
     look_row.add_suffix(&look_box);
     theme_group.add(&look_row);
+
+    // Green or blue. The same script applies it (colours, logo, wallpaper); the boot splash is
+    // drawn before sign-in and stays green.
+    let accent_row = adw::ActionRow::new();
+    accent_row.set_title("Accent colour");
+    accent_row.set_subtitle("Green or blue. The boot screen stays green.");
+    let accent_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    accent_box.add_css_class("linked");
+    accent_box.set_valign(gtk4::Align::Center);
+    let green_btn = gtk4::ToggleButton::with_label("Green");
+    let blue_btn = gtk4::ToggleButton::with_label("Blue");
+    blue_btn.set_group(Some(&green_btn));
+    if current_accent() == "blue" { blue_btn.set_active(true) } else { green_btn.set_active(true) }
+    accent_box.append(&green_btn);
+    accent_box.append(&blue_btn);
+    accent_row.add_suffix(&accent_box);
+    theme_group.add(&accent_row);
+    for (btn, accent) in [(&green_btn, "green"), (&blue_btn, "blue")] {
+        let wp = wp_row.clone();
+        let (gb, bb) = (green_btn.clone(), blue_btn.clone());
+        btn.connect_toggled(move |b| {
+            if !b.is_active() || current_accent() == accent { return; }
+            let wp = wp.clone();
+            let (gb, bb) = (gb.clone(), bb.clone());
+            glib::spawn_future_local(async move {
+                let look = current_look();
+                let ok = gtk4::gio::spawn_blocking(move || {
+                    Command::new("/usr/libexec/arka-apply-look").arg(look).arg(accent).status().map(|s| s.success()).unwrap_or(false)
+                }).await.unwrap_or(false);
+                if !ok {
+                    wp.set_subtitle("Couldn't switch the accent. Try System Settings > Colors & Themes.");
+                    // Show the accent that is still in use, not the one that was asked for.
+                    if current_accent() == "blue" { bb.set_active(true) } else { gb.set_active(true) }
+                    return;
+                }
+                let custom = std::fs::read_to_string(gtk4::glib::user_config_dir().join("arkaos").join("wallpaper")).unwrap_or_default();
+                if custom.is_empty() || custom.starts_with("/usr/share/arka/wallpapers/default") {
+                    wp.set_subtitle(&default_wallpaper(look, accent));
+                }
+            });
+        });
+    }
     for (btn, look) in [(&light_btn, "light"), (&dark_btn, "dark")] {
         let wp = wp_row.clone();
         let (lb, db) = (light_btn.clone(), dark_btn.clone());
@@ -266,7 +320,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
                 // Show the wallpaper that is now in use (unless the user picked their own).
                 let custom = std::fs::read_to_string(gtk4::glib::user_config_dir().join("arkaos").join("wallpaper")).unwrap_or_default();
                 if custom.is_empty() || custom.starts_with("/usr/share/arka/wallpapers/default") {
-                    wp.set_subtitle(&format!("/usr/share/arka/wallpapers/default-{look}.png"));
+                    wp.set_subtitle(&default_wallpaper(look, current_accent()));
                 }
             });
         });
@@ -302,7 +356,7 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     // Wire up Reset button
     let wp_row_ref2 = wp_row.clone();
     reset_btn.connect_clicked(move |_| {
-        let default = format!("/usr/share/arka/wallpapers/default-{}.png", current_look());
+        let default = default_wallpaper(current_look(), current_accent());
         apply_wallpaper(default, wp_row_ref2.clone());
     });
 
