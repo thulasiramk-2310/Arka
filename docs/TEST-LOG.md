@@ -70,18 +70,24 @@ kernel 7.2.13, XFS root). Nothing here has run on real hardware.
 - **Verified boot**: asked the booted XFS root to enable fs-verity on a file; the kernel answered "Inappropriate
   ioctl for device". XFS does not support it here, so nothing checks file contents by digest at boot.
 
-**Two defects were found in this build.** Both have a fix in the working tree that has not been built or tested
-in an image.
+**Two defects were found in that build, and both are fixed.** The fixes were built (commit `bab62b1`, the five fixes
+below) and checked in a fresh VM running that image, the same day:
 
-1. The time zone search only matched the start of a name: typing "Berlin" showed nothing, although the page says
-   to type "Berlin or Kolkata".
-2. A Blue choice in setup did not reach the login screen: its ring and button stayed green.
+1. **Time zone search.** Typing "Berlin" now lists Europe/Berlin. Before, it listed nothing.
+2. **Blue login screen.** After choosing Blue (Dark look) in setup, the login screen showed a blue avatar ring, a blue
+   password field and button, and the blue logo, with the clock on Berlin time.
 
-Minor: a notification after Make smaller on a video says "Converted" rather than "Made smaller".
+Also checked in that image: the focus ring on the accent choice is a neutral ring round the dot, not a blue pill; the
+shortcuts page lists Ctrl + Alt + T; the Wi-Fi app's title and message say "Wi-Fi"; Alt + `, Ctrl + F3, Ctrl + F1,
+Meta + Ctrl + Left and Meta + Ctrl + Shift + Right all did what the page says; and there were no crash records after
+setup, a reboot and a second login.
+
+Minor: a notification after Make smaller on a video says "Converted" rather than "Made smaller". Not fixed.
 
 ## Not yet checked
 
-- The two fixes above in a booted image.
+- The Light look together with Blue: the Light login theme and the blue copy of it were built but not seen.
+- Meta + Ctrl + Shift + Left was not pressed.
 - Anything on real hardware, including the Nokia laptop.
 - Several monitors, a real touchpad and a real phone.
-- Whether the plasmashell crash is gone, beyond the two logins above.
+- Whether the plasmashell crash is gone for good. There were none in these sessions, but it was rare.

@@ -15,7 +15,7 @@ It has not been tried on real hardware.
 | Alt + F1 | Open the app launcher | Pressed |
 | Ctrl + Alt + T | Open a terminal | Pressed |
 | Alt + Tab | Switch between windows | Pressed |
-| Alt + ` | Switch between windows of the same app | Not pressed yet |
+| Alt + ` | Switch between windows of the same app | Pressed (with two terminals open, the other one came to the front) |
 | Meta + W | Overview of all windows and spaces | Pressed |
 | Meta + D | Peek at the desktop | Pressed |
 | Meta + PgUp / PgDn | Maximise / minimise the window | Pressed |
@@ -23,11 +23,11 @@ It has not been tried on real hardware.
 | Meta + ← / → | Tile the window on the left or right half | Pressed |
 | Meta + ↑ / ↓ | Tile the window up or down. From a half it goes to a corner, and the other arrow undoes it | Pressed |
 | Meta + T | Edit the tile layout | Pressed |
-| Ctrl + F1, F2 | Go to space 1 or 2 | Pressed (F2 confirmed in the overview; F1 not checked separately) |
-| Ctrl + F3 | Go to space 3 | Not pressed yet |
+| Ctrl + F1, F2 | Go to space 1 or 2 | Pressed |
+| Ctrl + F3 | Go to space 3 | Pressed (the other windows were not there) |
 | Meta + Ctrl + → | Go to the next space | Pressed |
-| Meta + Ctrl + ← | Go to the previous space | Pressed, but its result was not checked |
-| Meta + Ctrl + Shift + ← / → | Move the window to the previous or next space | Not pressed yet |
+| Meta + Ctrl + ← | Go to the previous space | Pressed |
+| Meta + Ctrl + Shift + ← / → | Move the window to the previous or next space; the view follows the window | Pressed (→ only; ← not pressed) |
 | Meta + G | Show all spaces as a grid | Pressed |
 | Meta + V | Clipboard history, at the pointer | Pressed |
 | Meta + L | Lock the screen | Pressed |
