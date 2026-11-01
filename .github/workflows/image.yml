@@ -79,7 +79,7 @@ jobs:
           # build cache ("image not known"). The layers still go into the host's /var/lib/containers.
           sudo podman run --rm --privileged --user root --security-opt label=disable \
             -v /var/lib/containers:/var/lib/containers -v "$PWD":/src -w /src \
-            -e TOKEN -e ACTOR -e OPTS="$OPTS" -e CACHE -e SOURCE_URL -e REVISION \
+            -e TOKEN="$TOKEN" -e ACTOR="$ACTOR" -e OPTS="$OPTS" -e CACHE="$CACHE" -e SOURCE_URL="$SOURCE_URL" -e REVISION="$REVISION" \
             quay.io/podman/stable:latest sh -c '
               set -eu
               podman version | head -2
