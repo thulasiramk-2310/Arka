@@ -19,6 +19,29 @@ if [ -n "${seeded:-}" ] && [ "$(cat "$HOME/.config/arka-look" 2>/dev/null)" = li
         kwriteconfig6 --file "$f" --group General --key inactiveIndicatorColor2D '#3c4148'
     done
 fi
+# The launchers were renamed to match each app's window id (arka-dashboard became
+# org.arka.dashboard) so the dock can tell that a running app is the pinned one. An account
+# made before that still pins the old name, and the dock then shows two icons for one app:
+# the pinned old entry and the running window. Rename the old pins in place, keep the order
+# the user chose, and drop a name that ends up listed twice. Anything else is left alone.
+for d in KDE generic; do
+    f=$HOME/.config/crystal-dock/$d/panel_1.conf
+    [ -f "$f" ] || continue
+    awk '
+        /^launchers="/ {
+            body = $0; sub(/^launchers="/, "", body); sub(/"[ \t]*$/, "", body)
+            n = split(body, items, ";"); out = ""; delete seen
+            for (i = 1; i <= n; i++) {
+                it = items[i]
+                if (it ~ /^arka-(bluetooth|capsule|dashboard|hotkeys|perms|settings|sound|update|wifi)$/) it = "org.arka." substr(it, 6)
+                if (it == "" || (it in seen)) continue
+                seen[it] = 1; out = out (out == "" ? "" : ";") it
+            }
+            print "launchers=\"" out "\""; next
+        }
+        { print }' "$f" > "$f.new" && ! cmp -s "$f" "$f.new" && mv "$f.new" "$f"
+    rm -f "$f.new"
+done
 # Crystal Dock's own application menu (a KDE-logo button) used to be on; the ArkaOS
 # launcher in the top bar replaces it. Turn it off once on accounts that still have it;
 # a user who turns it back on afterwards keeps it.
