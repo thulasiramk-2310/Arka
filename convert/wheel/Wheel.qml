@@ -38,7 +38,7 @@ Window {
     readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.46)
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
-    readonly property color accent: "#16C784"     // ArkaOS's own colour, not the desktop accent
+    readonly property color accent: "#4DB491"     // ArkaOS's own colour, not the desktop accent
     readonly property color accentInk: "#06281B"
 
     readonly property var names: ({ png: "PNG", jpg: "JPEG", webp: "WEBP", pdf: "PDF", mp3: "MP3", wav: "WAV",

@@ -20,7 +20,7 @@ When someone sees a screenshot, they should immediately think: **this is ArkaOS.
 | `text.hi` | `#F5F7FA` | Primary text |
 | `text.lo` | `#9AA4B2` | Secondary text |
 | `text.muted` | `#5B6675` | Placeholders, disabled |
-| `accent` | `#16C784` | THE Arka green. Privacy = safe. Focus, toggles-on, links-primary, selection |
+| `accent` | `#4DB491` | THE Arka green. Privacy = safe. Focus, toggles-on, links-primary, selection |
 | `accent.dim` | `#0E8F5D` | Pressed accent |
 | `secondary` | `#2E7BFF` | Informational blue. Links, info badges. Never competes with accent |
 | `danger` | `#FF4D4F` | Destructive, denied, errors |

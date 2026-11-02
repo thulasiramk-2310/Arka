@@ -32,7 +32,7 @@ esac
 if [ "$ACCENT" = blue ]; then
     SUFFIX=-blue SCHEME_TAIL=Blue ACCENT_RGB="79,134,255"
 else
-    SUFFIX= SCHEME_TAIL= ACCENT_RGB="22,199,132"
+    SUFFIX= SCHEME_TAIL= ACCENT_RGB="77,180,145"
 fi
 
 # Remember the current Plasma style and icons: the panel only needs restarting

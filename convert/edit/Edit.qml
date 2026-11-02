@@ -20,7 +20,7 @@ Window {
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
     readonly property color line: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0.07, 0.1, 0.15, 0.12)
-    readonly property color accent: "#16C784"
+    readonly property color accent: "#4DB491"
     readonly property color accentInk: "#06281B"
 
     readonly property bool isImage: edit.tool !== "trim"
@@ -73,7 +73,7 @@ Window {
     property var drawing: null   // {x, y, w, h} in picture pixels while dragging
 
     // ---- background state
-    readonly property var swatches: ["#FFFFFF", "#F2EFE9", "#1E2128", "#16C784", "#2F6FED",
+    readonly property var swatches: ["#FFFFFF", "#F2EFE9", "#1E2128", "#4DB491", "#2F6FED",
                                      "#FFD9B8-#F58A7A", "#BFD9FF-#7A8CF5", "#CFF5E3-#3FC6A0", "#2B3140-#0E1117"]
     property int swatch: 5
     property real padding: 60

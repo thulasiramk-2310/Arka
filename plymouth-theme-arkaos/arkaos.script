@@ -1,5 +1,5 @@
 // ArkaOS boot splash: three triangles fade in staggered, glow pulses, ARKA
-// wordmark rises beneath. Design tokens: bg #07080e, accent #16C784.
+// wordmark rises beneath. Design tokens: bg #07080e, accent #4DB491.
 //
 // Normal boot shows an activity indicator, not a progress bar: Plymouth's
 // boot "progress" is an estimate from the previous boot and can stall or

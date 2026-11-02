@@ -383,7 +383,7 @@ fn decode_out(l: &gtk4::Label, text: &str, done: impl Fn() + 'static) {
             } else {
                 let n = NOISE[glib::random_int_range(0, NOISE.len() as i32) as usize];
                 markup.push_str(&format!(
-                    "<span foreground=\"#16c784\" fgalpha=\"60%\">{}</span>",
+                    "<span foreground=\"#4db491\" fgalpha=\"60%\">{}</span>",
                     glib::markup_escape_text(&n.to_string())
                 ));
             }

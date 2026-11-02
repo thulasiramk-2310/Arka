@@ -273,10 +273,10 @@ COPY ArkaOSBlue.colors /usr/share/color-schemes/ArkaOSBlue.colors
 COPY ArkaOSLightBlue.colors /usr/share/color-schemes/ArkaOSLightBlue.colors
 
 # Design-system defaults for every new user (read from /etc/skel on account
-# creation): ArkaOS color scheme, green #16C784 accent, Inter font — applied
+# creation): ArkaOS color scheme, green #4DB491 accent, Inter font — applied
 # from the first frame.
 RUN mkdir -p /etc/skel/.config && \
-    printf '[General]\nColorScheme=ArkaOS\nAccentColor=22,199,132\naccentColorFromWallpaper=false\nfont=Inter,10,-1,5,50,0,0,0,0,0\nfixed=JetBrains Mono,10,-1,5,50,0,0,0,0,0\nmenuFont=Inter,10,-1,5,50,0,0,0,0,0\nsmallestReadableFont=Inter,8,-1,5,50,0,0,0,0,0\ntoolBarFont=Inter,10,-1,5,50,0,0,0,0,0\n\n[KDE]\nwidgetStyle=Breeze\nLookAndFeelPackage=org.kde.breezedark.desktop\n\n[Icons]\nTheme=Arka\n\n[Sounds]\nTheme=Arka\n\n[WM]\nactiveFont=Inter,10,-1,5,75,0,0,0,0,0\n' \
+    printf '[General]\nColorScheme=ArkaOS\nAccentColor=77,180,145\naccentColorFromWallpaper=false\nfont=Inter,10,-1,5,50,0,0,0,0,0\nfixed=JetBrains Mono,10,-1,5,50,0,0,0,0,0\nmenuFont=Inter,10,-1,5,50,0,0,0,0,0\nsmallestReadableFont=Inter,8,-1,5,50,0,0,0,0,0\ntoolBarFont=Inter,10,-1,5,50,0,0,0,0,0\n\n[KDE]\nwidgetStyle=Breeze\nLookAndFeelPackage=org.kde.breezedark.desktop\n\n[Icons]\nTheme=Arka\n\n[Sounds]\nTheme=Arka\n\n[WM]\nactiveFont=Inter,10,-1,5,75,0,0,0,0,0\n' \
       > /etc/skel/.config/kdeglobals
 
 # First-login one-shot: apply the ArkaOS wallpaper + accent via the official
@@ -368,7 +368,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
     mkdir -p /tmp/cur /usr/share/icons/ArkaCursor/cursors && \
     cd /tmp/cur && \
     magick -size 96x96 xc:none \
-      -fill "#f5f7fa" -stroke "#16c784" -strokewidth 6 \
+      -fill "#f5f7fa" -stroke "#4db491" -strokewidth 6 \
       -draw "polygon 12,8 12,84 34,62 48,92 60,86 46,58 72,58" ptr96.png && \
     for s in 24 32 48; do \
       magick ptr96.png -resize ${s}x${s} ptr_${s}.png; \

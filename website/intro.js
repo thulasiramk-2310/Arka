@@ -16,10 +16,10 @@
 
   /* ---------- styles ---------- */
   var css = '\
-#ai{position:fixed;inset:0;z-index:99999;background:#f4f5f7;overflow:hidden;font-family:var(--sans);color:#111317;-webkit-font-smoothing:antialiased;--ink:#111317;--ink2:#4a505b;--line:#dfe3e8;--ac:#16c784;--acd:#0b7a53}\
+#ai{position:fixed;inset:0;z-index:99999;background:#f4f5f7;overflow:hidden;font-family:var(--sans);color:#111317;-webkit-font-smoothing:antialiased;--ink:#111317;--ink2:#4a505b;--line:#dfe3e8;--ac:#4db491;--acd:#0b7a53}\
 #ai *{box-sizing:border-box}\
 #ai .s{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}\
-#ai .bg{position:absolute;inset:-200px;background:radial-gradient(40% 40% at 25% 20%,#fff 0,rgba(255,255,255,0) 70%),radial-gradient(35% 35% at 80% 85%,rgba(22,199,132,.07) 0,rgba(22,199,132,0) 70%)}\
+#ai .bg{position:absolute;inset:-200px;background:radial-gradient(40% 40% at 25% 20%,#fff 0,rgba(255,255,255,0) 70%),radial-gradient(35% 35% at 80% 85%,rgba(77,180,145,.07) 0,rgba(77,180,145,0) 70%)}\
 #ai .a{position:absolute;white-space:nowrap}\
 #ai .c{left:0;width:1920px;text-align:center}\
 #ai .serif{font-family:var(--serif)}\
@@ -70,7 +70,7 @@
 #ai .prog{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--ac);z-index:3}';
 
   /* ---------- DOM ---------- */
-  var MARK = function (sz, k) { return '<svg data-k="' + k + '" width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24"><path data-k="' + k + 'o" pathLength="1" d="M12 3 L22 20 H2 Z" fill="none" stroke="#16c784" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="1" stroke-dashoffset="0"/><path data-k="' + k + 'i" d="M12 10 L17 18.5 H7 Z" fill="#16c784"/></svg>'; };
+  var MARK = function (sz, k) { return '<svg data-k="' + k + '" width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24"><path data-k="' + k + 'o" pathLength="1" d="M12 3 L22 20 H2 Z" fill="none" stroke="#4db491" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="1" stroke-dashoffset="0"/><path data-k="' + k + 'i" d="M12 10 L17 18.5 H7 Z" fill="#4db491"/></svg>'; };
   var ROWS = [
     ['Encrypted DNS', 'Requires system DNS lookups to be encrypted.'],
     ['Private network address', 'Uses a random hardware address on network connections.'],
@@ -125,7 +125,7 @@
   /* scene 12/13 */
   html += '<div data-k="s12"><div class="a" data-k="mk12" style="left:810px;top:230px">' + MARK(300, 'bg12') + '</div><div class="a c serif big" data-k="h12a" style="top:600px"></div><div class="a c serif big" data-k="h12b" style="top:730px"></div></div>';
   html += '<div data-k="s13"><div class="a" data-k="mk13" style="left:900px;top:200px">' + MARK(120, 'bg13') + '</div>';
-  html += '<a class="a btn" data-k="pill" href="#try" style="left:640px;top:410px;width:640px;height:104px;background:#fff;color:#111317;border:1px solid #dfe3e8;box-shadow:0 18px 40px rgba(17,19,23,.10);text-decoration:none"><span data-k="pfill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#16c784"></span><span style="position:relative;font-size:38px">Try it in a virtual machine</span></a>';
+  html += '<a class="a btn" data-k="pill" href="#try" style="left:640px;top:410px;width:640px;height:104px;background:#fff;color:#111317;border:1px solid #dfe3e8;box-shadow:0 18px 40px rgba(17,19,23,.10);text-decoration:none"><span data-k="pfill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#4db491"></span><span style="position:relative;font-size:38px">Try it in a virtual machine</span></a>';
   html += '<div class="a c" data-k="end1" style="top:590px;font-size:36px;color:#4a505b"></div></div>';
   html += '<div data-k="rips"></div><svg class="cur" data-k="cur" viewBox="0 0 32 32"><path d="M5 3 L5 27 L11 21.5 L15 30 L19 28.2 L15 19.8 L23 19.5 Z" fill="#111317" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>';
 
@@ -228,7 +228,7 @@ function launch() {
       var a = instant ? 1 : seg(t, t0 + i * .06, t0 + i * .06 + .4);
       var tick = instant ? 1 : seg(t, t0 + 1.1 + i * per, t0 + 1.1 + i * per + .01);
       r.style.opacity = eo(a); r.style.transform = 'translateY(' + (1 - eo(a)) * 24 + 'px)';
-      r.firstChild.style.background = tick ? '#16c784' : '#cfd5dc';
+      r.firstChild.style.background = tick ? '#4db491' : '#cfd5dc';
       var s = r.lastChild; s.textContent = tick ? 'Configured' : 'Checking'; s.style.color = tick ? '#0b7a53' : '#9aa2ad';
     });
   }
@@ -267,7 +267,7 @@ function launch() {
         put('ic' + n, { y: (1 - eo(p)) * 40 - eo(po) * 30, o: act ? eo(p) * (1 - po) : 0, b: (1 - eo(p)) * 8 });
       });
       draw('ic1c', seg(t, 4.1, 4.7)); draw('ic1h', seg(t, 4.55, 4.95));
-      var tog = seg(t, 5.2, 5.6); K.ic2k.setAttribute('cx', lerp(24, 56, eo(tog))); K.ic2t.setAttribute('fill', tog > .5 ? '#16c784' : '#d8dce2');
+      var tog = seg(t, 5.2, 5.6); K.ic2k.setAttribute('cx', lerp(24, 56, eo(tog))); K.ic2t.setAttribute('fill', tog > .5 ? '#4db491' : '#d8dce2');
       var out = seg(t, 6.85, 7.1); K.s2.style.opacity = 1 - out;
     }
     /* 3: logo 7-9 */
@@ -276,7 +276,7 @@ function launch() {
       draw('bg3o', bl); K.bg3i.style.opacity = seg(t, 7.7, 8.2); K.bg3i.style.transformOrigin = '12px 15px'; K.bg3i.style.transform = 'scale(' + (.4 + .6 * back(seg(t, 7.7, 8.3))) + ')';
       put('intro1', { y: (1 - eo(seg(t, 7.4, 8.0))) * 30, o: eo(seg(t, 7.4, 8.0)), b: (1 - eo(seg(t, 7.4, 8.0))) * 9 });
       var wp = seg(t, 7.9, 8.5); K.wm.style.opacity = eo(wp); K.wm.style.transform = 'translateY(' + (1 - eo(wp)) * 30 + 'px)';
-      var sw = seg(t, 8.2, 9.0); K.wm.style.backgroundImage = 'linear-gradient(100deg,#111317 ' + (sw * 140 - 50) + '%,#16c784 ' + (sw * 140 - 30) + '%,#111317 ' + (sw * 140 - 10) + '%)';
+      var sw = seg(t, 8.2, 9.0); K.wm.style.backgroundImage = 'linear-gradient(100deg,#111317 ' + (sw * 140 - 50) + '%,#4db491 ' + (sw * 140 - 30) + '%,#111317 ' + (sw * 140 - 10) + '%)';
       K.wm.style.webkitBackgroundClip = K.wm.style.backgroundClip = 'text'; K.wm.style.color = 'transparent'; K.wm.style.webkitTextFillColor = 'transparent';
       var shrink = eo(seg(t, 8.6, 9.2)); K.bigmark.style.transformOrigin = '150px 150px';
       put('bigmark', { x: -shrink * (810 + 150 - 146), y: -shrink * (300 + 150 - 114), s: 1 - shrink * .8 });
@@ -356,7 +356,7 @@ function launch() {
       K.cBs.style.color = phase === 2 ? '#a35a00' : '';
       K.cBh.textContent = 'New version';
       K.cBp.textContent = phase === 0 ? 'Prepared next to the one you use.' : phase === 1 ? 'Took over when you restarted.' : 'Went back to the previous version.';
-      K.cBb.style.width = (phase === 0 ? eo(seg(tl, 26.0, 27.0)) * 100 : 100) + '%'; K.cBb.style.background = phase === 2 ? '#c98a2b' : '#16c784';
+      K.cBb.style.width = (phase === 0 ? eo(seg(tl, 26.0, 27.0)) * 100 : 100) + '%'; K.cBb.style.background = phase === 2 ? '#c98a2b' : '#4db491';
       var rbp = seg(tl, 26.9, 27.4) * (1 - seg(tl, 27.9, 28.2));
       put('rb', { y: (1 - eo(seg(tl, 26.9, 27.4))) * 30, o: rbp, s: tl >= 27.6 && tl < 27.78 ? .95 : 1 });
       K.h8t.style.opacity = eo(seg(tl, 29.3, 29.8)); K.h8t.style.display = '';

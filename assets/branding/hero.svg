@@ -9,7 +9,7 @@
 <text x="600.0" y="181.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">KDE Plasma on KWin, in the ArkaOS look</text>
 <text x="600.0" y="200.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">Dock · launcher · top bar · Dashboard, Capsule, Permissions, Settings</text>
 <path d="M600.0 230 L600.0 260" fill="none" stroke="#8b96a5" stroke-width="1.25" stroke-linejoin="miter"/>
-<path d="M258 260H942L950 268V364L942 372H258L250 364V268Z" fill="#0f141a" stroke="#16c784" stroke-width="1.25" stroke-linejoin="miter"/>
+<path d="M258 260H942L950 268V364L942 372H258L250 364V268Z" fill="#0f141a" stroke="#4db491" stroke-width="1.25" stroke-linejoin="miter"/>
 <text x="600.0" y="303.0" text-anchor="middle" font-size="20" font-weight="700" fill="#f5f7fa">arkad, the privacy daemon</text>
 <text x="600.0" y="323.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">Applies and re-checks MAC randomization, encrypted DNS, hostname, IPv6 and firewall</text>
 <text x="600.0" y="342.4" text-anchor="middle" font-size="13" font-weight="400" fill="#a3adba">About every minute. It reports what it checked, not what is protected.</text>

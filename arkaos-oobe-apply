@@ -135,7 +135,7 @@ runuser -u "$user" -- bash -c '
         scheme=ArkaOS style=arkaos-dark icons=Arka laf=org.arkaos.dark.desktop wall=ArkaOS-Dark
     fi
     # The accent: the blue schemes and wallpapers have Blue on the end of their names.
-    accent_rgb="22,199,132"
+    accent_rgb="77,180,145"
     if [ "$accent" = blue ]; then scheme=${scheme}Blue wall=${wall}-Blue accent_rgb="79,134,255"; fi
     kg=$home/.config/kdeglobals
     colors=/usr/share/color-schemes/$scheme.colors

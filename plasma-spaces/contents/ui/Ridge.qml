@@ -15,7 +15,7 @@ Item {
     property int count: 1
     property int current: 0            // zero-based index of the current desktop
     property color lineColor: "#8b919b"
-    property color markColor: "#16c784"
+    property color markColor: "#4db491"
     property string tooltipPrefix: ""  // unused by the drawing; kept for the host
     signal activated(int index)
 

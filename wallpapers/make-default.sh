@@ -12,7 +12,7 @@ H=${3:-2160}
 LOOK=${4:-dark}
 ACCENT=${5:-green}
 case "$ACCENT" in
-  green) LINE_ACCENT="#16c784" ;;
+  green) LINE_ACCENT="#4db491" ;;
   blue)  LINE_ACCENT="#4f86ff" ;;
   *) echo "make-default: accent must be green or blue" >&2; exit 2 ;;
 esac

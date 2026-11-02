@@ -14,7 +14,7 @@ case "$FONT" in
   *LiberationSans-Bold*) [ -f "$FONT" ] ;;
   *) echo "make-assets: Liberation Sans Bold not found (got '$FONT')" >&2; exit 1 ;;
 esac
-G="#16c784"
+G="#4db491"
 
 # The logo (logo-src.png, the same green artwork as the start button) sits where the old
 # triangles were. The splash is always green: it is drawn before anyone has signed in, so it

@@ -9,7 +9,7 @@
   html { scroll-behavior: smooth; }
   body { margin: 0; background: #06070C; color: #EEF1F6; font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   * { box-sizing: border-box; }
-  a { color: #16C784; text-decoration: none; }
+  a { color: #4DB491; text-decoration: none; }
   h1, h2, h3, h4, p, ul, ol, li, pre, figure, table { margin: 0; padding: 0; }
   ul, ol { list-style: none; }
   code, pre { font-family: 'JetBrains Mono', monospace; }
@@ -27,7 +27,7 @@
   <header style="position:sticky;top:0;z-index:40;background:rgba(6,7,12,.9);backdrop-filter:blur(10px);border-bottom:1px solid #1C2230">
     <nav aria-label="Primary" style="max-width:1280px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
       <a href="../" style="display:flex;align-items:center;gap:10px;color:#EEF1F6">
-        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 21H2L12 2.5Z" fill="none" stroke="#16C784" stroke-width="1.6"/><path d="M12 10.5 16.8 19H7.2L12 10.5Z" fill="#16C784"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 22 21H2L12 2.5Z" fill="none" stroke="#4DB491" stroke-width="1.6"/><path d="M12 10.5 16.8 19H7.2L12 10.5Z" fill="#4DB491"/></svg>
         <span style="font-size:15px;font-weight:600">ArkaOS</span>
       </a>
       <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8B93A3;border-left:1px solid #1C2230;padding-left:16px">docs</span>
@@ -36,7 +36,7 @@
         <a class="nl" href="../#architecture" style="color:#8B93A3">Architecture</a>
         <a class="nl" href="../#status" style="color:#8B93A3">Status</a>
         <a class="nl" href="https://github.com/thulasiramk-2310/Arka" rel="noopener" style="color:#8B93A3">GitHub</a>
-        <a class="btnp" href="../#try" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#16C784;padding:9px 16px;border-radius:6px;font-weight:700;white-space:nowrap">Try ArkaOS</a>
+        <a class="btnp" href="../#try" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#4DB491;padding:9px 16px;border-radius:6px;font-weight:700;white-space:nowrap">Try ArkaOS</a>
       </div>
     </nav>
   </header>
@@ -66,19 +66,19 @@
       <h1 style="margin-top:14px;font-size:clamp(32px,4.4vw,46px);font-weight:700;letter-spacing:-.025em;line-height:1.08">ArkaOS, documented as it actually is.</h1>
       <p style="margin-top:18px;font-size:17px;line-height:1.65;color:#8B93A3;text-wrap:pretty">This is a Developer Preview. These pages describe what runs today, what we are still validating, and what does not exist yet. Where a claim cannot be demonstrated, it is labelled rather than softened.</p>
       <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:11px">
-        <span style="border:1px solid rgba(22,199,132,.4);color:#16C784;border-radius:4px;padding:6px 10px">● CONFIGURED</span>
+        <span style="border:1px solid rgba(77,180,145,.4);color:#4DB491;border-radius:4px;padding:6px 10px">● CONFIGURED</span>
         <span style="border:1px solid rgba(84,214,198,.4);color:#54D6C6;border-radius:4px;padding:6px 10px">◐ EXPERIMENTAL</span>
         <span style="border:1px solid #2A3244;color:#8B93A3;border-radius:4px;padding:6px 10px">○ NOT YET</span>
       </div>
 
       <section id="what-is-arkaos" style="margin-top:64px;border-top:1px solid #1C2230;padding-top:36px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">01</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">01</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What is ArkaOS?</h2>
-        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">ArkaOS is an independent Linux desktop built on the Fedora bootc immutable image foundation. System image files are read-only at runtime. Updates are staged atomically and a retained deployment can be selected for rollback; this does not guarantee a successful boot or restore personal files. On top of that foundation it adds two system services of its own — <code style="color:#16C784">arkad</code> for privacy enforcement and <code style="color:#54D6C6">arka-pulse</code> for reliability monitoring — and ships a KDE Plasma desktop.</p>
+        <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">ArkaOS is an independent Linux desktop built on the Fedora bootc immutable image foundation. System image files are read-only at runtime. Updates are staged atomically and a retained deployment can be selected for rollback; this does not guarantee a successful boot or restore personal files. On top of that foundation it adds two system services of its own — <code style="color:#4DB491">arkad</code> for privacy enforcement and <code style="color:#54D6C6">arka-pulse</code> for reliability monitoring — and ships a KDE Plasma desktop.</p>
         <p style="margin-top:16px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The premise is narrow on purpose. Privacy settings that a careful user would configure by hand are applied by default and re-checked while the system runs. The system can describe its own state, and it can be returned to a known-good one.</p>
 
-        <div style="margin-top:28px;background:#0E1119;border:1px solid #1C2230;border-left:2px solid #16C784;border-radius:10px;padding:24px">
-          <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:#16C784">WHY NOT JUST FEDORA KDE?</p>
+        <div style="margin-top:28px;background:#0E1119;border:1px solid #1C2230;border-left:2px solid #4DB491;border-radius:10px;padding:24px">
+          <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:#4DB491">WHY NOT JUST FEDORA KDE?</p>
           <pre style="margin-top:14px;font-size:12.5px;line-height:1.9;color:#EEF1F6;white-space:pre-wrap">ArkaOS
 = proven Linux foundation
 + opinionated privacy enforcement
@@ -99,11 +99,11 @@
       </section>
 
       <section id="getting-started" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">02</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">02</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">Getting started</h2>
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">There is no installer ISO to download yet; one can be built from source with scripts/make-iso.sh. Three routes work today. Start with the virtual machine unless you are testing hardware support on purpose.</p>
 
-        <h3 style="margin-top:36px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Run in a VM <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#16C784;border:1px solid rgba(22,199,132,.4);border-radius:4px;padding:4px 8px">RECOMMENDED</span></h3>
+        <h3 style="margin-top:36px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Run in a VM <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#4DB491;border:1px solid rgba(77,180,145,.4);border-radius:4px;padding:4px 8px">RECOMMENDED</span></h3>
         <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">QEMU/KVM with 4 GB of RAM and 40 GB of disk. Use only a disposable image file and no physical disk passthrough. Test rollback and personal-data preservation inside that guest.</p>
         <pre style="margin-top:16px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.8;color:#EEF1F6;overflow-x:auto">qemu-system-x86_64 \
   -enable-kvm -m 4096 -smp 4 \
@@ -132,7 +132,7 @@ bootc-image-builder --type qcow2 arkaos:dev</pre>
       </section>
 
       <section id="prove" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">03</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">03</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What we prove / what we don't</h2>
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Configured means a checked setting is in place, not that you are protected. These rows describe expected mechanisms, not live checks of your machine. Missing or stale observations remain unknown; every candidate needs fresh image tests.</p>
 
@@ -146,16 +146,16 @@ bootc-image-builder --type qcow2 arkaos:dev</pre>
       </section>
 
       <section id="how-it-works" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">04</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">04</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">How ArkaOS works</h2>
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Seven layers. The lower five are upstream Linux infrastructure; ArkaOS owns the two in the middle and the experience above them.</p>
 
         <figure style="margin:28px 0 0;background:#0E1119;border:1px solid #1C2230;border-radius:12px;padding:26px">
           <pre style="font-size:12.5px;line-height:2;color:#C6CCD8;overflow-x:auto;margin:0">You
  ↓
-<span style="color:#16C784">ArkaOS Desktop</span>          KDE Plasma session
+<span style="color:#4DB491">ArkaOS Desktop</span>          KDE Plasma session
  ↓
-<span style="color:#16C784">Applications + Sandbox</span>  Firefox · bubblewrap
+<span style="color:#4DB491">Applications + Sandbox</span>  Firefox · bubblewrap
  ↓
 <span style="color:#54D6C6">arkad + arka-pulse</span>     the Arka layer
  ↓
@@ -167,7 +167,7 @@ Hardware                x86_64 · UEFI</pre>
           <figcaption style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8B93A3">The interactive version of this stack lives on the <a href="../#architecture">homepage</a>.</figcaption>
         </figure>
 
-        <h3 id="arkad" style="margin-top:44px;font-size:21px;font-weight:600;color:#16C784">arkad · privacy daemon</h3>
+        <h3 id="arkad" style="margin-top:44px;font-size:21px;font-weight:600;color:#4DB491">arkad · privacy daemon</h3>
         <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">A system service that applies a fixed privacy state at boot and re-checks it while the machine runs. If something resets a setting, arkad puts it back and records that it did.</p>
         <pre style="margin-top:18px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.9;color:#EEF1F6;overflow-x:auto">$ arkactl status
 arkad                  enforcing
@@ -182,8 +182,8 @@ last re-check          14s ago</pre>
         <h3 id="pulse" style="margin-top:44px;font-size:21px;font-weight:600;color:#54D6C6">arka-pulse · reliability layer</h3>
         <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Local reliability monitoring and prediction. Currently focused on telemetry, detection, prediction and verification; recovery actions remain constrained and experimental. Nothing is sent off the device.</p>
         <ul style="margin-top:18px;display:flex;flex-direction:column;gap:12px;font-size:15px;line-height:1.6;color:#8B93A3">
-          <li style="display:flex;gap:12px"><span style="color:#16C784;font-family:'JetBrains Mono',monospace">●</span><span><strong style="color:#EEF1F6;font-weight:600">Telemetry</strong> — disk, memory, thermals, service failures, journal patterns, collected locally.</span></li>
-          <li style="display:flex;gap:12px"><span style="color:#16C784;font-family:'JetBrains Mono',monospace">●</span><span><strong style="color:#EEF1F6;font-weight:600">Detection</strong> — degradation surfaced with the signal that triggered it.</span></li>
+          <li style="display:flex;gap:12px"><span style="color:#4DB491;font-family:'JetBrains Mono',monospace">●</span><span><strong style="color:#EEF1F6;font-weight:600">Telemetry</strong> — disk, memory, thermals, service failures, journal patterns, collected locally.</span></li>
+          <li style="display:flex;gap:12px"><span style="color:#4DB491;font-family:'JetBrains Mono',monospace">●</span><span><strong style="color:#EEF1F6;font-weight:600">Detection</strong> — degradation surfaced with the signal that triggered it.</span></li>
           <li style="display:flex;gap:12px"><span style="color:#54D6C6;font-family:'JetBrains Mono',monospace">◐</span><span><strong style="color:#EEF1F6;font-weight:600">Prediction</strong> — early warning ahead of failure. Thresholds are still being calibrated.</span></li>
           <li style="display:flex;gap:12px"><span style="color:#54D6C6;font-family:'JetBrains Mono',monospace">◐</span><span><strong style="color:#EEF1F6;font-weight:600">Verification</strong> — confirming the system is in the state it reports.</span></li>
           <li style="display:flex;gap:12px"><span style="color:#8B93A3;font-family:'JetBrains Mono',monospace">○</span><span><strong style="color:#8B93A3;font-weight:600">Autonomous recovery</strong> — not shipped. arka-pulse recommends; you decide.</span></li>
@@ -197,7 +197,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
       </section>
 
       <section id="status" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
-        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#16C784">05</p>
+        <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">05</p>
         <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">Project status</h2>
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">ArkaOS is in Developer Preview. It is suitable for a VM, for reading, and for contributing. It is not suitable as your only machine.</p>
         <div id="statusCols" style="margin-top:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px"></div>
@@ -214,7 +214,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
           <p style="margin-top:8px;font-size:14.5px;color:#8B93A3">Start in a VM. Read the gaps first.</p>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <a class="btnp" href="#getting-started" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#16C784;padding:11px 18px;border-radius:6px;font-weight:700">Getting started →</a>
+          <a class="btnp" href="#getting-started" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#06070C;background:#4DB491;padding:11px 18px;border-radius:6px;font-weight:700">Getting started →</a>
           <a class="btng" href="../" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#EEF1F6;border:1px solid #1C2230;padding:11px 18px;border-radius:6px">Back to arkaos home</a>
         </div>
       </div>
@@ -261,7 +261,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
       var on = h === href, a = navLinks[h];
       a.style.color = on ? "#EEF1F6" : "#8B93A3";
       a.style.background = on ? "#0E1119" : "transparent";
-      a.style.borderLeftColor = on ? "#16C784" : "transparent";
+      a.style.borderLeftColor = on ? "#4DB491" : "transparent";
     });
   }
   setActive("#what-is-arkaos");
@@ -278,7 +278,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
 
   // ── proof table ──
   var TAGS = {
-    configured: { label: "● configured", color: "#16C784" },
+    configured: { label: "● configured", color: "#4DB491" },
     failed: { label: "● failed test", color: "#EAB94A" },
     experimental: { label: "◐ experimental", color: "#54D6C6" },
     "not yet": { label: "○ not yet", color: "#8B93A3" }
@@ -312,7 +312,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
 
   // ── status columns ──
   var STATUS = [
-    { head: "WORKS TODAY", color: "#16C784", items: ["Immutable bootc image, read-only root", "Atomic updates (previous image kept on disk)", "KDE Plasma session", "arkad privacy enforcement", "Firefox in a bubblewrap sandbox", "arka-pulse telemetry and detection"] },
+    { head: "WORKS TODAY", color: "#4DB491", items: ["Immutable bootc image, read-only root", "Atomic updates (previous image kept on disk)", "KDE Plasma session", "arkad privacy enforcement", "Firefox in a bubblewrap sandbox", "arka-pulse telemetry and detection"] },
     { head: "BEING VALIDATED", color: "#54D6C6", items: ["Broader bare-metal validation", "Reliability calibration", "Display and scaling refinement", "Graphical first-run UX", "Additional privacy UX"] },
     { head: "PLANNED NEXT", color: "#2A3244", accent: "#8B93A3", items: ["Publishing the installer", "Unlocking with the TPM", "Stronger measured-boot coverage", "Installer evolution", "ArkaWM exploration", "Agentic system interfaces (research)"] }
   ];
@@ -355,7 +355,7 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
       btn.setAttribute("aria-expanded", open ? "false" : "true");
       var ic = btn.querySelector(".ic");
       ic.style.transform = open ? "rotate(0deg)" : "rotate(45deg)";
-      ic.style.color = open ? "#8B93A3" : "#16C784";
+      ic.style.color = open ? "#8B93A3" : "#4DB491";
     });
     wrap.appendChild(btn); wrap.appendChild(body); faqList.appendChild(wrap);
   });

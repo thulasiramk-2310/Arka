@@ -15,7 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-GREEN = (22, 199, 132)
+GREEN = (77, 180, 145)
 BLUE = (79, 134, 255)            # the ice blue of the logo artwork
 ACCENT_KEYS = {"BackgroundAlternate", "BackgroundNormal", "DecorationFocus", "DecorationHover",
                "ForegroundActive", "accentColor", "activeBlend"}

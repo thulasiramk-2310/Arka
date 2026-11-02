@@ -22,7 +22,7 @@ pub const PALETTE_DARK: &str = "
 @define-color text_hi    #f1f1f1;
 @define-color text_lo    #a6a6a6;
 @define-color text_muted #8c8c8c;
-@define-color accent     #16c784;
+@define-color accent     #4db491;
 @define-color accent_dim #0e8f5d;
 @define-color secondary  #60a5fa;
 @define-color danger     #ff8074;
@@ -144,7 +144,7 @@ pub const ADW_OVERRIDES: &str = "
 @define-color popover_bg_color   #202329;
 @define-color popover_fg_color   #f1f1f1;
 @define-color accent_color       #3ddc97;
-@define-color accent_bg_color    #16c784;
+@define-color accent_bg_color    #4db491;
 @define-color accent_fg_color    #07080e;
 @define-color destructive_color  #ff8074;
 @define-color destructive_bg_color #e5484d;
@@ -168,7 +168,7 @@ pub const ADW_OVERRIDES_LIGHT: &str = "
 @define-color popover_bg_color   #ffffff;
 @define-color popover_fg_color   #111111;
 @define-color accent_color       #0e8a5f;
-@define-color accent_bg_color    #16c784;
+@define-color accent_bg_color    #4db491;
 @define-color accent_fg_color    #07080e;
 @define-color destructive_color  #b42318;
 @define-color destructive_bg_color #c42b1c;

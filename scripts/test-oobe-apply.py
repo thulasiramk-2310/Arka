@@ -358,7 +358,7 @@ class ApplyTests(unittest.TestCase):
                 flat = [' '.join(c) for c in self.written_settings()]
                 self.assertTrue(any(c.endswith('--key ColorScheme ArkaOS') for c in flat), flat)
                 self.assertFalse(any('Blue' in c for c in flat), flat)
-                self.assertTrue(any('--key AccentColor 22,199,132' in c for c in flat), flat)
+                self.assertTrue(any('--key AccentColor 77,180,145' in c for c in flat), flat)
 
     def test_a_bad_accent_is_rejected_before_account_creation(self):
         for accent in ('red', 'Blue', 'blue\nreboot', 'blue;id', '$(id)', ' blue'):

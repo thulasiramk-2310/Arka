@@ -37,7 +37,7 @@ PlasmoidItem {
         count: vdi.numberOfDesktops
         current: vdi.desktopIds.indexOf(vdi.currentDesktop)
         lineColor: Qt.alpha(Kirigami.Theme.textColor, 0.7)
-        markColor: root.accent === "blue" ? "#4f86ff" : "#16c784"
+        markColor: root.accent === "blue" ? "#4f86ff" : "#4db491"
         onActivated: function (index) { vdi.requestActivate(vdi.desktopIds[index]) }
         Layout.minimumWidth: implicitWidth
         Layout.preferredWidth: implicitWidth

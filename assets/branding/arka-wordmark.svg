@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120">
   <rect width="360" height="120" rx="12" fill="#07080e"/>
-  <path d="M54 20 L90 88 H18 Z" fill="none" stroke="#16c784" stroke-width="3" stroke-linejoin="miter"/>
+  <path d="M54 20 L90 88 H18 Z" fill="none" stroke="#4db491" stroke-width="3" stroke-linejoin="miter"/>
   <text x="112" y="72" font-family="Inter, 'Noto Sans', 'Segoe UI', sans-serif" font-size="48" font-weight="700" letter-spacing="9" fill="#f5f7fa">ARKA</text>
   <text x="114" y="96" font-family="Inter, 'Noto Sans', 'Segoe UI', sans-serif" font-size="12" letter-spacing="3" fill="#a3adba">YOUR COMPUTER IS YOURS</text>
 </svg>

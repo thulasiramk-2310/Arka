@@ -52,7 +52,7 @@ Rectangle {
             return want
         if (probe.status === Loader.Ready && probe.item && probe.item.fromScheme)
             return probe.item.accent
-        return config.fallbackAccent ? config.fallbackAccent : "#16c784"
+        return config.fallbackAccent ? config.fallbackAccent : "#4db491"
     }
 
     QtObject {
