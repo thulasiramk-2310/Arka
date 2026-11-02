@@ -33,5 +33,6 @@ It has not been tried on real hardware.
 | Meta + L | Lock the screen | Pressed |
 | Ctrl + Alt + Del | Log out, restart or shut down | Pressed (the dialog shows Sleep, Restart, Shut Down, Log Out, Cancel) |
 
-New accounts start with three spaces. The wheel keys work on the file you have selected, or on a file you drop on
-the ring.
+New accounts start with three spaces. The wheel keys open a ring that waits for a file: start dragging a file, then
+move it over the ring. To use a file without dragging, right-click it and choose Convert with the format wheel or
+Edit with the edit wheel.
