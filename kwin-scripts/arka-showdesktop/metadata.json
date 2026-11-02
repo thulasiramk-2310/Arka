@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Id": "arka-showdesktop",
+        "Name": "Show Desktop (keeps the dock)",
+        "Description": "Meta+D puts every window away and brings them back on the second press, without hiding the dock.",
+        "Authors": [{ "Name": "ArkaOS" }],
+        "EnabledByDefault": true,
+        "License": "MIT",
+        "Version": "1.0"
+    },
+    "KPackageStructure": "KWin/Script",
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

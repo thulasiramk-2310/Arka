@@ -69,6 +69,11 @@ COPY arka-stale-trigger-check /usr/libexec/arka-stale-trigger-check
 COPY autostart/arka-privacy-dots.desktop /etc/xdg/autostart/arka-privacy-dots.desktop
 COPY crystal-dock/arkaos-dock.desktop /etc/xdg/autostart/arkaos-dock.desktop
 COPY crystal-dock/arka-dock-start /usr/libexec/arka-dock-start
+# Meta+D: KDE's own Show Desktop hides the dock too, so a small KWin script minimizes the windows instead,
+# and a login step hands it the key.
+COPY kwin-scripts/arka-showdesktop /usr/share/kwin/scripts/arka-showdesktop
+COPY kwin-scripts/arka-showdesktop-keys /usr/libexec/arka-showdesktop-keys
+COPY autostart/arka-showdesktop-keys.desktop /etc/xdg/autostart/arka-showdesktop-keys.desktop
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/KDE/panel_1.conf
 COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/KDE/appearance.conf
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/generic/panel_1.conf

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Give the Meta+D key to the ArkaOS Show Desktop script, once per account.
+# KDE keeps its own Show Desktop on Meta+D, and one key can have only one owner, so KDE's action is
+# emptied first and the key is handed to the ArkaOS one. The two calls are what System Settings makes
+# when a shortcut is changed there. 6 = remember it (2) and do not reload an older choice (4);
+# 268435524 = Meta (0x10000000) + the D key (0x44).
+# Not remembered when it fails, so the next login tries again; remembered when it works, so a key the
+# user later picks in System Settings is never taken back.
+MARK=$HOME/.config/arka-showdesktop-keys
+[ -f "$MARK" ] && exit 0
+
+set_shortcut() {
+    busctl --user --timeout=5 call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel setShortcut "$@" >/dev/null
+}
+
+# The shortcut service may still be starting; try for about half a minute.
+tries=0
+until set_shortcut asaiu 4 kwin 'Show Desktop' KWin 'Show Desktop' 0 6; do
+    tries=$((tries + 1))
+    [ "$tries" -ge 30 ] && exit 1
+    sleep 1
+done
+set_shortcut asaiu 4 kwin 'ArkaOS Show Desktop' KWin 'Show the desktop and keep the dock' 1 268435524 6 || exit 1
+mkdir -p "$HOME/.config" && : > "$MARK"

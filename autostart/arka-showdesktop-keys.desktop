@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS Show Desktop shortcut
+Comment=Gives Meta+D to the Show Desktop that keeps the dock
+Exec=/usr/libexec/arka-showdesktop-keys
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2
+NoDisplay=true
