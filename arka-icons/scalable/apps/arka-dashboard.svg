@@ -2,8 +2,8 @@
 <defs>
 <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27cf95"/><stop offset="1" stop-color="#0c8f5f"/></linearGradient>
 <linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9f0e5"/></linearGradient>
-<!-- The ArkaOS peak is cut out of the shield so the plate shows through; a small dot inside it is the status light. -->
-<mask id="m"><rect width="64" height="64" fill="#fff"/><polygon points="32,22 41.5,41 22.5,41" fill="#000"/><circle cx="32" cy="35.2" r="3.6" fill="#fff"/></mask>
+<!-- The ArkaOS peak is cut out of the shield so the plate shows through. There is no dot inside it: a dot in a triangle reads as a warning sign. -->
+<mask id="m"><rect width="64" height="64" fill="#fff"/><polygon points="32,22 41.5,41 22.5,41" fill="#000"/></mask>
 </defs>
 <rect x="4" y="5.5" width="56" height="56" rx="13" fill="#000" opacity=".16"/>
 <rect x="4" y="4" width="56" height="56" rx="13" fill="url(#g)"/>
