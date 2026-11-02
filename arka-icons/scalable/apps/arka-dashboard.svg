@@ -1,15 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="113 110 1025 1025">
+<!-- Privacy Dashboard: the ArkaOS "A" with a progress ring and signal bars on a dark tile. Rebuilt as a vector from the supplied artwork so it stays sharp at every size. -->
 <defs>
-<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27cf95"/><stop offset="1" stop-color="#0c8f5f"/></linearGradient>
-<linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9f0e5"/></linearGradient>
-<!-- The ArkaOS peak is cut out of the shield so the plate shows through. There is no dot inside it: a dot in a triangle reads as a warning sign. -->
-<mask id="m"><rect width="64" height="64" fill="#fff"/><polygon points="32,22 41.5,41 22.5,41" fill="#000"/></mask>
+<linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18222b"/><stop offset="1" stop-color="#0c1219"/></linearGradient>
+<linearGradient id="leg" gradientUnits="userSpaceOnUse" x1="470" y1="290" x2="930" y2="890"><stop offset="0" stop-color="#7efde1"/><stop offset=".55" stop-color="#3ad29b"/><stop offset="1" stop-color="#2cae85"/></linearGradient>
+<linearGradient id="chev" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5bf8d0"/><stop offset="1" stop-color="#54f4c9"/></linearGradient>
+<linearGradient id="bar" gradientUnits="userSpaceOnUse" x1="571" y1="0" x2="680" y2="0"><stop offset="0" stop-color="#f4f8f9"/><stop offset="1" stop-color="#b3f7e7"/></linearGradient>
+<linearGradient id="arc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3dfac3"/><stop offset="1" stop-color="#10f9ac"/></linearGradient>
+<clipPath id="inside"><path d="M626 434 L292 886 L958 887 Z"/></clipPath>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".16"/><stop offset=".5" stop-color="#ffffff" stop-opacity=".05"/><stop offset="1" stop-color="#ffffff" stop-opacity=".02"/></linearGradient>
+<radialGradient id="glow"><stop offset="0" stop-color="#2fe0a0" stop-opacity=".34"/><stop offset="1" stop-color="#2fe0a0" stop-opacity="0"/></radialGradient>
 </defs>
-<rect x="4" y="5.5" width="56" height="56" rx="13" fill="#000" opacity=".16"/>
-<rect x="4" y="4" width="56" height="56" rx="13" fill="url(#g)"/>
-<rect x="4.5" y="4.5" width="55" height="55" rx="12.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
-<!-- A shield with a flat top and cut corners (the ArkaOS cut), sized like the symbols of the other apps. -->
-<path d="M23 14 H41 L45.5 18.5 V31 C45.5 40.5 39 46.5 32 50.5 C25 46.5 18.5 40.5 18.5 31 V18.5 Z" fill="#000" opacity=".16" transform="translate(0 1.3)"/>
-<path d="M23 14 H41 L45.5 18.5 V31 C45.5 40.5 39 46.5 32 50.5 C25 46.5 18.5 40.5 18.5 31 V18.5 Z" fill="url(#s)" mask="url(#m)"/>
-<path d="M23 14.5 H41 L45 18.5" fill="none" stroke="#fff" stroke-width="1" opacity=".9"/>
+
+<rect x="133" y="130" width="985" height="985" rx="230" fill="url(#tile)"/>
+<rect x="134.5" y="131.5" width="982" height="982" rx="228.5" fill="none" stroke="url(#rim)" stroke-width="4"/>
+<g clip-path="url(#inside)"><circle cx="330" cy="880" r="190" fill="url(#glow)"/><circle cx="925" cy="880" r="190" fill="url(#glow)"/></g>
+<!-- the A: two tapering legs -->
+<path d="M626 282 L966 897 L958 887 L626 434 L292 886 L286 895 Z" fill="url(#leg)"/>
+<!-- the base chevron -->
+<path d="M286 895 L626 808 L966 897 L626 879 Z" fill="url(#chev)"/>
+<!-- progress ring and bars -->
+<circle cx="626" cy="690" r="118" fill="none" stroke="#3b4d58" stroke-width="13"/>
+<path d="M626.0 572.0 A118 118 0 0 1 742.9 673.6" fill="none" stroke="url(#arc)" stroke-width="13" stroke-linecap="round"/>
+<rect x="571" y="695" width="15" height="27" rx="7.5" fill="url(#bar)"/>
+<rect x="603" y="678" width="15" height="44" rx="7.5" fill="url(#bar)"/>
+<rect x="633" y="660" width="15" height="62" rx="7.5" fill="url(#bar)"/>
+<rect x="664" y="645" width="15" height="77" rx="7.5" fill="url(#bar)"/>
 </svg>
