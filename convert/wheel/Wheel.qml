@@ -302,6 +302,13 @@ Window {
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
+            // The hollow is only for the pointer (nothing there can be picked). It is filled solid, because the
+            // text in the middle is drawn over whatever is behind the window, and a selected file showing
+            // through made it unreadable.
+            ShapePath {
+                fillColor: Qt.rgba(win.surface.r, win.surface.g, win.surface.b, 1); strokeColor: "transparent"
+                PathSvg { path: win.octagonPath(win.innerR) }
+            }
             ShapePath {
                 fillColor: win.surface; strokeColor: win.rim; strokeWidth: 1.5
                 fillRule: ShapePath.OddEvenFill
@@ -406,14 +413,14 @@ Window {
         Text {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: win.files.length ? (win.edit ? "No edits" : "No formats") : "Drop a file"
+            text: win.files.length ? (win.edit ? "No edits" : "No formats") : "Move the file"
             color: win.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 1.4
         }
         Text {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideMiddle
-            text: win.files.length ? win.fileLabel() : (win.edit ? "to edit it" : "to convert it")
+            text: win.files.length ? win.fileLabel() : "onto the wheel"
             color: win.muted; font.pixelSize: 12
         }
     }
@@ -422,7 +429,7 @@ Window {
     Rectangle {
         visible: win.placed && win.formats.length === 0
         opacity: ring.opacity
-        x: win.cx - width / 2; y: win.cy + win.outerR + 12
+        x: Math.max(8, Math.min(win.width - width - 8, win.cx - width / 2)); y: win.cy + win.outerR + 12
         width: hint.implicitWidth + 28; height: 34; radius: 17
         antialiasing: true
         color: win.surface; border.color: win.rim
@@ -432,7 +439,17 @@ Window {
             color: win.ink; font.pixelSize: 13
             text: win.files.length ? (win.edit ? "Edits work on pictures, PDFs, sound and video"
                                                 : "This file can't be converted yet")
-                                   : "Drag a file onto the wheel, or press Esc"
+                                   : "Move the file you are dragging over the wheel, or press Esc"
         }
+    }
+
+    // The way that needs no dragging: the files come with the click, so the options are there at once.
+    Text {
+        visible: win.placed && win.formats.length === 0 && win.files.length === 0
+        opacity: ring.opacity
+        x: Math.max(8, Math.min(win.width - width - 8, win.cx - width / 2)); y: win.cy + win.outerR + 12 + 34 + 10
+        color: win.muted; font.pixelSize: 12
+        text: win.edit ? "Or right-click a file and choose Edit with the edit wheel"
+                       : "Or right-click a file and choose Convert with the format wheel"
     }
 }
