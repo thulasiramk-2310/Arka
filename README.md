@@ -365,8 +365,12 @@ exactly that: we haven't tried it.
   undo and integrity checks) and set up Git with the name and email for your
   commits. Settings › Developer tools changes them later and can run a VARA Hub,
   a web view of your repositories that only this computer can reach. The Hub is
-  off until you switch it on. VARA is built from its v0.4.4 release. Tested in a
-  VM (2026-10-20). Not yet on hardware.
+  off until you switch it on. VARA is built from one exact commit of its main branch
+  (`aa33bca`, version 0.4.5-dev), ahead of its v0.4.4 release: it adds a choice of how
+  to settle merge conflicts, a fix for undo, and a redesigned Hub. The older v0.4.4 build was
+  tested in a VM (2026-10-20). This build passed VARA's own tests on Linux, macOS and Windows
+  and a Hub and merge test on 2026-11-03, but has not yet been booted in ArkaOS.
+  Not yet on hardware.
 
 Still a developer preview: the installer is new and VM-tested only, we have one
 hardware data point, and the known rough edges are in the release validation notes and the field notes.
