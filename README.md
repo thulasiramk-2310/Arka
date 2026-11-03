@@ -444,17 +444,17 @@ To build it yourself, see [docs/BUILDING.md](docs/BUILDING.md).
 
 ## Screenshots
 
-Fedora 44 candidate, light look, from a VM test of a built image:
+Fedora 44 candidate, light look. Taken in a VM on 2026-11-03 from the image built from commit `9c02682`; later changes are not in these pictures:
 
 <p align="center">
-  <img src="website/img/desktop-light.png" width="100%" alt="The ArkaOS desktop in its light look: slim top bar, the ArkaOS Dock with the app menu, Settings, Discover, Files, Firefox and, after a divider, Trash, and a pale wallpaper with the ArkaOS triangle in thin lines"/>
+  <img src="website/img/desktop-light.png" width="100%" alt="The ArkaOS desktop in its light look: a slim top bar with the ArkaOS logo and name, a search button, a status pill reading 6 of 6 settings configured, a small activity line, the system tray and the clock; the ArkaOS Dock with Files, Firefox, a terminal, Discover, the Privacy Dashboard, a calculator and Settings, then a divider and Trash; and a pale wallpaper with the ArkaOS triangle in thin lines"/>
 </p>
 <p align="center">
-  <img src="website/img/dock-light.png" width="60%" alt="Close-up of the ArkaOS Dock: icons grow around the pointer, a small label above the Files icon shows its name, Dolphin, and a dot under it shows it is running"/>
+  <img src="website/img/dock-light.png" width="60%" alt="Close-up of the ArkaOS Dock with the pointer on the Privacy Dashboard icon: icons grow around the pointer and a small label above it shows its name"/>
 </p>
 <p align="center">
-  <img src="website/img/setup-privacy-light.png" width="49%" alt="The last step of setup, Your privacy settings, listing six settings including the firewall, each marked Configured"/>
-  <img src="website/img/dashboard-light.png" width="49%" alt="The Privacy dashboard listing six settings, each marked Configured, with when they were last checked"/>
+  <img src="website/img/setup-privacy-light.png" width="49%" alt="Step 8 of 9 of setup, Your privacy settings, listing six settings including the firewall, each marked Configured"/>
+  <img src="website/img/dashboard-light.png" width="49%" alt="The Privacy Dashboard open on its Overview page, with Activity, Health and Updates and recovery in the sidebar, listing six settings each marked Configured, when they were last checked, and a Re-apply settings button"/>
 </p>
 
 <details>
