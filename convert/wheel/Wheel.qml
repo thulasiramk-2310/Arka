@@ -60,7 +60,8 @@ Window {
     function fileLabel() {
         if (!files.length) return ""
         if (files.length > 1) return files.length + " files"
-        return decodeURIComponent(String(files[0]).split("/").pop())
+        const name = String(files[0]).split("/").pop()
+        try { return decodeURIComponent(name) } catch (e) { return name }
     }
     function hubText() {
         if (hover >= 0 && hover < formats.length) return label(formats[hover])
@@ -88,6 +89,8 @@ Window {
     }
     // Pick slot i for these files: do it, or open the next ring for "More".
     function pick(i, urls) {
+        // Ignore a second click/Enter while the first choice is fading out.
+        if (closing || !visible || i < 0 || i >= formats.length || !urls.length) return
         if (formats[i] === "more") {
             files = urls; clickMode = true; hover = -1
             setFormats(rest)
@@ -99,7 +102,7 @@ Window {
     }
 
     function open(urls, editMode) {
-        closing = false; fade.stop(); ring.opacity = 0; ring.scale = 0.6
+        closing = false; fade.stop(); enter.stop(); leaveTimer.stop(); ring.opacity = 0; ring.scale = 0.6
         dark = wheel.dark()
         edit = editMode
         clickMode = urls.length > 0
@@ -126,9 +129,12 @@ Window {
         const n = formats.length
         if (!n) return -1
         const dx = x - cx, dy = y - cy, d = Math.sqrt(dx * dx + dy * dy)
-        if (d < innerR || d > outerR + 40) return -1
+        const angle = Math.atan2(dy, dx)
+        // Keep the central dead zone, and reject the transparent area outside
+        // the visible octagon instead of silently choosing its nearest slot.
+        if (d < innerR || d > octEdge(shapeR, angle)) return -1
         const step = 360 / n
-        let a = Math.atan2(dy, dx) * 180 / Math.PI + 90   // 0 = straight up
+        let a = angle * 180 / Math.PI + 90   // 0 = straight up
         return Math.round(((a % 360) + 360) % 360 / step) % n
     }
     function stepBy(by) {
@@ -139,6 +145,34 @@ Window {
         if (closing || !visible) return
         closing = true; placeTimer.stop(); leaveTimer.stop()
         fade.restart()
+    }
+    function handleDragExit() {
+        // A drop on More (or a late URI list) has become click mode. Do not
+        // dismiss its choices when that finished drag leaves the window.
+        if (!clickMode && !closing) leaveTimer.restart()
+    }
+
+    function handleDrop(drop) {
+        if (closing) { drop.accepted = false; return }
+        const urls = urlsFrom(drop)
+        if (!urls.length) { drop.accepted = false; close(); return }
+        const i = indexAt(drop.x, drop.y)
+        const available = listFor(urls)
+        if (!formats.length || (i >= 0 && formats[i] !== "more" && available.indexOf(formats[i]) < 0)) {
+            // Late URI delivery or changed files: display the actual drop's choices.
+            drop.accept(Qt.CopyAction)
+            files = urls; clickMode = true; hover = -1
+            setFormats(available)
+            if (!formats.length) close()
+            return
+        }
+        if (i >= 0) {
+            drop.accept(Qt.CopyAction)
+            pick(i, urls)
+        } else {
+            drop.accepted = false
+            close()
+        }
     }
 
     // One slot of the ring as an SVG path, with its corners cut at 45 degrees
@@ -245,33 +279,13 @@ Window {
             leaveTimer.stop()
             win.place(drag.x, drag.y)
             const urls = win.urlsFrom(drag)
-            if (!win.files.length && urls.length) { win.files = urls; win.setFormats(win.listFor(urls)) }
+            if (!win.clickMode && urls.length) { win.files = urls; win.setFormats(win.listFor(urls)) }
             win.hover = win.indexAt(drag.x, drag.y)
             drag.accept(Qt.CopyAction)
         }
         onPositionChanged: (drag) => { win.hover = win.indexAt(drag.x, drag.y) }
-        onExited: leaveTimer.restart()
-        onDropped: (drop) => {
-            const i = win.indexAt(drop.x, drop.y)
-            if (!win.formats.length) {
-                // Some desktops only hand over the file when it is dropped. Take it, then let the user pick.
-                const urls = win.urlsFrom(drop)
-                drop.accept(Qt.CopyAction)
-                if (urls.length) {
-                    win.files = urls; win.clickMode = true; win.hover = -1
-                    win.setFormats(win.listFor(urls))
-                }
-                if (!win.formats.length) win.close()
-                return
-            }
-            if (i >= 0) {
-                drop.accept(Qt.CopyAction)   // copy, so the original file is never moved
-                win.pick(i, drop.urls)
-            } else {
-                drop.accepted = false        // dropped off the ring: nothing happens to the file
-                win.close()
-            }
-        }
+        onExited: win.handleDragExit()
+        onDropped: (drop) => win.handleDrop(drop)
     }
 
     // Click mode, and placing the ring when the pointer first shows up.
