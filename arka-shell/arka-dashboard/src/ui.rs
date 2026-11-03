@@ -12,10 +12,6 @@ use crate::state::{DashboardState, StateUpdate};
 
 const CSS: &str = include_str!("style.css");
 
-/// arkad re-checks every 60 s; older than three rounds counts as stale, and a
-/// stale reading is never shown as green.
-const STALE_SECS: u64 = 180;
-
 // --- helpers ----------------------------------------------------------------
 
 fn load_css() {
@@ -201,17 +197,17 @@ fn build_health_group() -> (adw::PreferencesGroup, HealthRows) {
 }
 
 fn fmt_pct(v: f64) -> String {
-    if v < 0.0 { "—".into() } else { format!("{v:.0}%") }
+    if !v.is_finite() || !(0.0..=100.0).contains(&v) { "—".into() } else { format!("{v:.0}%") }
 }
 
 fn fmt_temp(v: f64) -> String {
-    if v < 0.0 { "—".into() } else { format!("{v:.0}°C") }
+    if !v.is_finite() || v < 0.0 { "—".into() } else { format!("{v:.0}°C") }
 }
 
 fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     if !r.available {
         rows.verdict.set_title("System health unavailable");
-        rows.verdict.set_subtitle("arka-pulse isn’t running on this system");
+        rows.verdict.set_subtitle("The health service could not be read, or its last sample is out of date");
         set_badge(&rows.verdict_badge, "Offline", false, true);
         rows.cpu.set_text("—");
         rows.mem.set_text("—");
@@ -222,7 +218,7 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
 
     // health/summary are the deterministic DETECT verdict — safe to state plainly.
     let (title, badge, good, warn) = match r.health.as_str() {
-        "OK"   => ("Your computer is healthy", "Healthy", true, false),
+        "OK"   => ("Monitored checks look normal", "Normal", true, false),
         "WARN" => ("Attention may be needed", "Warning", false, true),
         "CRIT" => ("Critical — action recommended", "Critical", false, false),
         _      => ("Checking system health…", "…", false, true),
@@ -423,6 +419,11 @@ fn populate_timeline(container: &gtk4::Box) {
 
 // --- build ------------------------------------------------------------------
 
+fn connect_collapsed_navigation(list: &gtk4::ListBox, split: &adw::NavigationSplitView) {
+    let split = split.clone();
+    list.connect_row_activated(move |_, _| split.set_show_content(true));
+}
+
 pub fn build(
     window: &adw::ApplicationWindow,
     tx: Sender<StateUpdate>,
@@ -482,11 +483,12 @@ pub fn build(
     let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     actions.set_margin_top(20);
     reapply_note.set_valign(gtk4::Align::Center);
-    reapply_note.set_wrap(false);
+    reapply_note.set_hexpand(true);
     actions.append(&reapply);
     actions.append(&reapply_note);
 
     let tech = label("", "mono");
+    tech.set_wrap_mode(gtk4::pango::WrapMode::WordChar);
     tech.set_selectable(true);
     let expander = gtk4::Expander::new(Some("Technical details"));
     expander.set_child(Some(&tech));
@@ -605,6 +607,7 @@ pub fn build(
     split.set_content(Some(&content_page));
     split.set_min_sidebar_width(200.0);
     split.set_max_sidebar_width(240.0);
+    connect_collapsed_navigation(&list, &split);
     {
         let bp = adw::Breakpoint::new(adw::BreakpointCondition::parse("max-width: 600sp").expect("breakpoint"));
         bp.add_setter(&split, "collapsed", Some(&true.to_value()));
@@ -618,12 +621,13 @@ pub fn build(
     // Keyboard: Ctrl+1..4 switch pages.
     {
         let keys = gtk4::EventControllerKey::new();
-        let list = list.clone();
+        let (list, split) = (list.clone(), split.clone());
         keys.connect_key_pressed(move |_, key, _, m| {
             use gtk4::gdk::Key;
             if m.contains(gtk4::gdk::ModifierType::CONTROL_MASK) {
                 let i = match key { Key::_1 => 0, Key::_2 => 1, Key::_3 => 2, Key::_4 => 3, _ => return glib::Propagation::Proceed };
                 list.select_row(list.row_at_index(i).as_ref());
+                split.set_show_content(true);
                 return glib::Propagation::Stop;
             }
             glib::Propagation::Proceed
@@ -658,6 +662,41 @@ pub fn build(
     })
 }
 
+#[cfg(test)]
+mod presentation_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_health_numbers_are_not_formatted_as_measurements() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            assert_eq!(fmt_pct(value), "—");
+            assert_eq!(fmt_temp(value), "—");
+        }
+        assert_eq!(fmt_pct(101.0), "—");
+        assert_eq!(fmt_pct(42.0), "42%");
+        assert_eq!(fmt_temp(55.0), "55°C");
+    }
+
+    #[test]
+    #[ignore = "requires a display; run with xvfb-run and --ignored"]
+    fn collapsed_sidebar_opens_content_even_when_reselecting_the_same_page() {
+        adw::init().expect("GTK display for navigation test");
+        let list = gtk4::ListBox::new();
+        let row = gtk4::ListBoxRow::new();
+        list.append(&row);
+        let split = adw::NavigationSplitView::new();
+        split.set_sidebar(Some(&adw::NavigationPage::new(&list, "Pages")));
+        split.set_content(Some(&adw::NavigationPage::new(&gtk4::Label::new(Some("Privacy")), "Privacy")));
+        split.set_collapsed(true);
+        connect_collapsed_navigation(&list, &split);
+        for _ in 0..2 {
+            split.set_show_content(false);
+            list.emit_by_name::<()>("row-activated", &[&row]);
+            assert!(split.shows_content());
+        }
+    }
+}
+
 fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label, tech: &gtk4::Label) {
     if !s.available {
         for r in rows { r.set(Row::Unavailable); }
@@ -667,7 +706,7 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label
     }
     let now = now_secs();
     let age = now.saturating_sub(s.last_check);
-    let stale = s.last_check == 0 || s.last_check > now || age >= STALE_SECS;
+    let stale = !s.check_is_fresh_at(now);
     let b = |v: bool| if v { Row::Configured } else { Row::Attention };
     let dns = match &s.dns_status {
         DnsStatus::Unknown(_) => Row::Checking,
@@ -684,6 +723,8 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label
     }
     fresh.set_text(&if s.last_check == 0 {
         "Waiting for the privacy service's first check…".to_string()
+    } else if s.last_check > now {
+        "The check time is in the future. These settings are not confirmed.".to_string()
     } else if stale {
         format!("Last checked {}. These may be out of date.", ago(age))
     } else {

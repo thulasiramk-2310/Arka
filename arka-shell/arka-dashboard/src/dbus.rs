@@ -95,6 +95,7 @@ async fn fetch_full(
     pulse: &PulseProxy<'_>,
     tx: &Sender<StateUpdate>,
 ) -> zbus::Result<()> {
+    let last_check = proxy.last_check().await?;
     let state = DashboardState {
         available:         true,
         dns_status:        DnsStatus::from(proxy.dns_status().await?),
@@ -105,12 +106,15 @@ async fn fetch_full(
         firewall:          proxy.firewall().await.unwrap_or(false),
         sandbox_status:    SandboxStatus::from(proxy.sandbox_status().await?),
         browser_sandbox:   BrowserSandbox::from(proxy.browser_sandbox().await?),
-        last_check:        proxy.last_check().await.unwrap_or(0),
+        last_check,
         // Best-effort: if arka-pulse is unreachable, reliability stays the
         // default "unavailable" rather than failing the whole privacy fetch.
         reliability:       tokio::time::timeout(std::time::Duration::from_secs(1), fetch_reliability(pulse))
             .await.ok().and_then(Result::ok).unwrap_or_default(),
     };
+    if proxy.last_check().await? != last_check {
+        return Err(zbus::Error::Failure("Privacy check changed while reading status".into()));
+    }
     tx.send(StateUpdate::Full(Box::new(state)))
         .map_err(|_| zbus::Error::Failure("Dashboard closed".into()))?;
     Ok(())

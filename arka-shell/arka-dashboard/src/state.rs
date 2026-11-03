@@ -62,6 +62,33 @@ impl Default for DashboardState {
     }
 }
 
+impl DashboardState {
+    /// Match the tray and desktop widget: strictly less than three 30 s polls.
+    pub fn check_is_fresh_at(&self, now: u64) -> bool {
+        self.available && self.last_check > 0 && self.last_check <= now
+            && now - self.last_check < 90
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DashboardState;
+
+    #[test]
+    fn freshness_rejects_unknown_future_and_ninety_second_old_checks() {
+        let mut s = DashboardState { available: true, last_check: 1_000, ..Default::default() };
+        assert!(s.check_is_fresh_at(1_000));
+        assert!(s.check_is_fresh_at(1_089));
+        assert!(!s.check_is_fresh_at(1_090));
+        assert!(!s.check_is_fresh_at(999));
+        s.last_check = 0;
+        assert!(!s.check_is_fresh_at(1_000));
+        s.last_check = 1_000;
+        s.available = false;
+        assert!(!s.check_is_fresh_at(1_000));
+    }
+}
+
 #[derive(Debug)]
 pub enum StateUpdate {
     Full(Box<DashboardState>),
