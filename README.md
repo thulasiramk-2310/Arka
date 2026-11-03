@@ -70,7 +70,8 @@ This is source work plus the test results we wrote down along the way. The
 rollback and installer results (2026-10-11 and 2026-10-12) are written up in
 [Release Validation](docs/RELEASE-VALIDATION.md). The other dated results come
 from our own test sessions and are not all recorded in a repo document. Everything
-here was tested in a VM between 2026-10-11 and 2026-10-26 unless it says otherwise. "Not yet on hardware" means
+here was tested in a VM between 2026-10-11 and 2026-11-01 unless it says otherwise. Changes from 2026-11-02
+are source only: we have not seen them in a booted ArkaOS VM. "Not yet on hardware" means
 exactly that: we haven't tried it.
 
 ### Real hardware
@@ -205,8 +206,10 @@ exactly that: we haven't tried it.
   Dark, at 150% scaling, and on two virtual screens. Not yet on hardware.
 - **Top bar on every screen.** Each screen gets the bar with the launcher, clock
   and tray, including a screen plugged in later. A bar you remove from a screen
-  stays removed. Tested in a VM with two virtual screens (2026-10-20). Not yet
-  with real monitors.
+  stays removed. The bar has the ArkaOS wordmark (no tagline), one search button, a status pill and a
+  marker for your three spaces. In a VM on 2026-11-01 each of them appeared once, on the first desktop and
+  again after a reboot. A left click on the privacy shield opened its menu with the six settings and recent
+  events. Tested in a VM with two virtual screens (2026-10-20). Not yet with real monitors.
 - **Window snapping.** Meta+Left or Meta+Right puts a window on half of the
   screen. Dragging it to a screen edge shows a preview. This is KDE's own tiling,
   unchanged. Tested in a VM (2026-10-25) with the keyboard and by dragging. Not
@@ -226,7 +229,8 @@ exactly that: we haven't tried it.
   leave out Weather and Vaults. Both can be switched back on in the tray's
   settings. Tested in a VM (2026-10-20).
 - **App icons.** One family with a distinct colour per app. Firefox and the file
-  manager keep their own icons.
+  manager keep their own icons. The Privacy Dashboard's icon (2026-11-02) is the green ArkaOS "A" with a
+  progress ring and signal bars on a dark tile; it is a source change, not yet seen in a VM.
 - **Night light.** Settings › Appearance has a switch for warmer screen colours
   from 8 pm to 6 am. KDE's own schedule looks up your location by default. This
   one uses fixed times, so the switch asks for no location (we read this in the
@@ -259,6 +263,25 @@ exactly that: we haven't tried it.
   shows KDE's space switcher. Older accounts get two more once, at login. We have
   not seen the switcher working: our test session has no window manager. Not
   tested in a VM or on hardware.
+- **Green or Blue accent.** Setup has an accent step, and Settings › Appearance changes it later. The logo
+  in the top bar and on the start button, the wallpaper line, the spaces marker and the login screen follow it.
+  Blue has its own colour schemes and wallpapers. In a VM on 2026-11-01 the setup showed the logo in Blue, the
+  accent switched within seconds from Settings, Green stayed after a reboot, and the Blue login screen showed
+  a blue ring, field, button and logo (Dark look). The Light look with Blue was built but the login screen for
+  it was not seen. On 2026-11-02 the green was softened to `#4DB491`; that colour has not been seen on a
+  screen yet.
+- **Time zone step in setup.** You pick a time zone by typing any part of its name ("Berlin" finds
+  Europe/Berlin), with a live clock line for the zone you chose. It is applied after the reboot. A VM check on
+  2026-11-01 found that typing "Berlin" listed nothing; that was fixed and checked in a fresh VM the same day.
+- **The logo on the boot and login screens.** The boot splash and the login screen show the ArkaOS logo. Both
+  were seen in a VM on 2026-11-01; the shutdown screen has the logo in the source but was not looked at.
+- **Meta+D keeps the dock.** KDE's own Show Desktop hides the dock, so Meta+D now minimises the windows with a
+  small KWin script instead, and the dock stays. Source only; not yet seen in an ArkaOS VM.
+- **One dock icon per app.** Apps are launched under names that match their window ids so the dock can tell
+  that a running app is the pinned one. An account made before the rename still pinned the old name and showed
+  two icons for one app, so the dock's start script now renames old pins at login and keeps the order you
+  chose. Ten scripted checks cover it (an old pin, every renamed app, a name listed twice, your own pins kept,
+  running twice changes nothing). Not yet seen in a VM.
 - **Computer name and wheel tutorial in setup.** Setup now asks for a computer
   name (default `arka`, which is the same on every ArkaOS computer) and ends with
   a short practice of the format wheel. We checked each page as a screenshot of
@@ -287,9 +310,12 @@ exactly that: we haven't tried it.
   their OpenDocument twins) become PDFs through LibreOffice. A PDF that has text
   can become a Word file, but the layout will differ, and a scanned PDF is refused
   because ArkaOS has no text recognition yet. Everything runs in the same sandbox
-  with no network access. Tested with real files on the development laptop
-  (2026-11-01), not yet in a VM or on hardware. The smaller-video step needs the
-  OpenH264 encoder that ArkaOS ships and that laptop lacks, so it is untested.
+  with no network access. Tested in a VM (2026-11-01) with real files, inside the image's own sandbox: a photo
+  went from 6.3 MB to 1.8 MB (camera and location details gone), a PNG from 6.9 to 6.5 MB, a WAV from 882 KB
+  to 21 KB as MP3, a video from 3.7 MB to 0.6 MB (H.264, 720p; the OpenH264 encoder works in the image), and
+  ZIP, Word and Excel to PDF, and PDF to Word worked. A scanned PDF made no Word file, as intended, and a GIF was not
+  shrunk. After *Make smaller* on a video the notification says "Converted" rather than "Made smaller"; we
+  have not fixed that. Not yet on hardware.
 - **Remove hidden details.** Photos, PDFs, sound and video files often carry
   details you can't see: where a photo was taken, the camera, the author's name,
   the software that made a document. *Remove hidden details* in Dolphin's
@@ -311,7 +337,10 @@ exactly that: we haven't tried it.
   converted a picture to WebP and left the original alone, and the edit wheel
   opened the crop window. Drags from Gwenview and Firefox were tested on
   2026-10-19. That was the earlier round look; the octagon look (2026-10-27) has
-  only been checked in screenshots. Not yet with a real touchpad.
+  only been checked in screenshots. On 2026-11-02 the ring's middle became solid, so a file selected behind it no longer shows through, and
+  until a file is over the ring it says "Move the file onto the wheel" and points to the right-click menu as
+  the way that needs no dragging. The shortcuts page now says the wheel keys wait for a file you are dragging.
+  Source only; not yet seen in a VM. Not yet with a real touchpad.
 - **Edit from the right-click menu.** For a picture: *Crop* (drag the corners, or
   pick 1:1, 16:9, 3:2, 4:3 or 3:4), *Black out parts*, *Add a background* (a
   colour or gradient, and how much room to leave) and *Rotate left* or *right*.
