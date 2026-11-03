@@ -41,32 +41,25 @@ RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /b
 COPY convert/edit/ /build-edit/
 RUN cmake -S /build-edit -B /build-edit/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build-edit/out -j"$(nproc)"
 
-# Stage 2d: VARA, version control (github.com/thulasiramk-2310/vara), built from one exact commit of its
-# main branch, with its Hub web interface. This is a development build ahead of the v0.4.4 release (it has
-# the conflict choices, the undo fix and the new Hub interface); switch to a tag once VARA publishes its
-# next release. The checkout must be exactly VARA_COMMIT, so a moved branch fails the build instead of
-# changing what ships. The interface is a React app, built by VARA's own script from its package-lock.json;
-# the binary is pure Go, static.
+# Stage 2d: VARA, version control (github.com/thulasiramk-2310/vara), built from its v0.4.5 release, with
+# the web interface of its Hub. The checkout must be exactly the release commit, so a moved tag fails the
+# build instead of changing what ships. The interface is a React app, built by VARA's own script from its
+# package-lock.json; the binary is pure Go, static.
 FROM docker.io/library/node:22-alpine AS vara-ui
 RUN apk add --no-cache git
-ARG VARA_COMMIT=aa33bca6d3fb0d9ab11e000792cf57541306f72f
-RUN git init -q /src && \
-    git -C /src fetch --quiet --depth 1 https://github.com/thulasiramk-2310/vara "$VARA_COMMIT" && \
-    git -C /src checkout --quiet FETCH_HEAD && \
+ARG VARA_TAG=v0.4.5
+ARG VARA_COMMIT=a0e0e3992be228c359f9bff9b4dc8aefc9696577
+RUN git clone --quiet --depth 1 --branch "$VARA_TAG" https://github.com/thulasiramk-2310/vara /src && \
     test "$(git -C /src rev-parse HEAD)" = "$VARA_COMMIT" && \
     sh /src/scripts/build-hub-ui.sh /out/hub
 
 FROM docker.io/library/golang:1.25-alpine AS vara-builder
 RUN apk add --no-cache git
-ARG VARA_VERSION=0.4.5-dev
-ARG VARA_COMMIT=aa33bca6d3fb0d9ab11e000792cf57541306f72f
-RUN git init -q /src && \
-    git -C /src fetch --quiet --depth 1 https://github.com/thulasiramk-2310/vara "$VARA_COMMIT" && \
-    git -C /src checkout --quiet FETCH_HEAD && \
+ARG VARA_TAG=v0.4.5
+ARG VARA_COMMIT=a0e0e3992be228c359f9bff9b4dc8aefc9696577
+RUN git clone --quiet --depth 1 --branch "$VARA_TAG" https://github.com/thulasiramk-2310/vara /src && \
     test "$(git -C /src rev-parse HEAD)" = "$VARA_COMMIT" && \
-    cd /src && CGO_ENABLED=0 go build -trimpath \
-      -ldflags "-s -w -X main.version=${VARA_VERSION}+$(echo "$VARA_COMMIT" | cut -c1-7)" \
-      -o /out/vara ./cmd/vara
+    cd /src && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VARA_TAG#v}" -o /out/vara ./cmd/vara
 
 # Staging stages for the small, often-edited files and the built binaries,
 # laid out at their final paths. Each COPY into the 11 GB bootc image costs
