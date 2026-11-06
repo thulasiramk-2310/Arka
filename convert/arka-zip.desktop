@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=all/allfiles;inode/directory;
+Actions=zipall;
+X-KDE-Priority=TopLevel
+X-KDE-MinNumberOfUrls=2
+
+[Desktop Action zipall]
+Name=Put in one ZIP
+Exec=arka-convert zip-all %F
+Icon=application-x-compressed

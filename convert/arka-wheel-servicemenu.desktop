@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Service
-MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;application/pdf;audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/avif;application/pdf;audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;
 Actions=wheel;editwheel;
 X-KDE-Priority=TopLevel
 

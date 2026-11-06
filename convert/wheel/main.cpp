@@ -8,15 +8,20 @@
 // is done by arka-convert, or by arka-edit when the tool needs a window.
 
 #include <cmath>
+#include <algorithm>
 #include <QAction>
+#include <QCollator>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDir>
 #include <QFile>
+#include <QFont>
+#include <QFontDatabase>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QLocale>
 #include <QPalette>
 #include <QProcess>
 #include <QQmlApplicationEngine>
@@ -25,6 +30,7 @@
 #include <QQuickWindow>
 #include <QMouseEvent>
 #include <QRegion>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 
@@ -39,45 +45,75 @@ static const QString Path = QStringLiteral("/Wheel");
 // also be a target in arka-convert, which checks the request again anyway.
 static QStringList formatsForFile(const QString &path)
 {
-    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"};
+    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"};
     static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
     static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
     static const QStringList office{"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"};
     QString ext = QFileInfo(path).suffix().toLower();
     QStringList out;
     if (image.contains(ext))
-        out = {"png", "jpg", "webp", "pdf", "smaller-image", "zip"};
+        out = {"png", "jpg", "webp", "avif", "pdf", "smaller-image", "text", "tiff", "bmp", "zip"};
     else if (audio.contains(ext))
         out = {"mp3", "smaller-audio", "wav", "flac", "ogg", "m4a", "zip"};
     else if (video.contains(ext))
         out = {"mp4", "smaller-video", "mkv", "webm", "mp3", "zip"};
     else if (ext == "pdf")
-        out = {"png", "smaller-pdf", "docx", "zip"};
+        out = {"png", "smaller-pdf", "docx", "text", "zip"};
     else if (office.contains(ext))
         out = {"pdf", "zip"};
     else if (QFileInfo(path).isFile())
         out = {"zip"}; // any other file can still be put in a ZIP
-    out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext); // not the format it already is
+    out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext == "tif" ? QStringLiteral("tiff") : ext); // not the format it already is
     // Only these pictures can be made smaller; animated and old formats are left alone.
     if (ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp")
         out.removeAll(QStringLiteral("smaller-image"));
     return out;
 }
 
-// The edits each kind of file offers, in wheel order. "rotate-left" and the
-// like are run by arka-convert directly; the rest open arka-edit.
+// The edits each kind of file offers, in wheel order: the first five are on the ring, the
+// rest behind "More". Tools that need choices open arka-edit; rotate, split pages, join,
+// smaller and clean are run by arka-convert directly ("smaller" asks how much first).
 static QStringList toolsForFile(const QString &path)
 {
-    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"};
+    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"};
+    static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
+    static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
     static const QStringList trimmable{"mp3", "wav", "flac", "ogg", "opus", "m4a", "mp4", "mkv", "webm"};
+    // The formats "Remove hidden details" (mat2) handles; the same list as CLEAN_EXT in arka-convert.
+    static const QStringList cleanable{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "pdf", "mp3",
+                                       "flac", "ogg", "oga", "opus", "wav", "mp4", "m4v", "avi"};
     const QString ext = QFileInfo(path).suffix().toLower();
-    if (image.contains(ext))
-        return {"crop", "redact", "background", "rotate-left", "rotate-right"};
-    if (ext == "pdf")
-        return {"split"};
-    if (trimmable.contains(ext))
-        return {"trim"};
-    return {};
+    QStringList out;
+    if (image.contains(ext)) {
+        out = {"crop", "annotate", "redact", "hide-private", "smaller", "background", "clean", "rotate-left",
+               "rotate-right"};
+        if (ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp")
+            out.removeAll(QStringLiteral("smaller"));   // animated and old formats are left alone
+    } else if (ext == "pdf") {
+        out = {"split", "smaller", "clean"};
+    } else if (audio.contains(ext)) {
+        out = {"trim", "split-media", "bleep", "smaller", "clean"};
+    } else if (video.contains(ext)) {
+        out = {"trim", "crop", "redact", "bleep", "smaller", "split-media", "clean"};
+    }
+    if (!trimmable.contains(ext))
+        out.removeAll(QStringLiteral("trim"));
+    if (!cleanable.contains(ext))
+        out.removeAll(QStringLiteral("clean"));
+    return out;
+}
+
+static QString kindOf(const QString &path)
+{
+    static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
+    static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
+    const QString ext = QFileInfo(path).suffix().toLower();
+    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"};
+    return ext == QLatin1String("pdf") ? QStringLiteral("pdf")
+         : image.contains(ext)         ? QStringLiteral("image")
+         : audio.contains(ext)         ? QStringLiteral("audio")
+         : video.contains(ext)         ? QStringLiteral("video")
+                                       : QString();
 }
 
 class IconProvider : public QQuickImageProvider
@@ -107,6 +143,8 @@ public:
 
     QColor accent() const { return QGuiApplication::palette().color(QPalette::Highlight); }
 
+    Q_INVOKABLE bool hasIcons() const { return true; }   // the "icon" image provider is registered
+
     Q_INVOKABLE bool dark() const
     {
         QFile f(QDir::homePath() + QStringLiteral("/.config/arka-look"));
@@ -134,11 +172,21 @@ public:
                 common = keep;
             }
         }
+        // Two or more files and folders can always go into ONE ZIP, whatever they are, so this
+        // does not depend on what the others share. It comes first, so it keeps the same place
+        // on the ring each time.
+        if (urls.size() >= 2) {
+            bool all = true;
+            for (const QUrl &u : urls)
+                all = all && QFileInfo::exists(u.toLocalFile());
+            if (all)
+                common.prepend(QStringLiteral("zip-all"));
+        }
         return common;
     }
 
-    // The edits that suit every one of these files. Two or more PDFs can be merged;
-    // everything else works on one file at a time.
+    // The edits that suit every one of these files. Two or more PDFs can be merged, and two
+    // or more sounds (or videos) joined; everything else works on one file at a time.
     Q_INVOKABLE QStringList toolsFor(const QList<QUrl> &urls) const
     {
         if (urls.isEmpty())
@@ -147,12 +195,55 @@ public:
             if (!u.isLocalFile())
                 return {};
         if (urls.size() > 1) {
-            for (const QUrl &u : urls)
-                if (QFileInfo(u.toLocalFile()).suffix().toLower() != QLatin1String("pdf"))
+            // Several files of one kind: put them together, and the edits that work file by file.
+            const QString kind = kindOf(urls.first().toLocalFile());
+            bool allSmaller = true, allClean = true;
+            for (const QUrl &u : urls) {
+                const QString path = u.toLocalFile();
+                if (kindOf(path) != kind)
                     return {};
-            return {"merge"};
+                const QStringList one = toolsForFile(path);
+                allSmaller = allSmaller && one.contains(QStringLiteral("smaller"));
+                allClean = allClean && one.contains(QStringLiteral("clean"));
+            }
+            QStringList multi;
+            if (kind == QLatin1String("pdf"))
+                multi << QStringLiteral("merge");
+            else if (kind == QLatin1String("audio") || kind == QLatin1String("video"))
+                multi << QStringLiteral("join");
+            if (allSmaller)
+                multi << QStringLiteral("smaller");
+            if (allClean)
+                multi << QStringLiteral("clean");
+            return multi;
         }
         return toolsForFile(urls.first().toLocalFile());
+    }
+
+    // Bytes of all the files together; 0 when any of them is not a plain file.
+    Q_INVOKABLE qint64 totalBytes(const QList<QUrl> &urls) const
+    {
+        qint64 total = 0;
+        for (const QUrl &u : urls) {
+            const QFileInfo fi(u.toLocalFile());
+            if (!u.isLocalFile() || !fi.isFile())
+                return 0;
+            total += fi.size();
+        }
+        return total;
+    }
+
+    // How big the files are together, in the units Dolphin shows ("1.2 MiB"). Empty for folders.
+    Q_INVOKABLE QString sizeText(const QList<QUrl> &urls) const
+    {
+        qint64 total = 0;
+        for (const QUrl &u : urls) {
+            const QFileInfo fi(u.toLocalFile());
+            if (!u.isLocalFile() || !fi.isFile())
+                return {};
+            total += fi.size();
+        }
+        return urls.isEmpty() ? QString() : QLocale().formattedDataSize(total, 1, QLocale::DataSizeIecFormat);
     }
 
     Q_INVOKABLE void runTool(const QString &tool, const QList<QUrl> &urls) const
@@ -163,9 +254,24 @@ public:
                 files << u.toLocalFile();
         if (files.isEmpty())
             return;
-        if (tool == QLatin1String("crop") || tool == QLatin1String("redact") || tool == QLatin1String("background")
-            || tool == QLatin1String("trim"))
+        static const QStringList windowed{"crop", "redact", "annotate", "background", "trim", "bleep"};
+        if (windowed.contains(tool))
             QProcess::startDetached(QStringLiteral("arka-edit"), {tool, files.first()});
+        else if (tool == QLatin1String("hide-private"))
+            QProcess::startDetached(QStringLiteral("arka-edit"), {QStringLiteral("redact"), files.first(),
+                                                                  QStringLiteral("--find-private")});
+        else if (tool == QLatin1String("split-media"))
+            QProcess::startDetached(QStringLiteral("arka-edit"), {QStringLiteral("split"), files.first()});
+        else if (tool == QLatin1String("join")) {
+            // In name order, as the file manager lists them: "clip 2" before "clip 10".
+            QCollator order;
+            order.setNumericMode(true);
+            std::sort(files.begin(), files.end(), [&order](const QString &a, const QString &b) {
+                return order.compare(QFileInfo(a).fileName(), QFileInfo(b).fileName()) < 0;
+            });
+            QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"join-media"} + files);
+        } else if (tool == QLatin1String("clean"))
+            QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"clean"} + files);
         else if (tool == QLatin1String("rotate-left"))
             QProcess::startDetached(QStringLiteral("arka-convert"), {"rotate", files.first(), "left"});
         else if (tool == QLatin1String("rotate-right"))
@@ -240,6 +346,15 @@ int main(int argc, char **argv)
     app.setApplicationName(QStringLiteral("arka-wheel"));
     app.setDesktopFileName(QStringLiteral("org.arkaos.wheel"));
     app.setQuitOnLastWindowClosed(false);
+    // The type ArkaOS's own apps use, when installed (packaged as "Inter" or "Inter Variable").
+    for (const QString &family : {QStringLiteral("Inter"), QStringLiteral("Inter Variable")}) {
+        if (QFontDatabase::hasFamily(family)) {
+            QFont f(family);
+            f.setPointSizeF(QGuiApplication::font().pointSizeF());
+            QGuiApplication::setFont(f);
+            break;
+        }
+    }
 
     QStringList files = app.arguments().mid(1);
     const bool editMode = !files.isEmpty() && files.first() == QLatin1String("--edit");
@@ -262,6 +377,16 @@ int main(int argc, char **argv)
     }
 
     Wheel wheel;
+    // The slot icons come from the desktop's icon theme. Without one (a bare session), use Breeze
+    // in the matching shade, so the icons never silently disappear.
+    QStringList iconDirs = QIcon::themeSearchPaths();
+    for (const QString &dir : QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("icons"),
+                                                         QStandardPaths::LocateDirectory))
+        if (!iconDirs.contains(dir))
+            iconDirs << dir;
+    QIcon::setThemeSearchPaths(iconDirs);
+    if (QIcon::themeName().isEmpty() || QIcon::themeName() == QLatin1String("hicolor"))
+        QIcon::setThemeName(wheel.dark() ? QStringLiteral("breeze-dark") : QStringLiteral("breeze"));
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("icon"), new IconProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("wheel"), &wheel);

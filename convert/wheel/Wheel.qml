@@ -17,9 +17,13 @@ Window {
     property real cy: height / 2
     property bool placed: false
     property bool clickMode: false
+    property bool levelMode: false      // the second ring of "Make smaller": how much to give up
     property bool closing: false
     property bool edit: false
     property var files: []
+    // The theme icons come from the program's image provider; a test harness without one shows words only.
+    readonly property bool iconsReady: typeof wheel.hasIcons === "function" && wheel.hasIcons()
+    readonly property string sizeLabel: files.length ? wheel.sizeText(files) : ""
     property var formats: []
     property var rest: []          // formats behind the "More" slot, when there are over 6
     readonly property int maxSlots: 6
@@ -28,12 +32,12 @@ Window {
 
     // The ArkaOS look, as on the wallpaper: a flat field, hairlines, no gloss or glow.
     // Green appears once, as a short line on the slot you are on.
-    readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 0.97) : Qt.rgba(244 / 255, 243 / 255, 238 / 255, 0.97)
+    readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 0.97) : Qt.rgba(241 / 255, 243 / 255, 245 / 255, 0.97)
     readonly property color slotFill: "transparent"
     readonly property color slotOnFill: dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)
     readonly property color idleInk: dark ? "#B4B8C2" : "#3F4755"
     readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.18)
-    readonly property color hubFill: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 1) : Qt.rgba(244 / 255, 243 / 255, 238 / 255, 1)
+    readonly property color hubFill: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 1) : Qt.rgba(241 / 255, 243 / 255, 245 / 255, 1)
     // A clear edge on any wallpaper: light on dark, dark on light.
     readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.46)
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
@@ -41,21 +45,56 @@ Window {
     readonly property color accent: "#4DB491"     // ArkaOS's own colour, not the desktop accent
     readonly property color accentInk: "#06281B"
 
-    readonly property var names: ({ png: "PNG", jpg: "JPEG", webp: "WEBP", pdf: "PDF", mp3: "MP3", wav: "WAV",
-                                    flac: "FLAC", ogg: "OGG", opus: "OPUS", m4a: "M4A", mp4: "MP4", mkv: "MKV",
-                                    webm: "WEBM", "smaller-pdf": "SMALLER PDF", "smaller-image": "SMALLER",
-                                    "smaller-audio": "SMALLER", "smaller-video": "SMALLER", zip: "ZIP",
-                                    docx: "WORD (ROUGH)", more: "MORE",
+    // Sentence case everywhere; format names stay as they are written (PNG, MP3).
+    readonly property var names: ({ png: "PNG", jpg: "JPEG", webp: "WebP", avif: "AVIF", tiff: "TIFF", bmp: "BMP", pdf: "PDF",
+                                    mp3: "MP3", wav: "WAV", flac: "FLAC", ogg: "OGG", opus: "Opus", m4a: "M4A", mp4: "MP4",
+                                    mkv: "MKV", webm: "WebM", "smaller-pdf": "Smaller PDF", "smaller-image": "Smaller",
+                                    "smaller-audio": "Smaller", "smaller-video": "Smaller", zip: "ZIP", "zip-all": "Zip together",
+                                    docx: "Word (rough)", text: "Text (OCR)", more: "More",
+                                    "smaller:light": "Light", "smaller:medium": "Medium", "smaller:strong": "Strong",
+                                    "smaller:10mb": "Under 10 MB", "smaller:25mb": "Under 25 MB",
                                     crop: "Crop", redact: "Black out", background: "Background", "rotate-left": "Rotate left",
-                                    "rotate-right": "Rotate right", split: "Split pages", merge: "Merge PDFs", trim: "Trim" })
+                                    "rotate-right": "Rotate right", split: "Split pages", merge: "Merge PDFs", trim: "Trim",
+                                    annotate: "Annotate", bleep: "Bleep", "split-media": "Split", join: "Join in name order",
+                                    smaller: "Smaller", clean: "Remove details", "hide-private": "Find private text" })
+    // A theme icon for each edit, so a slot is recognised before it is read. Formats stay as words.
+    readonly property var icons: ({ more: "overflow-menu", crop: "transform-crop", annotate: "draw-freehand", redact: "draw-rectangle",
+                                    background: "color-fill", smaller: "zoom-out", clean: "document-cleanup", "hide-private": "edit-find",
+                                    "rotate-left": "object-rotate-left", "rotate-right": "object-rotate-right",
+                                    trim: "edit-cut", "split-media": "view-split-left-right", split: "view-split-left-right",
+                                    bleep: "audio-volume-muted", join: "media-playlist-append", merge: "media-playlist-append",
+                                    "zip-all": "archive-insert", zip: "archive-insert" })
 
     function label(f) {
-        if (!edit && isPdf() && f === "png") return "PNG PAGES"
-        if (!edit && isVideo() && f === "mp3") return "MP3 AUDIO"
-        return names[f] || f.toUpperCase()
+        if (!edit && isPdf() && f === "png") return "PNG pages"
+        if (!edit && isVideo() && f === "mp3") return "MP3 audio"
+        if (!edit && f === "zip" && files.length > 1) return "ZIP each"
+        return names[f] || f.toUpperCase()   // an unknown format name is written as formats are
+    }
+    // What a slot does, for screen readers (and anyone who wonders before picking).
+    function describe(f) {
+        const d = { crop: "Open the crop window", annotate: "Open the drawing window", redact: "Open the black-out window",
+                    "hide-private": "Open the black-out window and suggest boxes over emails, phone and card numbers",
+                    background: "Open the background window", smaller: "Choose how much smaller to make it",
+                    clean: "Save a copy without hidden details such as location", trim: "Open the trim window",
+                    "split-media": "Open the split window", bleep: "Open the bleep window", join: "Join them in name order",
+                    merge: "Merge the PDFs in name order", more: "Show more choices", split: "Save each page as its own PDF",
+                    "rotate-left": "Save a copy turned left", "rotate-right": "Save a copy turned right" }
+        if (d[f]) return d[f]
+        if (String(f).indexOf("smaller") === 0) return "Save a smaller copy"
+        return "Save a copy as " + label(f)
     }
     function ext() { return files.length ? String(files[0]).split(".").pop().toLowerCase() : "" }
     function isPdf() { return ext() === "pdf" }
+    // iPhone photos: the HEVC decoder is not in Fedora (patented), so there is no honest way to offer them yet.
+    function isHeic() { return ["heic", "heif"].indexOf(ext()) >= 0 }
+    // What the hint says when the ring is empty.
+    function emptyHint() {
+        if (!files.length) return "Move the file you are dragging over the wheel, or press Esc"
+        if (edit) return "Edits work on pictures, PDFs, sound and video"
+        if (isHeic()) return "iPhone HEIC photos can't be converted yet: Fedora has no decoder for them"
+        return "This file can't be converted yet"
+    }
     function isVideo() { return ["mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"].indexOf(ext()) >= 0 }
     function fileLabel() {
         if (!files.length) return ""
@@ -65,7 +104,7 @@ Window {
     }
     function hubText() {
         if (hover >= 0 && hover < formats.length) return label(formats[hover])
-        return clickMode ? "Pick one" : (files.length ? "Drop on one" : "Drop a file")
+        return clickMode ? "Pick one" : (files.length ? "Drop on one" : "Drop a file")   // nothing hovered yet
     }
 
     // The dragged files: from the event, or parsed from the raw uri-list when the event leaves them out.
@@ -94,8 +133,16 @@ Window {
         if (formats[i] === "more") {
             files = urls; clickMode = true; hover = -1
             setFormats(rest)
+        } else if ((!edit && String(formats[i]).indexOf("smaller-") === 0) || (edit && formats[i] === "smaller")) {
+            // "Make smaller" asks how much first: a second ring, like More. Light is what it has always done.
+            files = urls; clickMode = true; hover = -1; levelMode = true
+            // A size to reach, offered only when the smallest file is bigger than it.
+            const big = urls.every(u => wheel.totalBytes([u]) > 10000000), huge = urls.every(u => wheel.totalBytes([u]) > 25000000)
+            formats = ["smaller:light", "smaller:medium", "smaller:strong"]
+                      .concat(big ? ["smaller:10mb"] : []).concat(huge ? ["smaller:25mb"] : []); rest = []
         } else {
-            if (edit) wheel.runTool(formats[i], urls)
+            // The level ring's choices convert, also when it was opened from the edit wheel.
+            if (edit && String(formats[i]).indexOf("smaller:") !== 0) wheel.runTool(formats[i], urls)
             else wheel.convert(formats[i], urls)
             close()
         }
@@ -105,6 +152,7 @@ Window {
         closing = false; fade.stop(); enter.stop(); leaveTimer.stop(); ring.opacity = 0; ring.scale = 0.6
         dark = wheel.dark()
         edit = editMode
+        levelMode = false
         clickMode = urls.length > 0
         files = urls
         setFormats(clickMode ? listFor(urls) : [])
@@ -140,6 +188,11 @@ Window {
     function stepBy(by) {
         const n = formats.length
         if (n) hover = hover < 0 ? (by > 0 ? 0 : n - 1) : (hover + by + n) % n
+    }
+    // Home and End: the first and the last slot.
+    function jumpTo(last) {
+        const n = formats.length
+        if (n) hover = last ? n - 1 : 0
     }
     function close() {
         if (closing || !visible) return
@@ -267,9 +320,13 @@ Window {
     }
 
     Shortcut { sequence: "Escape"; onActivated: win.close() }
-    Shortcut { sequence: "Left"; enabled: win.clickMode; onActivated: win.stepBy(-1) }
-    Shortcut { sequence: "Right"; enabled: win.clickMode; onActivated: win.stepBy(1) }
-    Shortcut { sequences: ["Return", "Enter"]; enabled: win.clickMode && win.hover >= 0; onActivated: win.pick(win.hover, win.files) }
+    // Everything the pointer does can be done from the keyboard: the arrows (or Tab) move round the ring,
+    // Home and End jump to its ends, Enter or Space picks the slot you are on.
+    Shortcut { sequences: ["Left", "Up", "Backtab"]; enabled: win.clickMode; onActivated: win.stepBy(-1) }
+    Shortcut { sequences: ["Right", "Down", "Tab"]; enabled: win.clickMode; onActivated: win.stepBy(1) }
+    Shortcut { sequence: "Home"; enabled: win.clickMode; onActivated: win.jumpTo(false) }
+    Shortcut { sequence: "End"; enabled: win.clickMode; onActivated: win.jumpTo(true) }
+    Shortcut { sequences: ["Return", "Enter", "Space"]; enabled: win.clickMode && win.hover >= 0; onActivated: win.pick(win.hover, win.files) }
 
     // Drag mode: the file being dragged decides the formats.
     DropArea {
@@ -344,29 +401,50 @@ Window {
                 readonly property string path: win.slotPath(index, win.formats.length)
                 anchors.fill: parent
 
+                // What a screen reader says and does for this slot.
+                Accessible.role: Accessible.Button
+                Accessible.name: win.label(slotItem.modelData)
+                Accessible.description: win.describe(slotItem.modelData)
+                Accessible.focused: slotItem.on
+                Accessible.onPressAction: win.pick(slotItem.index, win.files)
+
                 Shape {
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
                     ShapePath {
-                        strokeColor: slotItem.on ? (win.dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.45)) : win.slotEdge
-                        strokeWidth: 1
+                        // The slot you are on: an accent edge, clear for low vision too.
+                        strokeColor: slotItem.on ? win.accent : win.slotEdge
+                        strokeWidth: slotItem.on ? 2 : 1
                         joinStyle: ShapePath.MiterJoin
                         fillRule: ShapePath.OddEvenFill
                         fillColor: slotItem.on ? win.slotOnFill : win.slotFill
                         PathSvg { path: slotItem.path }
                     }
                 }
-                Text {
+                Column {
+                    readonly property string iconName: win.icons[slotItem.modelData] || ""
                     width: Math.max(72, 100 * win.k)
                     x: win.outerR + slotItem.r * Math.cos(slotItem.mid) - width / 2
                     y: slotItem.ym - height / 2
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    text: win.label(slotItem.modelData)
-                    color: slotItem.on ? win.ink : win.idleInk
-                    font.pixelSize: Math.max(12, (win.edit ? 13 : 14) * win.k)
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: win.edit ? 0.6 : 1.4
+                    spacing: 5
+                    Image {
+                        visible: parent.iconName.length > 0
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(18, Math.round(24 * win.k)); height: width
+                        sourceSize: Qt.size(width * 2, height * 2)
+                        source: parent.iconName.length && win.iconsReady ? "image://icon/" + parent.iconName : ""
+                        opacity: slotItem.on ? 1 : 0.78
+                    }
+                    Text { textFormat: Text.PlainText;
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        text: win.label(slotItem.modelData)
+                        color: slotItem.on ? win.ink : win.idleInk
+                        font.pixelSize: Math.max(12, 13 * win.k)
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0.3
+                    }
                 }
             }
         }
@@ -382,7 +460,7 @@ Window {
             }
         }
         Item {   // the pointer tick, turned to face the hovered slot
-            visible: win.formats.length > 1 && win.hover >= 0
+            visible: false   // the hovered slot is already marked by its fill; a separate tick read as a glitch
             readonly property real mid: (-90 + win.hover * 360 / Math.max(1, win.formats.length)) * Math.PI / 180
             readonly property real edgeR: win.octEdge(win.innerR, mid)   // the octagon's edge in that direction
             x: win.outerR + (edgeR + 6) * Math.cos(mid) - 6
@@ -397,23 +475,55 @@ Window {
             x: win.outerR - width / 2; y: win.outerR - height / 2
             width: 2 * win.innerR - 22
             spacing: 5
-            Text {
+            Text { textFormat: Text.PlainText;
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: win.hover >= 0 ? win.ext().toUpperCase() : win.hubText()
-                color: win.hover >= 0 ? win.muted : win.ink
-                font.pixelSize: win.hover >= 0 ? 11 : 13
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                text: win.hubText()
+                color: win.ink
+                font.pixelSize: 13
                 font.weight: Font.DemiBold
-                font.letterSpacing: 1.4
+                font.letterSpacing: 0.3
             }
-            Text {
+            Text { textFormat: Text.PlainText;
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideMiddle
                 text: win.fileLabel()
-                color: win.hover >= 0 ? win.ink : win.muted
+                color: win.muted
                 font.pixelSize: 12
             }
+            Text { textFormat: Text.PlainText;   // how big it is now, so "Smaller" has something to be compared with
+                width: parent.width
+                visible: text.length > 0
+                horizontalAlignment: Text.AlignHCenter
+                text: win.sizeLabel
+                color: win.muted
+                font.pixelSize: 11
+                font.letterSpacing: 0.4
+            }
+        }
+    }
+
+    // Tells keyboard users what works, so the keys are not a secret. Under the ring, or above it when
+    // the ring sits at the bottom edge of the screen.
+    Rectangle {
+        id: keyHint
+        visible: win.placed && win.clickMode && win.formats.length > 0
+        opacity: ring.opacity
+        x: Math.max(8, Math.min(win.width - width - 8, win.cx - width / 2))
+        y: win.cy + win.outerR + 12 + height > win.height - 6 ? win.cy - win.outerR - 12 - height
+                                                              : win.cy + win.outerR + 12
+        width: keyHintText.implicitWidth + 28; height: 30; radius: 15
+        antialiasing: true
+        color: win.surface; border.color: win.rim
+        Text { textFormat: Text.PlainText;
+            id: keyHintText
+            anchors.centerIn: parent
+            color: win.ink; font.pixelSize: 12
+            text: win.levelMode ? "Light keeps the most quality, Strong makes the smallest file; a size is kept only if reached. Esc to cancel"
+                                : "Arrow keys to choose, Enter to pick, Esc to cancel"
         }
     }
 
@@ -424,13 +534,13 @@ Window {
         x: win.cx - width / 2; y: win.cy - height / 2
         width: 2 * win.innerR - 22
         spacing: 5
-        Text {
+        Text { textFormat: Text.PlainText;
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: win.files.length ? (win.edit ? "No edits" : "No formats") : "Move the file"
-            color: win.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 1.4
+            color: win.ink; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 0.3
         }
-        Text {
+        Text { textFormat: Text.PlainText;
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideMiddle
@@ -447,23 +557,21 @@ Window {
         width: hint.implicitWidth + 28; height: 34; radius: 17
         antialiasing: true
         color: win.surface; border.color: win.rim
-        Text {
+        Text { textFormat: Text.PlainText;
             id: hint
             anchors.centerIn: parent
             color: win.ink; font.pixelSize: 13
-            text: win.files.length ? (win.edit ? "Edits work on pictures, PDFs, sound and video"
-                                                : "This file can't be converted yet")
-                                   : "Move the file you are dragging over the wheel, or press Esc"
+            text: win.emptyHint()
         }
     }
 
     // The way that needs no dragging: the files come with the click, so the options are there at once.
-    Text {
+    Text { textFormat: Text.PlainText;
         visible: win.placed && win.formats.length === 0 && win.files.length === 0
         opacity: ring.opacity
         x: Math.max(8, Math.min(win.width - width - 8, win.cx - width / 2)); y: win.cy + win.outerR + 12 + 34 + 10
         color: win.muted; font.pixelSize: 12
-        text: win.edit ? "Or right-click a file and choose Edit with the edit wheel"
-                       : "Or right-click a file and choose Convert with the format wheel"
+        text: win.edit ? "Or right-click a file (or press the Menu key) and choose Edit with the edit wheel"
+                       : "Or right-click a file (or press the Menu key) and choose Convert with the format wheel"
     }
 }

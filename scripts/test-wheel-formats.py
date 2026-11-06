@@ -52,7 +52,7 @@ class WheelFormatsTest(unittest.TestCase):
         for kind, slots in wheel_slots().items():
             for ext in exts[kind]:
                 accepted = targets(f"file.{ext}")
-                same = "jpg" if ext == "jpeg" else ext
+                same = {"jpeg": "jpg", "tif": "tiff"}.get(ext, ext)
                 for slot in slots:
                     if slot == same:
                         continue  # the wheel leaves out the format a file already is
@@ -62,11 +62,62 @@ class WheelFormatsTest(unittest.TestCase):
                         self.assertIn(slot, accepted)
 
 
+class ZipTogetherTest(unittest.TestCase):
+    def test_wheel_offers_zip_together_first_for_two_or_more_items(self):
+        m = re.search(r"urls\.size\(\) >= 2\)(.*?)return common;", SOURCE, re.S)
+        self.assertIsNotNone(m, "formatsFor() no longer has the two-or-more-items rule")
+        self.assertIn('common.prepend(QStringLiteral("zip-all"))', m.group(1))
+
+    def test_converter_runs_the_command_the_wheel_sends(self):
+        text = CONVERT.read_text()
+        self.assertIn('"zip-all"', text)
+        self.assertIn("def zip_all(", text)
+        # a request with fewer than two items is refused with the usage line, not run
+        r = subprocess.run([sys.executable, "-B", str(CONVERT), "zip-all", "/nonexistent"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
+
 class SmallerPictureRuleTest(unittest.TestCase):
     def test_wheel_and_converter_agree_on_which_pictures_can_be_made_smaller(self):
         m = re.search(r"SMALLER_IMAGE = \{([^}]*)\}", CONVERT.read_text())
         converter = set(re.findall(r'"([^"]+)"', m.group(1)))
         self.assertEqual(wheel_smaller_images(), converter)
+
+
+class EditToolsTest(unittest.TestCase):
+    """Every edit the edit wheel can show has a name on the ring and something that runs it."""
+
+    def tools(self):
+        body = re.search(r"static QStringList toolsForFile\(.*?\n}\n", SOURCE, re.S).group(0)
+        lists = re.findall(r"out = \{([^}]*)\}", body)
+        found = {t for l in lists for t in re.findall(r'"([^"]+)"', l)}
+        found |= set(re.findall(r'multi << QStringLiteral\("([^"]+)"\)', re.search(r"QStringList toolsFor\(.*?\n    }\n", SOURCE, re.S).group(0)))
+        return found
+
+    def test_every_tool_has_a_label(self):
+        qml = (ROOT / "convert" / "wheel" / "Wheel.qml").read_text()
+        names = re.search(r"readonly property var names: \(\{(.*?)\}\)", qml, re.S).group(1)
+        for tool in self.tools():
+            with self.subTest(tool=tool):
+                self.assertRegex(names, r'(^|[\s,{])"?%s"?:' % re.escape(tool))
+
+    def test_every_tool_is_run_by_something(self):
+        run = re.search(r"Q_INVOKABLE void runTool\(.*?\n    }\n", SOURCE, re.S).group(0)
+        windowed = set(re.findall(r'"([^"]+)"', re.search(r"windowed\{([^}]*)\}", run).group(1)))
+        handled = windowed | set(re.findall(r'tool == QLatin1String\("([^"]+)"\)', run))
+        qml = (ROOT / "convert" / "wheel" / "Wheel.qml").read_text()
+        for tool in self.tools():
+            with self.subTest(tool=tool):
+                # "smaller" opens the level ring in the QML, which then converts.
+                self.assertTrue(tool in handled or (tool == "smaller" and 'formats[i] === "smaller"' in qml), tool)
+
+    def test_edit_window_knows_every_windowed_tool(self):
+        run = re.search(r"Q_INVOKABLE void runTool\(.*?\n    }\n", SOURCE, re.S).group(0)
+        windowed = set(re.findall(r'"([^"]+)"', re.search(r"windowed\{([^}]*)\}", run).group(1))) | {"split"}
+        edit = (ROOT / "convert" / "edit" / "main.cpp").read_text()
+        accepted = set(re.findall(r'"([^"]+)"', re.search(r"static const QStringList tools\{([^}]*)\}", edit).group(1)))
+        self.assertLessEqual(windowed, accepted)
 
 
 if __name__ == "__main__":
