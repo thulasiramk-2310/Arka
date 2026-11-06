@@ -17,7 +17,7 @@ PlasmoidItem {
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
     P5Support.DataSource { id: run; engine: "executable"; onNewData: (s, d) => disconnectSource(s) }
-    function open() { run.connectSource("qdbus6 org.kde.krunner /App org.kde.krunner.App.display") }
+    function open() { run.connectSource("dbus-send --session --type=method_call --dest=org.kde.krunner /App org.kde.krunner.App.display") }
 
     fullRepresentation: Item {
         id: btn
