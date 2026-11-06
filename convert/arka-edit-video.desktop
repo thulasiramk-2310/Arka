@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Service
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/x-m4v;video/ogg;
+Actions=trim;crop;redact;split;bleep;
+X-KDE-Submenu=Edit video
+X-KDE-Priority=TopLevel
+X-KDE-MaxNumberOfUrls=1
+
+[Desktop Action trim]
+Name=Trim...
+Exec=arka-edit trim %f
+Icon=edit-cut
+
+[Desktop Action crop]
+Name=Crop...
+Exec=arka-edit crop %f
+Icon=transform-crop
+
+[Desktop Action redact]
+Name=Black out parts...
+Exec=arka-edit redact %f
+Icon=draw-rectangle
+
+[Desktop Action split]
+Name=Split in two...
+Exec=arka-edit split %f
+Icon=view-split-left-right
+
+[Desktop Action bleep]
+Name=Bleep out parts...
+Exec=arka-edit bleep %f
+Icon=audio-volume-muted

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Service
-MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;
-Actions=crop;redact;background;left;right;
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/avif;
+Actions=crop;annotate;redact;private;background;left;right;
 X-KDE-Submenu=Edit picture
 X-KDE-Priority=TopLevel
 X-KDE-MaxNumberOfUrls=1
@@ -11,10 +11,20 @@ Name=Crop...
 Exec=arka-edit crop %f
 Icon=transform-crop
 
+[Desktop Action annotate]
+Name=Annotate...
+Exec=arka-edit annotate %f
+Icon=draw-freehand
+
 [Desktop Action redact]
 Name=Black out parts...
 Exec=arka-edit redact %f
 Icon=draw-rectangle
+
+[Desktop Action private]
+Name=Find private text...
+Exec=arka-edit redact %f --find-private
+Icon=edit-find
 
 [Desktop Action background]
 Name=Add a background...

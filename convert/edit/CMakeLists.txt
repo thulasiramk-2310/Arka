@@ -7,6 +7,6 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 6.6 REQUIRED COMPONENTS Gui Quick QuickControls2)
 
 qt_add_executable(arka-edit main.cpp)
-qt_add_resources(arka-edit "qml" PREFIX "/" FILES Edit.qml)
+qt_add_resources(arka-edit "qml" PREFIX "/" FILES Edit.qml Player.qml)
 target_link_libraries(arka-edit PRIVATE Qt6::Gui Qt6::Quick Qt6::QuickControls2)
 install(TARGETS arka-edit DESTINATION bin)

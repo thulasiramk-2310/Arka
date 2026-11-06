@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/x-m4v;video/ogg;
+Actions=join;
+X-KDE-Priority=TopLevel
+X-KDE-MinNumberOfUrls=2
+
+[Desktop Action join]
+Name=Join into one, in name order
+Exec=arka-convert join-media --name-order %F
+Icon=media-playlist-append
