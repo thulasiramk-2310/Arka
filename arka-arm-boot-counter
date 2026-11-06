@@ -8,13 +8,40 @@
 # GREENBOOT_MAX_BOOT_ATTEMPTS boots, and greenboot makes that permanent. A
 # healthy update clears the counter on its first boot.
 set -u
-grub2-editenv list 2>/dev/null | grep -q '^greenboot_next_deployment_id=' || exit 0
+fail() { echo "arka-arm-boot-counter: $*" >&2; exit 1; }
+# No GRUB environment file at all means greenboot has recorded nothing to arm: not an error.
+# A file that exists but cannot be read is one, since an update may be waiting.
+grubenv=${ARKA_GRUBENV:-/boot/grub2/grubenv}
+[ -e "$grubenv" ] || exit 0
+boot_env=$(grub2-editenv list) || fail "cannot read the boot environment"
+printf '%s\n' "$boot_env" | grep -q '^greenboot_next_deployment_id=.' || exit 0
 max=$(sed -n 's/^GREENBOOT_MAX_BOOT_ATTEMPTS=//p' /etc/greenboot/greenboot.conf 2>/dev/null | tail -1)
 case "$max" in ''|*[!0-9]*) max=3 ;; esac
+[ "$max" -ge 1 ] 2>/dev/null || max=3
 was_ro=0
-findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro && was_ro=1
-[ $was_ro = 1 ] && mount -o remount,rw /boot
-grub2-editenv - set "boot_counter=$max" boot_success=0 &&
-    echo "Armed boot counter ($max boots) for the staged update"
-[ $was_ro = 1 ] && mount -o remount,ro /boot
+# /boot that is not a mount of its own has nothing to remount. If it is one, its state must be known.
+if mountpoint -q /boot; then
+    options=$(findmnt -no OPTIONS /boot) || fail "cannot determine the boot mount state"
+else
+    options=
+fi
+restore_boot() {
+    result=$?
+    trap - 0
+    if [ "$was_ro" = 1 ] && ! mount -o remount,ro /boot; then
+        echo "arka-arm-boot-counter: cannot restore the read-only boot mount" >&2
+        result=1
+    fi
+    exit "$result"
+}
+case ",$options," in
+    *,ro,*)
+        was_ro=1
+        trap restore_boot 0
+        trap 'exit 1' HUP INT TERM
+        mount -o remount,rw /boot || fail "cannot make the boot mount writable"
+        ;;
+esac
+grub2-editenv - set "boot_counter=$max" boot_success=0 || fail "cannot arm the boot counter"
+echo "Armed boot counter ($max boots) for the staged update"
 exit 0
