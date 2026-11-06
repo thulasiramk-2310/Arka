@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Service
-MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;
-Actions=png;jpg;webp;pdf;
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/avif;
+Actions=png;jpg;webp;avif;pdf;tiff;bmp;text;
 X-KDE-Submenu=Convert to
 X-KDE-Priority=TopLevel
 
@@ -24,3 +24,23 @@ Icon=image-x-generic
 Name=PDF
 Exec=arka-convert pdf %F
 Icon=image-x-generic
+
+[Desktop Action avif]
+Name=AVIF
+Exec=arka-convert avif %F
+Icon=image-x-generic
+
+[Desktop Action tiff]
+Name=TIFF
+Exec=arka-convert tiff %F
+Icon=image-x-generic
+
+[Desktop Action bmp]
+Name=BMP
+Exec=arka-convert bmp %F
+Icon=image-x-generic
+
+[Desktop Action text]
+Name=Text (read by OCR)
+Exec=arka-convert text %F
+Icon=text-plain

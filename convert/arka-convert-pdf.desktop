@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Service
 MimeType=application/pdf;
-Actions=png;smaller-pdf;docx;
+Actions=png;smaller-pdf;docx;text;
 X-KDE-Submenu=Convert to
 X-KDE-Priority=TopLevel
 
@@ -19,3 +19,8 @@ Icon=application-pdf
 Name=Word (layout may differ)
 Exec=arka-convert docx %F
 Icon=application-pdf
+
+[Desktop Action text]
+Name=Text (read by OCR)
+Exec=arka-convert text %F
+Icon=text-plain

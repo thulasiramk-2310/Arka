@@ -1,19 +1,37 @@
 #!/usr/bin/env python3
 """arka-convert: convert files next to the originals, with no network access.
 
-    arka-convert FORMAT FILE...        convert each FILE to FORMAT
+    arka-convert FORMAT FILE...        convert each FILE to FORMAT (pictures: png, jpg, webp,
+                                       avif, tiff, bmp, pdf)
     arka-convert --targets FILE        list the formats FILE can become
+    arka-convert --find-private PICTURE  suggest boxes over email addresses, card and phone numbers
+                                       and IBANs that OCR reads in a picture (JSON; nothing changed)
+    arka-convert text FILE...          save the words in a picture or PDF as a .txt (OCR when the
+                                       PDF has no text of its own; it can make mistakes)
+    arka-convert --details FILE        list the hidden details FILE carries (location, camera,
+                                       people, dates, software), as JSON; nothing is changed
     arka-convert clean FILE...         save a copy without hidden details
     arka-convert merge-pdf FILE FILE...  join PDFs into one, in the order given
     arka-convert split-pdf FILE        save each page of a PDF as its own PDF
     arka-convert trim FILE START END   keep only START to END of a sound or video
                                        (seconds, mm:ss or hh:mm:ss)
     arka-convert rotate FILE left|right|flip
-    arka-convert crop FILE X Y W H     keep a box of a picture (pixels)
-    arka-convert redact FILE X Y W H [X Y W H ...]   black out boxes of a picture
+    arka-convert crop FILE X Y W H     keep a box of a picture or a video (pixels)
+    arka-convert redact FILE X Y W H [X Y W H ...]   black out boxes of a picture or a video
+    arka-convert redact FILE --between START END X Y W H ...   only from START to END of a video
+    arka-convert annotate FILE SHAPES  draw pens, arrows, boxes, highlights and text on a picture
+                                       (SHAPES is JSON, in picture pixels; see annotate_shapes)
+    arka-convert split-media FILE TIME save a sound or video as two parts, cut at TIME
+    arka-convert join-media [--name-order] FILE FILE...  join sounds, or videos, into one,
+                                       in the order given (or sorted by name)
+    arka-convert bleep FILE START END [START END ...]  bleep out parts of a sound or a video (the
+                                       sound there is removed and a 1 kHz tone put in its place)
     arka-convert background FILE COLOR[-COLOR2] PADDING   put a picture on a colour
-    arka-convert smaller FILE...       make each picture, sound, video or PDF smaller
+    arka-convert smaller[:LEVEL] FILE...  make each picture, sound, video or PDF smaller
+                                       LEVEL is light (the default), medium or strong, or
+                                       10mb / 25mb: a copy under that size, or none at all
     arka-convert zip FILE...           put each file in its own ZIP (any kind of file)
+    arka-convert zip-all ITEM ITEM...  put files and folders together in ONE ZIP
 
 The converted file is saved beside the original (in Downloads when that folder is
 read-only) and never replaces anything:
@@ -33,7 +51,9 @@ import sys
 import tempfile
 import time
 
-IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"}
+IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"}
+# Pillow on Fedora reads no AVIF, so ffmpeg (dav1d) turns one into a PNG first, and writes AVIF too.
+FFMPEG_IMAGE = {"avif"}
 AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
 VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
 # Word, Excel and PowerPoint files, and their open-format twins. LibreOffice turns them into PDFs.
@@ -43,8 +63,8 @@ SMALLER_IMAGE = {"png", "jpg", "jpeg", "webp"}
 
 # "zip" works for any file, including the kinds nothing else is offered for.
 TARGETS = {
-    "image": ["png", "jpg", "webp", "pdf", "smaller-image", "clean", "zip"],
-    "pdf": ["png", "smaller-pdf", "docx", "clean", "zip"],
+    "image": ["png", "jpg", "webp", "avif", "pdf", "text", "tiff", "bmp", "smaller-image", "clean", "zip"],
+    "pdf": ["png", "smaller-pdf", "docx", "text", "clean", "zip"],
     "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a", "smaller-audio", "clean", "zip"],
     "video": ["mp4", "mkv", "webm", "mp3", "smaller-video", "clean", "zip"],
     "office": ["pdf", "zip"],
@@ -55,12 +75,12 @@ TARGETS = {
 CLEAN_EXT = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "pdf",
              "mp3", "flac", "ogg", "oga", "opus", "wav", "mp4", "m4v", "avi"}
 
-NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "pdf": "PDF", "mp3": "MP3",
+NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "avif": "AVIF", "tiff": "TIFF", "bmp": "BMP", "pdf": "PDF", "mp3": "MP3",
          "flac": "FLAC", "wav": "WAV", "ogg": "Ogg Vorbis", "opus": "Opus",
          "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM",
          "smaller-pdf": "a smaller PDF", "smaller-image": "a smaller picture",
          "smaller-audio": "a smaller MP3", "smaller-video": "a smaller MP4",
-         "docx": "Word (layout may differ)", "zip": "a ZIP file",
+         "docx": "Word (layout may differ)", "zip": "a ZIP file", "text": "text (read by OCR, may have mistakes)",
          "clean": "a copy without hidden details"}
 
 # ffmpeg output options for each target. -vn drops any cover art or video.
@@ -73,10 +93,37 @@ AUDIO_OPTS = {
     "m4a": ["-vn", "-c:a", "aac", "-b:a", "192k"],
 }
 # "Smaller" for sound and video: a lower bit rate in the format uploads accept almost everywhere.
-SMALLER_AUDIO_OPTS = ["-vn", "-c:a", "libmp3lame", "-q:a", "5"]
-SMALLER_VIDEO_OPTS = ["-map", "0:v:0", "-map", "0:a:0?", "-sn",
-                      "-vf", "scale=w='min(1280,iw)':h=-2", "-c:v", "libopenh264", "-b:v", "1500k",
-                      "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart"]
+# How much "smaller" gives up. "light" is what it always did, so nothing changes unless a level is asked
+# for; "strong" gives up the most quality for the smallest file. These are settings, not promised sizes:
+# a copy is only kept if it really is smaller.
+QUALITY_LEVELS = ("light", "medium", "strong")
+SMALLER_LEVELS = QUALITY_LEVELS + ("10mb", "25mb")
+# "Under 10 MB" and "Under 25 MB" (common attachment limits; email adds about a third when it encodes a file): a size to reach, in decimal megabytes, so the
+# copy also fits limits counted in MiB. The copy is kept only if it really is under the size.
+FIT_LEVELS = {"10mb": 10_000_000, "25mb": 25_000_000}
+IMAGE_LEVELS = {"light": (2560, 78), "medium": (1920, 70), "strong": (1280, 60)}   # longest side, quality
+AUDIO_LEVELS = {"light": "5", "medium": "7", "strong": "9"}                        # lame VBR quality (higher = smaller)
+VIDEO_LEVELS = {"light": (1280, "1500k", "96k"), "medium": (960, "900k", "64k"),   # width, video rate, sound rate
+                "strong": (640, "500k", "48k")}
+PDF_LEVELS = {"light": ["-dPDFSETTINGS=/ebook"],
+              "medium": ["-dPDFSETTINGS=/ebook", "-dColorImageResolution=110", "-dGrayImageResolution=110",
+                         "-dMonoImageResolution=220"],
+              "strong": ["-dPDFSETTINGS=/screen"]}
+
+
+def smaller_audio_opts(level="light"):
+    return ["-vn", "-c:a", "libmp3lame", "-q:a", AUDIO_LEVELS[level]]
+
+
+def smaller_video_opts(level="light"):
+    width, rate, sound = VIDEO_LEVELS[level]
+    return ["-map", "0:v:0", "-map", "0:a:0?", "-sn",
+            "-vf", f"scale=w='min({width},iw)':h=-2", "-c:v", "libopenh264", "-b:v", rate,
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", sound, "-movflags", "+faststart"]
+
+
+SMALLER_AUDIO_OPTS = smaller_audio_opts()
+SMALLER_VIDEO_OPTS = smaller_video_opts()
 VIDEO_OPTS = {
     "mp4": ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-c:v", "libopenh264",
             "-b:v", "5M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
@@ -107,7 +154,7 @@ def kind_of(path):
 def targets_for(path):
     kind = kind_of(path)
     ext = Path(path).suffix.lower().lstrip(".")
-    ext = "jpg" if ext == "jpeg" else ext
+    ext = {"jpeg": "jpg", "tif": "tiff"}.get(ext, ext)
     return [t for t in TARGETS.get(kind, ["zip"])
             if t != ext and (t != "clean" or ext in CLEAN_EXT) and (t != "smaller-image" or ext in SMALLER_IMAGE)]
 
@@ -172,7 +219,7 @@ def media_seconds(scratch, inp):
     """The length of a sound or video file in seconds, or None if unknown."""
     done = subprocess.run(sandbox_prefix(scratch) + [
         "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", inp],
-        stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
     try:
         seconds = float(done.stdout.strip())
     except ValueError:
@@ -212,24 +259,66 @@ def run_ffmpeg(scratch, cmd, total, on_progress):
         raise RuntimeError(lines[-1] if lines else "ffmpeg failed")
 
 
+def readable_image(scratch, src):
+    """A path Pillow can open for src: src itself, or a PNG ffmpeg made of an AVIF in the scratch folder."""
+    src = Path(src)
+    if src.suffix.lower().lstrip(".") not in FFMPEG_IMAGE:
+        return str(src)
+    png = scratch / "decoded.png"
+    # An AVIF with see-through parts keeps them as a second, grey picture: put it back as alpha.
+    streams = subprocess.run(sandbox_prefix(scratch) + ["ffprobe", "-v", "error", "-select_streams", "v",
+                             "-show_entries", "stream=index", "-of", "csv=p=0", str(src)],
+                             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60).stdout.split()
+    # Exactly two pictures is a colour picture and its alpha; anything else (a grid, an animation) is
+    # read as its first picture only.
+    alpha = ["-filter_complex", "[0:v:0][0:v:1]alphamerge,format=rgba"] if len(streams) == 2 else []
+    run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), *alpha, "-frames:v", "1", str(png)],
+        timeout=120)
+    return str(png)
+
+
+def has_alpha(path):
+    from PIL import Image
+    with Image.open(path) as im:
+        return im.mode in ("RGBA", "LA", "PA") or (im.mode == "P" and "transparency" in im.info)
+
+
+def write_avif(scratch, png, out):
+    """Encode a PNG as AVIF with AV1 (libaom), keeping see-through parts see-through."""
+    base = ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(png)]
+    codec = ["-c:v", "libaom-av1", "-still-picture", "1", "-crf", "28", "-cpu-used", "6"]
+    if has_alpha(png):
+        cmd = base + ["-filter_complex", "[0:v]format=yuva444p,split[c][a];[a]alphaextract[al]",
+                      "-map", "[c]", "-map", "[al]", *codec, str(out)]
+    else:
+        cmd = base + ["-vf", "format=yuv420p", *codec, str(out)]
+    run(scratch, cmd, timeout=300)
+
+
 def image_worker(src, dst, fmt):
     """Runs inside the sandbox: convert one picture with Pillow."""
-    from PIL import Image
+    from PIL import Image, ImageOps
     with Image.open(src) as im:
         im.seek(0)  # animated pictures: first frame only
-        if fmt in ("jpg", "pdf") and im.mode in ("RGBA", "LA", "P", "PA"):
+        # Turned the way it is seen: a phone photo is often stored sideways with a rotation note,
+        # and the note is not carried over, so the pixels themselves are turned.
+        im = ImageOps.exif_transpose(im)
+        if im.mode in ("CMYK", "F", "YCbCr", "LAB", "HSV"):
+            im = im.convert("RGB")   # most formats can't store these as they are
+        # JPEG and PDF have no see-through parts, and most programs ignore them in BMP: put white behind.
+        if fmt in ("jpg", "pdf", "bmp") and im.mode in ("RGBA", "LA", "P", "PA"):
             im = im.convert("RGBA")
             flat = Image.new("RGB", im.size, "white")
             flat.paste(im, mask=im.split()[-1])
             im = flat
-        elif fmt in ("jpg", "pdf") and im.mode != "RGB":
+        elif fmt in ("jpg", "pdf", "bmp") and im.mode != "RGB":
             im = im.convert("RGB")
-        names = {"jpg": "JPEG", "png": "PNG", "webp": "WEBP", "pdf": "PDF"}
-        extra = {"quality": 92} if fmt in ("jpg", "webp") else {}
+        names = {"jpg": "JPEG", "png": "PNG", "webp": "WEBP", "pdf": "PDF", "tiff": "TIFF", "bmp": "BMP"}
+        extra = {"quality": 92} if fmt in ("jpg", "webp") else {"compression": "tiff_adobe_deflate"} if fmt == "tiff" else {}
         im.save(dst, names[fmt], **extra)
 
 
-def image_smaller_worker(src, dst, ext):
+def image_smaller_worker(src, dst, ext, level="light"):
     """Runs inside the sandbox: save a smaller copy of one picture with Pillow. A picture wider or
     taller than 2560 px is scaled down to that. JPEG and WebP are saved at quality 78; PNG is saved as
     small as it goes without losing anything. Camera and location details are not copied over."""
@@ -237,8 +326,9 @@ def image_smaller_worker(src, dst, ext):
     with Image.open(src) as im:
         im.seek(0)
         im = ImageOps.exif_transpose(im)  # keeps the picture turned the right way up
-        if max(im.size) > 2560:
-            im.thumbnail((2560, 2560), Image.LANCZOS)
+        side, quality = IMAGE_LEVELS[level]
+        if max(im.size) > side:
+            im.thumbnail((side, side), Image.LANCZOS)
         if ext == "jpg":
             if im.mode in ("RGBA", "LA", "P", "PA"):
                 im = im.convert("RGBA")
@@ -247,9 +337,9 @@ def image_smaller_worker(src, dst, ext):
                 im = flat
             elif im.mode != "RGB":
                 im = im.convert("RGB")
-            im.save(dst, "JPEG", quality=78, optimize=True, progressive=True)
+            im.save(dst, "JPEG", quality=quality, optimize=True, progressive=True)
         elif ext == "webp":
-            im.save(dst, "WEBP", quality=78, method=6)
+            im.save(dst, "WEBP", quality=quality, method=6)
         else:
             im.save(dst, "PNG", optimize=True)
 
@@ -260,7 +350,7 @@ def must_be_smaller(made, src):
         raise RuntimeError("it is already as small as this makes it")
 
 
-def convert_one(src, fmt, on_progress=None):
+def convert_one(src, fmt, on_progress=None, level="light"):
     """Convert src to fmt. Returns the list of files made. For sound and video,
     on_progress(fraction) is called as ffmpeg works through the file."""
     src = Path(src).resolve()
@@ -299,13 +389,21 @@ def convert_one(src, fmt, on_progress=None):
             ext = "jpg" if src.suffix.lower() == ".jpeg" else src.suffix.lower().lstrip(".")
             tmp = scratch / f"out.{ext}"
             run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
-                          "--image-smaller-worker", inp, str(tmp), ext])
+                          "--image-smaller-worker", inp, str(tmp), ext, level])
             must_be_smaller(tmp, src)
             made = [tmp]
+        elif fmt == "text":
+            made = [read_text(scratch, src, kind)]
         elif kind == "image":
+            inp = readable_image(scratch, src)
             tmp = scratch / f"out.{fmt}"
-            run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
-                          "--image-worker", inp, str(tmp), fmt])
+            if fmt == "avif":
+                flat = scratch / "flat.png"   # the first frame only, as for every format
+                run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--image-worker", inp, str(flat), "png"])
+                write_avif(scratch, flat, tmp)
+            else:
+                run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
+                              "--image-worker", inp, str(tmp), fmt])
             made = [tmp]
         elif kind == "office":
             # LibreOffice does the work, inside the same sandbox, on a copy with a plain name.
@@ -321,8 +419,8 @@ def convert_one(src, fmt, on_progress=None):
             text = subprocess.run(sandbox_prefix(scratch) + ["pdftotext", "-l", "10", inp, "-"],
                                   stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout
             if len(text.strip()) < 20:
-                raise RuntimeError("this PDF has no text to carry over (it looks scanned), and ArkaOS "
-                                   "can't read scanned pages yet")
+                raise RuntimeError("this PDF has no text to carry over (it looks scanned); "
+                                   "use Text (read by OCR) to get its words")
             work = scratch / "in.pdf"
             shutil.copyfile(src, work)
             run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
@@ -333,7 +431,7 @@ def convert_one(src, fmt, on_progress=None):
         elif fmt in ("smaller-audio", "smaller-video"):
             ext = "mp3" if fmt == "smaller-audio" else "mp4"
             tmp = scratch / f"out.{ext}"
-            opts = SMALLER_AUDIO_OPTS if fmt == "smaller-audio" else SMALLER_VIDEO_OPTS
+            opts = smaller_audio_opts(level) if fmt == "smaller-audio" else smaller_video_opts(level)
             run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", inp, *opts, str(tmp)],
                        media_seconds(scratch, inp), on_progress)
             must_be_smaller(tmp, src)
@@ -341,7 +439,7 @@ def convert_one(src, fmt, on_progress=None):
         elif fmt == "smaller-pdf":
             # Ghostscript's "ebook" setting: pictures at 150 dpi, text untouched.
             tmp = scratch / "out.pdf"
-            run(scratch, ["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/ebook", "-dNOPAUSE",
+            run(scratch, ["gs", "-sDEVICE=pdfwrite", *PDF_LEVELS[level], "-dNOPAUSE",
                           "-dBATCH", "-dSAFER", "-dQUIET", "-sOutputFile=" + str(tmp), inp])
             if tmp.exists() and tmp.stat().st_size >= src.stat().st_size:
                 raise RuntimeError("it is already as small as this makes it")
@@ -365,17 +463,117 @@ def convert_one(src, fmt, on_progress=None):
                 stem = f"{src.stem} (cleaned)"
             elif fmt == "smaller-pdf" or fmt.startswith("smaller-"):
                 stem = f"{src.stem} (smaller)"
+            elif fmt == "text":
+                stem = f"{src.stem} (text)"
             elif kind == "pdf" and fmt == "png":
                 stem = src.stem if len(made) == 1 else f"{src.stem}-{i + 1}"
             else:
                 stem = src.stem
-            ext = {"smaller-pdf": "pdf", "smaller-image": "jpg" if src.suffix.lower() == ".jpeg" else src.suffix.lower().lstrip("."),
+            ext = {"text": "txt", "smaller-pdf": "pdf", "smaller-image": "jpg" if src.suffix.lower() == ".jpeg" else src.suffix.lower().lstrip("."),
                    "smaller-audio": "mp3", "smaller-video": "mp4",
                    "clean": src.suffix.lstrip(".")}.get(fmt, fmt)
             final = free_name(out_dir, stem, ext)
             m.rename(final)
             results.append(final)
         return results
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def image_fit_worker(src, dst, ext, limit):
+    """Runs inside the sandbox: lower the quality, then the size, until the picture fits under limit."""
+    import io
+    from PIL import Image, ImageOps
+    limit = int(limit)
+    with Image.open(src) as im:
+        im.seek(0)
+        im = ImageOps.exif_transpose(im)
+        fmt = {"jpg": "JPEG", "webp": "WEBP"}.get(ext, "JPEG")
+        if fmt == "JPEG" and im.mode in ("RGBA", "LA", "P", "PA"):
+            flat = Image.new("RGB", im.size, "white")
+            rgba = im.convert("RGBA")
+            flat.paste(rgba, mask=rgba.split()[-1])
+            im = flat
+        elif im.mode not in ("RGB", "L", "RGBA"):
+            im = im.convert("RGB")   # CMYK, 16-bit and the rest
+        scale = 1.0
+        while scale > 0.05:
+            sized = im if scale == 1.0 else im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))),
+                                                     Image.LANCZOS)
+            for quality in (85, 75, 65, 55, 45):
+                buf = io.BytesIO()
+                sized.save(buf, fmt, quality=quality, optimize=True)
+                if buf.tell() <= limit:
+                    with open(dst, "wb") as f:
+                        f.write(buf.getvalue())
+                    return
+            scale *= 0.8
+    raise RuntimeError("it can't be made that small")
+
+
+def fit_to_size(path, level, on_progress=None):
+    """Save a copy of a picture, sound, video or PDF that is under the size of level ("10mb", "25mb")."""
+    limit = FIT_LEVELS[level]
+    label = {"10mb": "under 10 MB", "25mb": "under 25 MB"}[level]
+    src = Path(path).resolve()
+    kind = kind_of(src)
+    if src.stat().st_size <= limit:
+        raise RuntimeError(f"it is already {label}")
+    out_dir = save_dir(src.parent)
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        inp = str(src)
+        if kind == "image":
+            ext = {"webp": "webp"}.get(src.suffix.lower().lstrip("."), "jpg")
+            tmp = scratch / f"out.{ext}"
+            run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--image-fit-worker",
+                          readable_image(scratch, src), str(tmp), ext, str(limit)], timeout=600)
+        elif kind in ("audio", "video"):
+            seconds = media_seconds(scratch, inp)
+            if not seconds:
+                raise RuntimeError("its length could not be read, so the size can't be planned")
+            ext = "mp3" if kind == "audio" else "mp4"
+            tmp = scratch / f"out.{ext}"
+            # Aim at 92% of the size: containers and the start of the stream take a little room.
+            budget = limit * 8 * 0.92 / seconds          # bits per second for everything
+            for attempt in (1.0, 0.8, 0.62):
+                rate = budget * attempt
+                if kind == "audio":
+                    kbps = int(rate / 1000)
+                    if kbps < 24:
+                        raise RuntimeError(f"it is too long to fit {label} at a listenable quality")
+                    opts = ["-vn", "-c:a", "libmp3lame", "-b:a", f"{min(kbps, 192)}k"]
+                else:
+                    sound = 96_000 if rate > 900_000 else 48_000
+                    video = int(rate - sound)
+                    if video < 120_000:
+                        raise RuntimeError(f"it is too long to fit {label} at a watchable quality")
+                    width = 1920 if video > 4_000_000 else 1280 if video > 1_500_000 else 854 if video > 600_000 else 640
+                    opts = ["-map", "0:v:0", "-map", "0:a:0?", "-sn",
+                            "-vf", f"scale=w='min({width},iw)':h=-2", "-c:v", "libopenh264", "-b:v", str(video),
+                            "-maxrate", str(int(video * 1.2)), "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", "-b:a", str(sound), "-movflags", "+faststart"]
+                run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", inp, *opts, str(tmp)],
+                           seconds, on_progress)
+                if tmp.exists() and tmp.stat().st_size <= limit:
+                    break
+            else:
+                raise RuntimeError(f"it could not be made {label}")
+        elif kind == "pdf":
+            tmp = scratch / "out.pdf"
+            for lvl in ("light", "medium", "strong"):
+                run(scratch, ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pdfwrite",
+                              "-dCompatibilityLevel=1.6", *PDF_LEVELS[lvl], f"-sOutputFile={tmp}", inp], timeout=600)
+                if tmp.exists() and tmp.stat().st_size <= limit:
+                    break
+            else:
+                raise RuntimeError(f"it could not be made {label}; its pictures may already be small")
+            ext = "pdf"
+        else:
+            raise RuntimeError("only pictures, sound, video and PDFs can be fitted to a size")
+        if not tmp.exists() or tmp.stat().st_size > limit:
+            raise RuntimeError(f"it could not be made {label}")
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} ({label})", ext)])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -426,6 +624,90 @@ def merge_pdfs(paths):
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+# Files whose formats already squeeze their contents. Deflating them again costs time and gains
+# next to nothing, so a ZIP of them stores them as they are.
+ALREADY_PACKED = {"jpg", "jpeg", "png", "webp", "gif", "mp3", "m4a", "aac", "ogg", "oga", "opus", "flac",
+                  "mp4", "mkv", "webm", "mov", "m4v", "avi", "ogv", "zip", "gz", "xz", "bz2", "7z", "rar",
+                  "pdf", "docx", "xlsx", "pptx", "odt", "ods", "odp"}
+
+
+def zip_all(paths):
+    """Put every file and folder in paths into ONE ZIP saved beside the first item.
+
+    Folders go in whole, with everything inside them. Symbolic links are skipped, never
+    followed, so a link cannot pull a file from somewhere else into the archive. Two items with the
+    same name get " (1)", " (2)" so neither hides the other inside the ZIP. Nothing is opened or run."""
+    import zipfile
+    # Not resolve(): that would follow a link the user picked and archive whatever it points at.
+    picked = [Path(os.path.abspath(p)) for p in paths]
+    items = [p for p in picked if not p.is_symlink()]
+    if len(picked) < 2:
+        raise RuntimeError("putting files together needs at least two items")
+    if not items:
+        raise RuntimeError("those are all links, and links are skipped, not followed")
+    for item in items:
+        if not item.exists():
+            raise RuntimeError(f"{item.name} is gone")
+        if not (item.is_file() or item.is_dir()):
+            raise RuntimeError(f"{item.name} is neither a file nor a folder")
+    out_dir = save_dir(items[0].parent)
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        tmp = scratch / "out.zip"
+        used, count = set(), 0
+
+        def top_name(name):
+            stem, dot, ext = name.rpartition(".") if "." in name.lstrip(".") else (name, "", "")
+            candidate, n = name, 1
+            while candidate.lower() in used:
+                candidate = f"{stem} ({n}){dot}{ext}"
+                n += 1
+            used.add(candidate.lower())
+            return candidate
+
+        def add_file(archive, path, arcname):
+            nonlocal count
+            packed = path.suffix.lower().lstrip(".") in ALREADY_PACKED
+            archive.write(path, arcname=arcname,
+                          compress_type=zipfile.ZIP_STORED if packed else zipfile.ZIP_DEFLATED,
+                          compresslevel=None if packed else 9)
+            count += 1
+
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+            for item in items:
+                name = top_name(item.name)
+                if item.is_file():
+                    add_file(archive, item, name)
+                    continue
+                for root, dirs, files in os.walk(item, followlinks=False):
+                    root = Path(root)
+                    if scratch == root or scratch in root.parents:
+                        dirs[:] = []
+                        continue
+                    rel = root.relative_to(item)
+                    base = Path(name) / rel
+                    dirs[:] = sorted(d for d in dirs if not (root / d).is_symlink())
+                    if not dirs and not files:
+                        archive.writestr(zipfile.ZipInfo(f"{base.as_posix()}/"), b"")
+                    for f in sorted(files):
+                        fp = root / f
+                        if fp.is_symlink() or not fp.is_file():
+                            continue
+                        add_file(archive, fp, (base / f).as_posix())
+        if count == 0:
+            raise RuntimeError("there were no files to put in the ZIP")
+        first = items[0].stem if items[0].is_file() else items[0].name
+        if len(items) == 1:
+            label = first
+        elif len(items) == 2:
+            label = f"{first} and {items[1].stem if items[1].is_file() else items[1].name}"
+        else:
+            label = f"{first} and {len(items) - 1} more"
+        return edit_done(scratch, [tmp], [(out_dir, label, "zip")])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def split_pdf(path):
     """Save every page of a PDF as its own PDF beside it."""
     src = Path(path).resolve()
@@ -454,14 +736,10 @@ def trim_media(path, start, end, on_progress=None):
         raise RuntimeError("only sound and video can be trimmed")
     if t1 <= t0:
         raise RuntimeError("the end has to be after the start")
-    if kind == "audio" and ext in AUDIO_OPTS:
-        opts = AUDIO_OPTS[ext]
-    elif ext in ("mp4", "mkv"):
-        opts = [o for o in VIDEO_OPTS["mp4"] if o not in ("-movflags", "+faststart")]
-    elif ext == "webm":
-        opts = VIDEO_OPTS["webm"]
-    else:
-        raise RuntimeError(f".{ext} can't be trimmed yet (mp3, wav, flac, ogg, opus, m4a, mp4, mkv, webm can)")
+    # Saved in its own format when that can be written, else as MP4 or MP3 (MOV, AVI and the like).
+    ext = media_ext(src)
+    maps = ["-vn"] if kind == "audio" else ["-map", "0:v:0", "-map", "0:a?", "-sn"]
+    opts = maps + codec_opts(ext)
     out_dir = src.parent
     out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
@@ -477,6 +755,709 @@ def trim_media(path, start, end, on_progress=None):
         return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} (trimmed)", ext)])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def media_ext(src):
+    """The format an edited sound or video is saved in: its own when it can be written, else MP4 or MP3."""
+    ext = src.suffix.lower().lstrip(".")
+    if kind_of(src) == "audio":
+        return ext if ext in AUDIO_OPTS else "mp3"
+    return ext if ext in ("mp4", "mkv", "webm") else "mp4"
+
+
+def codec_opts(ext):
+    """Encoder options for an edited file in format ext, without stream choices (-map)."""
+    if ext in AUDIO_OPTS:
+        return [o for o in AUDIO_OPTS[ext] if o != "-vn"]
+    opts = VIDEO_OPTS["webm"] if ext == "webm" else VIDEO_OPTS["mp4"]
+    out, skip = [], False
+    for o in opts:
+        if skip:
+            skip = False
+            continue
+        if o == "-map":
+            skip = True
+            continue
+        if o == "-sn" or (ext != "mp4" and o in ("-movflags", "+faststart")):
+            continue
+        out.append(o)
+    return out
+
+
+def picture_opts(ext):
+    """Only the picture encoder options of codec_opts(ext): the sound settings are left out, in pairs."""
+    out, opts, i = [], codec_opts(ext), 0
+    while i < len(opts):
+        if opts[i] in ("-c:a", "-b:a", "-q:a"):
+            i += 2
+            continue
+        out.append(opts[i])
+        i += 1
+    return out
+
+
+def sound_opts(ext):
+    """Only the sound encoder for format ext, when the picture is copied as it is."""
+    if ext in AUDIO_OPTS:
+        return [o for o in AUDIO_OPTS[ext] if o != "-vn"]
+    return ["-c:a", "libopus", "-b:a", "128k"] if ext == "webm" else ["-c:a", "aac", "-b:a", "192k"]
+
+
+def probe(scratch, inp):
+    """What ffprobe says about a file: duration, picture size and frame rate, and whether it has sound."""
+    import json
+    done = subprocess.run(sandbox_prefix(scratch) + [
+        "ffprobe", "-v", "error", "-show_entries",
+        "format=duration:stream=codec_type,width,height,avg_frame_rate:stream_tags=rotate:stream_side_data=rotation",
+        "-of", "json", inp],
+        stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+    try:
+        data = json.loads(done.stdout or "{}")
+    except ValueError:
+        data = {}
+    streams = data.get("streams") or []
+    video = next((st for st in streams if st.get("codec_type") == "video"), None)
+    info = {"seconds": None, "width": None, "height": None, "fps": None,
+            "audio": any(st.get("codec_type") == "audio" for st in streams)}
+    try:
+        info["seconds"] = float(data.get("format", {}).get("duration")) or None
+    except (TypeError, ValueError):
+        pass
+    if video:
+        info["width"], info["height"] = video.get("width"), video.get("height")
+        # A phone video is often stored sideways with a rotation note. ffmpeg turns it upright
+        # before any filter sees it, and the edit window shows it upright, so the sizes swap.
+        turn = video.get("tags", {}).get("rotate") or next(
+            (d.get("rotation") for d in video.get("side_data_list") or [] if "rotation" in d), 0)
+        try:
+            if round(abs(float(turn))) % 180 == 90:
+                info["width"], info["height"] = info["height"], info["width"]
+        except (TypeError, ValueError):
+            pass
+        num, _, den = str(video.get("avg_frame_rate") or "").partition("/")
+        try:
+            fps = float(num) / float(den or 1)
+            info["fps"] = fps if 1 <= fps <= 240 else None
+        except (ValueError, ZeroDivisionError):
+            pass
+    return info
+
+
+def media_job(path, kinds):
+    """Common checks for a sound or video edit; returns (src, kind, out_dir, scratch)."""
+    src = Path(path).resolve()
+    kind = kind_of(src)
+    if kind not in kinds:
+        raise RuntimeError("this only works on " + " and ".join({"audio": "sound", "video": "video"}[k] for k in kinds))
+    out_dir = save_dir(src.parent)
+    return src, kind, out_dir, Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+
+
+def time_ranges(args):
+    """Pairs of times as [(start, end)] in seconds; each end after its start."""
+    if not args or len(args) % 2:
+        raise RuntimeError("give the parts as pairs of times: START END")
+    ranges = []
+    for a, b in zip(args[0::2], args[1::2]):
+        t0, t1 = parse_time(a), parse_time(b)
+        if t1 <= t0:
+            raise RuntimeError("each part has to end after it starts")
+        ranges.append((t0, t1))
+    if len(ranges) > 200:
+        raise RuntimeError("that is more than 200 parts")
+    return sorted(ranges)
+
+
+def between(ranges):
+    """An ffmpeg expression that is true during any of the ranges."""
+    return "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in ranges)
+
+
+def box_list(args, even=False):
+    """X Y W H groups as whole numbers. even: rounded to even numbers inside the box, which a video
+    crop needs. Never used for black-out boxes: those must cover at least what was marked."""
+    if not args or len(args) % 4:
+        raise RuntimeError("a box is four whole numbers: X Y W H")
+    try:
+        vals = [int(a) for a in args]
+    except ValueError:
+        raise RuntimeError("a box is four whole numbers: X Y W H") from None
+    boxes = [vals[i:i + 4] for i in range(0, len(vals), 4)]
+    if even:
+        boxes = [[v - v % 2 for v in b] for b in boxes]
+    for x, y, w, h in boxes:
+        if x < 0 or y < 0 or w < 1 or h < 1 or (even and (w < 2 or h < 2)):
+            raise RuntimeError("a box needs a size and can't start before the picture")
+    return boxes
+
+
+def edit_video(op, path, args, on_progress=None):
+    """crop or redact a video. The picture is encoded again; the sound is copied as it is."""
+    window = None
+    if op == "redact" and args[:1] == ["--between"]:
+        if len(args) < 3:
+            raise RuntimeError("--between needs a start and an end")
+        window = time_ranges(args[1:3])
+        args = args[3:]
+    boxes = box_list(args, even=(op == "crop"))
+    if op == "crop" and len(boxes) != 1:
+        raise RuntimeError("crop takes one box")
+    src, _, out_dir, scratch = media_job(path, ("video",))
+    try:
+        info = probe(scratch, str(src))
+        w0, h0 = info["width"], info["height"]
+        if not w0 or not h0:
+            raise RuntimeError("its picture size could not be read")
+        for x, y, w, h in boxes:
+            if x + w > w0 or y + h > h0:
+                raise RuntimeError(f"that box is outside the picture ({w0} x {h0})")
+        if op == "crop":
+            x, y, w, h = boxes[0]
+            vf = f"crop={w}:{h}:{x}:{y}"
+        else:
+            # Widened outward to even edges: video keeps colour at half resolution, so a box edge on an
+            # odd pixel could blend with its neighbour. A box only ever covers more than was marked.
+            grown = []
+            for x, y, w, h in boxes:
+                x1, y1 = min(w0, x + w + (x + w) % 2), min(h0, y + h + (y + h) % 2)
+                x0, y0 = x - x % 2, y - y % 2
+                grown.append((x0, y0, x1 - x0, y1 - y0))
+            boxes = grown
+            when = f":enable='{between(window)}'" if window else ""
+            # t=fill paints the box solid. The frames are encoded from the painted pixels,
+            # so what was under a box is not in the new file at all.
+            vf = ",".join(f"drawbox=x={x}:y={y}:w={w}:h={h}:color=black:t=fill{when}" for x, y, w, h in boxes)
+        ext = media_ext(src)
+        tmp = scratch / f"out.{ext}"
+        sound = ["-c:a", "copy"] if ext == src.suffix.lower().lstrip(".") else sound_opts(ext)
+        # File details (title, comments, chapters) can repeat what was covered, so the copy has none.
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src),
+                             "-map", "0:v:0", "-map", "0:a?", "-sn", "-map_metadata", "-1", "-map_chapters", "-1",
+                             "-vf", vf,
+                             *picture_opts(ext), *sound, str(tmp)],
+                   info["seconds"], on_progress)
+        label = {"crop": "cropped", "redact": "redacted"}[op]
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} ({label})", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def split_media(path, at, on_progress=None):
+    """Save a sound or video as two files, cut at the time given."""
+    t = parse_time(at)
+    src, kind, out_dir, scratch = media_job(path, ("audio", "video"))
+    try:
+        info = probe(scratch, str(src))
+        total = info["seconds"]
+        if t <= 0 or (total and t >= total):
+            raise RuntimeError("the cut has to be inside the file")
+        ext = media_ext(src)
+        maps = ["-map", "0:v:0", "-map", "0:a?", "-sn"] if kind == "video" else ["-vn"]  # cover art is not a video
+        first, second = scratch / f"part1.{ext}", scratch / f"part2.{ext}"
+        common = ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src)]
+        run_ffmpeg(scratch, common + ["-t", f"{t:.3f}", *maps, *codec_opts(ext), str(first)], t, None)
+        run_ffmpeg(scratch, common + ["-ss", f"{t:.3f}", *maps, *codec_opts(ext), str(second)],
+                   total - t if total else None, on_progress)
+        return edit_done(scratch, [first, second],
+                         [(out_dir, f"{src.stem} (part 1)", ext), (out_dir, f"{src.stem} (part 2)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def name_order(paths):
+    """Sort as the file manager lists names: "clip 2" before "clip 10", capitals mixed in."""
+    import re
+    return sorted(paths, key=lambda p: [int(t) if t.isdigit() else t.casefold()
+                                        for t in re.split(r"(\d+)", Path(p).name)])
+
+
+def join_media(paths, on_progress=None):
+    """Join sounds, or videos, end to end in the order given, into one file beside the first.
+
+    Videos take the first one's picture size and frame rate; a video that is a different shape
+    is fitted inside with black bars, never stretched. A video with no sound gets silence."""
+    if len(paths) < 2:
+        raise RuntimeError("joining needs at least two files")
+    if len(paths) > 30:
+        raise RuntimeError("join at most 30 files at a time")
+    srcs = [Path(p).resolve() for p in paths]
+    kinds = {kind_of(p) for p in srcs}
+    if kinds not in ({"audio"}, {"video"}):
+        raise RuntimeError("join sounds with sounds, or videos with videos")
+    kind = kinds.pop()
+    first, _, out_dir, scratch = media_job(srcs[0], (kind,))
+    try:
+        infos = [probe(scratch, str(p)) for p in srcs]
+        total = sum(i["seconds"] or 0 for i in infos) or None
+        ext = media_ext(first)
+        inputs, chains, labels = [], [], []
+        if kind == "audio":
+            for n, p in enumerate(srcs):
+                inputs += ["-i", str(p)]
+                chains.append(f"[{n}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{n}]")
+                labels.append(f"[a{n}]")
+            graph = ";".join(chains) + ";" + "".join(labels) + f"concat=n={len(srcs)}:v=0:a=1[a]"
+            maps = ["-map", "[a]"]
+        else:
+            w, h = infos[0]["width"], infos[0]["height"]
+            if not w or not h:
+                raise RuntimeError(f"{first.name}: its picture size could not be read")
+            w, h = w - w % 2, h - h % 2
+            fps = infos[0]["fps"] or 30
+            # Every real file first, so input n is file n; the silences for videos without sound
+            # come after them, in their own list.
+            silences, extra = [], len(srcs)
+            for p, info in zip(srcs, infos):
+                if not info["width"]:
+                    raise RuntimeError(f"{p.name} has no picture")
+                inputs += ["-i", str(p)]
+            for n, (p, info) in enumerate(zip(srcs, infos)):
+                chains.append(f"[{n}:v:0]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                              f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps:.3f},format=yuv420p[v{n}]")
+                if info["audio"]:
+                    chains.append(f"[{n}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{n}]")
+                    labels.append(f"[v{n}][a{n}]")
+                else:
+                    silences += ["-f", "lavfi", "-t", f"{info['seconds'] or 0.1:.3f}",
+                                 "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+                    labels.append(f"[v{n}][{extra}:a]")
+                    extra += 1
+            inputs += silences
+            graph = ";".join(chains) + ";" + "".join(labels) + f"concat=n={len(srcs)}:v=1:a=1[v][a]"
+            maps = ["-map", "[v]", "-map", "[a]"]
+        tmp = scratch / f"out.{ext}"
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", *inputs, "-filter_complex", graph,
+                             *maps, *codec_opts(ext), str(tmp)], total, on_progress)
+        label = f"{first.stem} and {len(srcs) - 1} more" if len(srcs) > 2 else f"{first.stem} and {srcs[1].stem}"
+        return edit_done(scratch, [tmp], [(out_dir, f"{label} (joined)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def bleep_media(path, args, on_progress=None):
+    """Replace the sound in the parts given with a beep. In a video the picture is copied as it is."""
+    ranges = time_ranges(args)
+    src, kind, out_dir, scratch = media_job(path, ("audio", "video"))
+    try:
+        info = probe(scratch, str(src))
+        if not info["audio"]:
+            raise RuntimeError("it has no sound")
+        if info["seconds"] and ranges[0][0] >= info["seconds"]:
+            raise RuntimeError("the parts are after the end of the file")
+        ext = media_ext(src)
+        cond = between(ranges)
+        # The sound is silenced in the parts, and a 1 kHz tone is heard only in them. The words
+        # under a beep are gone from the new file, not hidden under a louder sound.
+        graph = (f"[0:a:0]volume=0:enable='{cond}'[quiet];"
+                 f"sine=frequency=1000:sample_rate=48000,volume=0.8,volume=0:enable='not({cond})'[tone];"
+                 "[quiet][tone]amix=inputs=2:duration=first:normalize=0[a]")
+        tmp = scratch / f"out.{ext}"
+        picture = ["-map", "0:v:0", "-c:v", "copy"] if kind == "video" and info["width"] else []
+        if kind == "video" and info["width"] and ext != src.suffix.lower().lstrip("."):
+            picture = ["-map", "0:v:0"] + picture_opts(ext)
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), "-filter_complex", graph,
+                             *picture, "-map", "[a]", "-sn", *sound_opts(ext), str(tmp)], info["seconds"], on_progress)
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} (bleeped)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def save_frame(path, at, out):
+    """Write one frame of a video as a PNG, for the edit window to draw on. Prints its size."""
+    src = Path(path).resolve()
+    if kind_of(src) != "video":
+        raise RuntimeError("only videos have frames")
+    scratch = Path(tempfile.mkdtemp(prefix="arka-convert-"))
+    try:
+        tmp = scratch / "frame.png"
+        run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-ss", f"{parse_time(at):.3f}", "-i", str(src),
+                      "-frames:v", "1", str(tmp)], timeout=60)
+        if not tmp.exists() or tmp.stat().st_size == 0:
+            raise RuntimeError("no frame at that time")
+        shutil.move(str(tmp), out)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+# What a file's hidden details are about, in words a person uses. The first group whose pattern
+# matches a field's name wins; the rest is "Other".
+DETAIL_GROUPS = [
+    ("Location", r"gps|location|latitude|longitude|^city$|^country|sublocation|^state$|province"),
+    ("Camera or device", r"^make$|model|lens|serial|camera|device|bodyserial|owner ?name"),
+    ("People", r"artist|author|creator(?!tool)|copyright|owner|by-?line|credit|lastmodifiedby|company|manager"),
+    ("Dates", r"date|time"),
+    ("Software", r"software|producer|creatortool|encoder|encoded|encodedby|^tsse$|^tenc$|application|^tool|history"),
+]
+# Fields that only describe how the bytes are stored. They are removed too, but listing them
+# would bury the ones that say something about a person.
+DETAIL_SKIP = r"byteorder|^(image)?(width|height)$|bitspersample|colorspace|compression|resolution|ycbcr|orientation|^version$|filetype|mimetype|encoding"
+
+
+def details_worker(path):
+    """Runs inside the sandbox: the hidden details mat2 would remove, as JSON on stdout."""
+    import json
+    import re
+    from libmat2 import parser_factory
+    parser, _ = parser_factory.get_parser(path)
+    if parser is None:
+        print(json.dumps({"supported": False}))
+        return
+    meta = parser.get_meta() or {}
+
+    def flat(d, prefix=""):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                yield from flat(v, f"{prefix}{k} / ")
+            else:
+                yield f"{prefix}{k}", str(v)
+
+    groups, total = {}, 0
+    for key, value in flat(meta):
+        total += 1
+        name = key.split(" / ")[-1]
+        if re.search(DETAIL_SKIP, name, re.I):
+            continue
+        group = next((g for g, pat in DETAIL_GROUPS if re.search(pat, name.replace(" ", ""), re.I)), "Other")
+        groups.setdefault(group, []).append([name, value[:200]])
+    order = [g for g, _ in DETAIL_GROUPS] + ["Other"]
+    print(json.dumps({"supported": True, "total": total,
+                      "groups": [[g, groups[g]] for g in order if g in groups]}))
+
+
+def file_details(path):
+    """The hidden details of one file, read in the sandbox with mat2's own library."""
+    import json
+    src = Path(path).resolve()
+    if not src.is_file():
+        raise RuntimeError("it isn't a file")
+    if src.suffix.lower().lstrip(".") not in CLEAN_EXT:
+        return {"supported": False}
+    scratch = Path(tempfile.mkdtemp(prefix="arka-convert-"))
+    try:
+        done = subprocess.run(sandbox_prefix(scratch) + [sys.executable, "-I", os.path.realpath(__file__),
+                              "--details-worker", str(src)], stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, timeout=60)
+        try:
+            return json.loads(done.stdout)
+        except ValueError:
+            raise RuntimeError("its details could not be read") from None
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def upright_png(scratch, src):
+    """The picture as an upright PNG in the scratch folder: what the eye and the edit window see."""
+    out = scratch / "upright.png"
+    run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--image-worker",
+                  readable_image(scratch, src), str(out), "png"], timeout=120)
+    return out
+
+
+def ocr(scratch, image, extra=()):
+    """Tesseract on one image, in the sandbox; English. Returns what it printed."""
+    if not shutil.which("tesseract"):
+        raise RuntimeError("text recognition (tesseract) is not installed")
+    out = scratch / "ocr"
+    run(scratch, ["tesseract", str(image), str(out), "-l", "eng", *extra], timeout=300)
+    made = next(iter(sorted(scratch.glob("ocr.*"))), None)
+    if not made:
+        raise RuntimeError("no text could be read")
+    text = made.read_text(errors="replace")
+    made.unlink()
+    return text
+
+
+def read_text(scratch, src, kind):
+    """A .txt of the words in a picture or PDF. A PDF with real text is copied out as it is; a
+    scanned one (no text in it) is read page by page with OCR."""
+    out = scratch / "text.txt"
+    if kind == "pdf":
+        info = subprocess.run(sandbox_prefix(scratch) + ["pdfinfo", str(src)], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=60).stdout
+        import re
+        m = re.search(r"^Pages:\s+(\d+)", info, re.M)
+        count = int(m.group(1)) if m else 0
+        if count > 200:
+            raise RuntimeError(f"it has {count} pages; text recognition reads up to 200 at a time")
+        done = subprocess.run(sandbox_prefix(scratch) + ["pdftotext", "-layout", str(src), "-"],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+        # Real text on at least half the pages (pdftotext ends each page with a form feed), not a
+        # footer over scanned pages, is copied out as it is.
+        pages_text = [pg for pg in done.stdout.split("\f") if pg.strip()] if done.stdout.strip() else []
+        # 80 characters: more than a footer such as "Page 3 of 10 - Confidential" carries.
+        with_text = sum(1 for pg in pages_text if len(pg.strip()) >= 80)
+        if with_text and with_text * 2 >= max(1, count):
+            out.write_text(done.stdout)
+            return out
+        run(scratch, ["pdftoppm", "-r", "200", "-l", "200", "-scale-to", "3500", "-png", str(src),
+                      str(scratch / "page")], timeout=900)
+        deadline = time.monotonic() + 1800
+        texts = []
+        for p in sorted(scratch.glob("page-*.png")):
+            if time.monotonic() > deadline:
+                raise RuntimeError("reading it took over half an hour and was stopped")
+            texts.append(ocr(scratch, p))
+            p.unlink()
+        text = "\n\f".join(texts)
+    else:
+        text = ocr(scratch, upright_png(scratch, src))
+    if not text.strip():
+        raise RuntimeError("no text was found in it")
+    out.write_text(text)
+    return out
+
+
+# What "Find private text" looks for. Each is a pattern over one line of recognised words.
+PRIVATE_PATTERNS = [
+    ("email", r"[\w.+-]+@[\w-]+(\.[\w-]+)+"),
+    # Cards: 13 to 19 digits, written together or in groups, starting the way card numbers do.
+    ("card", r"(?<![\d])[2-6]\d{3}(?:[ -]?\d){9,15}(?![\d])"),
+    ("iban", r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b"),
+    # Phones: a leading + or (, or at least 10 digits; dates, times and IP addresses are left out below.
+    ("phone", r"(?<![\w./-])(?:\+|\()?\d[\d ().-]{7,}\d(?![\w:])"),
+    # UPI IDs (name@bank), used for payments in India; written like an email without a dot.
+    ("upi", r"(?<![\w.@-])[\w.-]{2,}@[a-zA-Z]{2,}(?![\w.@-])"),
+]
+NOT_A_PHONE = [r"^\d{4}-\d{1,2}-\d{1,2}$", r"^\d{1,2}[-./]\d{1,2}[-./]\d{2,4}$", r"^(\d{1,3}\.){3}\d{1,3}$",
+               r"^\d{1,3}([.,]\d{3})+([.,]\d+)?$"]
+
+
+def plausible(kind, found):
+    """A second look at a match, so dates, amounts and lookalikes are not boxed."""
+    import re
+    digits = re.sub(r"\D", "", found)
+    if kind == "card":
+        return 13 <= len(digits) <= 19 and luhn(digits) and not re.fullmatch(r"(19|20)\d{6,}", digits)
+    if kind == "phone":
+        if any(re.fullmatch(p, found.strip()) for p in NOT_A_PHONE):
+            return False
+        if re.search(r"\d{1,4}[-./]\d{1,2}[-./]\d{1,4}", found):   # a date with something after it
+            return False
+        lead = found.strip()[:1] in "+("
+        # With + or ( it reads as a phone number; without, only the lengths real numbers have.
+        return 9 <= len(digits) <= 15 if lead else 10 <= len(digits) <= 11
+    if kind == "iban":   # the IBAN's own check: move the first four characters to the end, mod 97 is 1
+        code = re.sub(r"\s", "", found)
+        moved = code[4:] + code[:4]
+        try:
+            return 15 <= len(code) <= 34 and int("".join(str(int(c, 36)) for c in moved)) % 97 == 1
+        except ValueError:
+            return False
+    return True
+
+
+def luhn(digits):
+    total, alt = 0, False
+    for d in reversed(digits):
+        n = int(d) * (2 if alt else 1)
+        total += n - 9 if n > 9 else n
+        alt = not alt
+    return total % 10 == 0
+
+
+def find_private(path):
+    """Boxes (X Y W H, picture pixels, upright) around email addresses, card and phone numbers and
+    IBANs that OCR reads in a picture. Suggestions only: the person checks them before anything is saved."""
+    import re
+    src = Path(path).resolve()
+    if kind_of(src) != "image":
+        raise RuntimeError("this works on pictures (and video frames)")
+    scratch = Path(tempfile.mkdtemp(prefix="arka-convert-"))
+    try:
+        tsv = ocr(scratch, upright_png(scratch, src), ["tsv"])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    lines, page_w, page_h = {}, None, None
+    for row in tsv.splitlines()[1:]:
+        f = row.split("\t")
+        if len(f) >= 10 and f[0] == "1":
+            page_w, page_h = int(f[8]), int(f[9])
+        if len(f) < 12 or f[0] != "5" or not f[11].strip():
+            continue
+        key = (f[2], f[3], f[4])                     # block, paragraph, line
+        lines.setdefault(key, []).append((f[11], int(f[6]), int(f[7]), int(f[8]), int(f[9])))
+    found = []
+    for words in lines.values():
+        text, spans = "", []
+        for w in words:
+            if text:
+                text += " "
+            spans.append((len(text), len(text) + len(w[0]), w))
+            text += w[0]
+        taken = []   # spans already boxed on this line: a phone is not also found inside a card or IBAN
+        for kind, pat in PRIVATE_PATTERNS:
+            for m in re.finditer(pat, text):
+                if not plausible(kind, m.group(0)):
+                    continue
+                if any(a < m.end() and b > m.start() for a, b in taken):
+                    continue
+                taken.append((m.start(), m.end()))
+                hit = [w for a, b, w in spans if a < m.end() and b > m.start()]
+                if not hit:
+                    continue
+                x0 = min(w[1] for w in hit) - 4
+                y0 = min(w[2] for w in hit) - 4
+                x1 = max(w[1] + w[3] for w in hit) + 4
+                y1 = max(w[2] + w[4] for w in hit) + 4
+                if page_w:
+                    x1, y1 = min(x1, page_w), min(y1, page_h)
+                x0, y0 = max(0, x0), max(0, y0)
+                if x1 - x0 < 2 or y1 - y0 < 2:
+                    continue
+                box = [x0, y0, x1 - x0, y1 - y0]
+                if not any(b == box for _, b in found):
+                    found.append((kind, box))
+    return [{"kind": k, "box": b} for k, b in found]
+
+
+def save_waveform(path, out, dark="1"):
+    """Draw the sound of a file as a waveform PNG for the edit window's timeline (1600 x 160)."""
+    src = Path(path).resolve()
+    if kind_of(src) not in ("audio", "video"):
+        raise RuntimeError("only sound and video have a waveform")
+    scratch = Path(tempfile.mkdtemp(prefix="arka-convert-"))
+    try:
+        tmp = scratch / "wave.png"
+        colour = "#C9CED6" if dark == "1" else "#4A5260"
+        run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), "-filter_complex",
+                      f"[0:a:0]aformat=channel_layouts=mono,showwavespic=s=1600x160:colors={colour}:scale=sqrt",
+                      "-frames:v", "1", str(tmp)], timeout=120)
+        if not tmp.exists() or tmp.stat().st_size == 0:
+            raise RuntimeError("it has no sound to draw")
+        shutil.move(str(tmp), out)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+ANNOTATE_KINDS = {"pen", "arrow", "box", "highlight", "text"}
+
+
+def shapes_text(arg):
+    """The JSON itself, or read from the file "@PATH" names. The edit window hands a drawing over as a
+    file in the user's private runtime folder and it is removed once read; the worker's copy lives in
+    the scratch folder."""
+    if not arg.startswith("@"):
+        return arg
+    path = Path(arg[1:])
+    try:
+        if path.stat().st_size > 8 * 1024 * 1024:
+            raise RuntimeError("the drawing is too big")
+        text = path.read_text()
+    except OSError:
+        raise RuntimeError("the drawing could not be read") from None
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime and path.parent == Path(runtime):
+        path.unlink(missing_ok=True)
+    return text
+
+
+def annotate_shapes(text):
+    """Check the shapes for "annotate". JSON: a list of
+         {"t": "pen"|"arrow"|"box"|"highlight"|"text", "c": "#RRGGBB", "w": width,
+          "p": [x, y, ...], "s": "words" (text only)}
+    in picture pixels. pen: any number of points; arrow: from and to; box and highlight: x y w h;
+    text: where its top left goes, w is the letter height."""
+    import json
+    import re
+    try:
+        shapes = json.loads(text)
+    except ValueError:
+        raise RuntimeError("the drawing could not be read") from None
+    if not isinstance(shapes, list) or not shapes or len(shapes) > 500:
+        raise RuntimeError("there is nothing to draw, or too much")
+    points = 0
+    for sh in shapes:
+        if not isinstance(sh, dict) or sh.get("t") not in ANNOTATE_KINDS:
+            raise RuntimeError("the drawing has an unknown shape")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(sh.get("c", ""))):
+            raise RuntimeError("a colour is written like #E5484D")
+        w, p = sh.get("w"), sh.get("p")
+        if not isinstance(w, (int, float)) or not 1 <= w <= 400:
+            raise RuntimeError("a line or letter size is 1 to 400")
+        if not isinstance(p, list) or not all(isinstance(v, (int, float)) and -1e5 < v < 1e5 for v in p):
+            raise RuntimeError("a shape has bad points")
+        need = {"pen": None, "arrow": 4, "box": 4, "highlight": 4, "text": 2}[sh["t"]]
+        if (need and len(p) != need) or (not need and (len(p) < 2 or len(p) % 2)):
+            raise RuntimeError(f"a {sh['t']} has the wrong number of points")
+        if sh["t"] == "text" and (not isinstance(sh.get("s"), str) or not 0 < len(sh["s"]) <= 300):
+            raise RuntimeError("a text needs 1 to 300 letters")
+        points += len(p)
+    if points > 100000:
+        raise RuntimeError("the drawing has too many points")
+    return shapes
+
+
+_FONT_FILE = []
+
+
+def annotate_font(size):
+    """A real font for the letters, found once the way the desktop finds one; Pillow's own if none."""
+    from PIL import ImageFont
+    if not _FONT_FILE:
+        try:
+            _FONT_FILE.append(subprocess.run(["fc-match", "-f", "%{file}", "sans-serif:weight=bold"],
+                                             capture_output=True, text=True, timeout=10).stdout.strip())
+        except (OSError, subprocess.SubprocessError):
+            _FONT_FILE.append("")
+    try:
+        if _FONT_FILE[0]:
+            return ImageFont.truetype(_FONT_FILE[0], size)
+    except OSError:
+        pass
+    return ImageFont.load_default(size)
+
+
+def draw_shapes(im, shapes):
+    """Draw annotate shapes on an RGBA picture. Highlights are see-through; the rest is solid."""
+    import math
+    from PIL import Image, ImageDraw
+    over = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    marks = ImageDraw.Draw(over)
+    draw = ImageDraw.Draw(im)
+    pending = False
+    for sh in shapes:
+        rgb = tuple(int(sh["c"][i:i + 2], 16) for i in (1, 3, 5))
+        w, p = max(1, round(sh["w"])), sh["p"]
+        if sh["t"] == "highlight":
+            x, y, bw, bh = p
+            marks.rectangle((x, y, x + bw, y + bh), fill=rgb + (96,))
+            pending = True
+            continue
+        # Earlier highlights go under later lines and letters.
+        if pending:
+            im.alpha_composite(over)
+            over = Image.new("RGBA", im.size, (0, 0, 0, 0))
+            marks = ImageDraw.Draw(over)
+            pending = False
+        if sh["t"] == "pen":
+            pts = list(zip(p[0::2], p[1::2]))
+            if len(pts) == 1:
+                pts = pts * 2
+            draw.line(pts, fill=rgb + (255,), width=w, joint="curve")
+            r = w / 2  # round ends
+            for x, y in (pts[0], pts[-1]):
+                draw.ellipse((x - r, y - r, x + r, y + r), fill=rgb + (255,))
+        elif sh["t"] == "box":
+            x, y, bw, bh = p
+            draw.rectangle((x, y, x + bw, y + bh), outline=rgb + (255,), width=w)
+        elif sh["t"] == "arrow":
+            x0, y0, x1, y1 = p
+            ang = math.atan2(y1 - y0, x1 - x0)
+            head = w * 3 + 8
+            back = (x1 - head * 0.8 * math.cos(ang), y1 - head * 0.8 * math.sin(ang))
+            draw.line((x0, y0, *back), fill=rgb + (255,), width=w)
+            left = (x1 - head * math.cos(ang - 0.45), y1 - head * math.sin(ang - 0.45))
+            right = (x1 - head * math.cos(ang + 0.45), y1 - head * math.sin(ang + 0.45))
+            draw.polygon([(x1, y1), left, right], fill=rgb + (255,))
+        else:
+            font = annotate_font(w)
+            x, y = p
+            outline = (0, 0, 0, 255) if sum(rgb) > 382 else (255, 255, 255, 255)
+            draw.text((x, y), sh["s"], font=font, fill=rgb + (255,), stroke_width=max(1, w // 14),
+                      stroke_fill=outline)
+    if pending:
+        im.alpha_composite(over)
+    return im
 
 
 def edit_image_worker(op, src, dst, args):
@@ -506,12 +1487,16 @@ def edit_image_worker(op, src, dst, args):
                 if w < 1 or h < 1:
                     raise RuntimeError("a box has no size")
                 draw.rectangle((x, y, x + w - 1, y + h - 1), fill=black)  # the pixels are replaced, not covered
+        elif op == "annotate":
+            im = draw_shapes(im.convert("RGBA"), annotate_shapes(shapes_text(args[0])))
         elif op == "background":
             pad = int(args[1])
-            colors = [tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) for c in args[0].split("-")]
             fg = im.convert("RGBA")
             size = (fg.width + 2 * pad, fg.height + 2 * pad)
-            if len(colors) == 1:
+            colors = [] if args[0] == "none" else [tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) for c in args[0].split("-")]
+            if not colors:                     # see-through room around the picture
+                bg = Image.new("RGBA", size, (0, 0, 0, 0))
+            elif len(colors) == 1:
                 bg = Image.new("RGBA", size, colors[0] + (255,))
             else:  # top to bottom
                 bg = Image.new("RGBA", size)
@@ -545,24 +1530,45 @@ def edit_image(op, path, args):
             raise RuntimeError("a box is four whole numbers: X Y W H") from None
         if any(v < 0 for v in vals) or any(vals[i] < 1 for i in range(2, len(vals), 4)) or any(vals[i] < 1 for i in range(3, len(vals), 4)):
             raise RuntimeError("a box needs a size and can't start before the picture")
+    if op == "annotate":
+        if len(args) != 1:
+            raise RuntimeError("annotate takes the shapes as one JSON argument, or @FILE")
+        args = [shapes_text(args[0])]
+        annotate_shapes(args[0])  # checked here too, so a mistake is reported before anything runs
     if op == "background":
         import re
-        if len(args) != 2 or not re.fullmatch(r"#[0-9a-fA-F]{6}(-#[0-9a-fA-F]{6})?", args[0]) \
+        if len(args) != 2 or not re.fullmatch(r"none|#[0-9a-fA-F]{6}(-#[0-9a-fA-F]{6})?", args[0]) \
                 or not args[1].isdigit() or int(args[1]) > 2000:
-            raise RuntimeError("background needs a colour like #1E90FF (or two joined with -) and a padding of 0 to 2000")
+            raise RuntimeError("background needs a colour like #1E90FF (or two joined with -, or none for see-through) and a padding of 0 to 2000")
     out_ext = ext if ext in ("png", "jpg", "jpeg", "webp") else "png"
-    if op == "background" and ext in ("jpg", "jpeg", "webp"):
+    if op == "background" and args[0] == "none":
+        out_ext = "png" if ext not in ("webp",) else ext   # JPEG can't keep see-through parts
+    elif op in ("background", "annotate") and ext in ("jpg", "jpeg", "webp"):
         out_ext = ext
     out_dir = src.parent
     out_dir = save_dir(out_dir)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
         tmp = scratch / f"out.{out_ext}"
-        run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--edit-worker", op, str(src), str(tmp), *args])
-        label = {"rotate": "rotated", "crop": "cropped", "redact": "redacted", "background": "with background"}[op]
+        if op == "annotate":
+            # A long drawing is too big for one command-line argument (128 KiB on Linux), so the
+            # worker reads it from the scratch folder, which the sandbox can see.
+            (scratch / "shapes.json").write_text(args[0])
+            args = ["@" + str(scratch / "shapes.json")]
+        run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--edit-worker", op,
+                      readable_image(scratch, src), str(tmp), *args], timeout=300)
+        label = {"rotate": "rotated", "crop": "cropped", "redact": "redacted", "background": "with background",
+                 "annotate": "annotated"}[op]
         return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} ({label})", out_ext)])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def done_title(fmt):
+    """What the finished pop-up says. The wheel asks for smaller-image, smaller-video and so on; the menu asks for smaller."""
+    if fmt == "smaller" or fmt.startswith("smaller-"):
+        return "Made smaller"
+    return {"clean": "Removed hidden details", "zip": "Zipped"}.get(fmt, "Converted")
 
 
 def notify(text, body="", replace=None, urgency="normal"):
@@ -637,44 +1643,84 @@ def run_edit(tool, args):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
     wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3), "rotate": (2, 2), "crop": (5, 5),
-              "redact": (5, None), "background": (3, 3)}[tool]
+              "redact": (5, None), "background": (3, 3), "zip-all": (2, None), "annotate": (2, 2),
+              "split-media": (2, 2), "join-media": (2, None), "bleep": (3, None)}[tool]
     if len(args) < wanted[0] or (wanted[1] and len(args) > wanted[1]):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
     title = {"merge-pdf": "Merged", "split-pdf": "Split", "trim": "Trimmed", "rotate": "Rotated", "crop": "Cropped",
-             "redact": "Hidden parts blacked out", "background": "Background added"}[tool]
+             "redact": "Hidden parts blacked out", "background": "Background added",
+             "zip-all": "Zipped together", "annotate": "Annotated", "split-media": "Split in two",
+             "join-media": "Joined", "bleep": "Bleeped"}[tool]
+    media = tool in ("trim", "split-media", "join-media", "bleep") or (
+        tool in ("crop", "redact") and kind_of(args[0]) == "video")
+    working = {"trim": "Trimming", "split-media": "Splitting", "join-media": "Joining", "bleep": "Bleeping",
+               "crop": "Cropping", "redact": "Blacking out"}
+    nid = notify(working[tool], Path(args[0]).name if tool != "join-media" else f"{len([a for a in args if a != '--name-order'])} files",
+                 urgency="low") if media else None
+    last = [0.0]
+
+    def progress(fraction):
+        now = time.monotonic()
+        if nid and now - last[0] >= 2:
+            last[0] = now
+            notify(working[tool], f"{int(fraction * 100)}% done", nid, "low")
+
     try:
         if tool == "merge-pdf":
             made = merge_pdfs(args)
+        elif tool == "zip-all":
+            made = zip_all(args)
         elif tool == "split-pdf":
             made = split_pdf(args[0])
         elif tool == "trim":
-            made = trim_media(args[0], args[1], args[2])
+            made = trim_media(args[0], args[1], args[2], progress)
+        elif tool == "split-media":
+            made = split_media(args[0], args[1], progress)
+        elif tool == "join-media":
+            made = join_media(name_order(args[1:]) if args[0] == "--name-order" else args, progress)
+        elif tool == "bleep":
+            made = bleep_media(args[0], args[1:], progress)
+        elif tool in ("crop", "redact") and kind_of(args[0]) == "video":
+            made = edit_video(tool, args[0], args[1:], progress)
         else:
             made = edit_image(tool, args[0], args[1:])
-    except (RuntimeError, OSError) as e:
-        notify(f"Couldn't {tool.split('-')[0]}", f"{Path(args[0]).name}: {e}")
+    except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as e:
+        # A ZIP of many items has no single file to name; its messages already say which one.
+        notify(f"Couldn't {tool.split('-')[0]}", str(e) if tool in ("zip-all", "join-media") else f"{Path(args[0]).name}: {e}",
+               nid)
         return 1
     except (SystemExit, KeyboardInterrupt):
-        notify(f"{title} stopped", "Files that were not finished were not saved.")
+        notify(f"{title} stopped", "Files that were not finished were not saved.", nid)
         raise
     refresh_folder(made)
     if len(made) == 1:
-        notify_done(title, made[0])
+        notify_done(title, made[0], nid)
     else:
-        notify(title, f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the original"))
+        notify(title, f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the original"), nid)
     return 0
 
 
 def main(argv):
     if len(argv) >= 6 and argv[1] == "--edit-worker":
-        edit_image_worker(argv[2], argv[3], argv[4], argv[5:])
+        try:
+            edit_image_worker(argv[2], argv[3], argv[4], argv[5:])
+        except RuntimeError as e:   # one plain sentence for the notification, not a traceback
+            print(e, file=sys.stderr)
+            return 1
         return 0
     if len(argv) >= 5 and argv[1] == "--image-worker":
         image_worker(argv[2], argv[3], argv[4])
         return 0
+    if len(argv) == 6 and argv[1] == "--image-fit-worker":
+        try:
+            image_fit_worker(argv[2], argv[3], argv[4], argv[5])
+        except RuntimeError as e:
+            print(e, file=sys.stderr)
+            return 1
+        return 0
     if len(argv) >= 5 and argv[1] == "--image-smaller-worker":
-        image_smaller_worker(argv[2], argv[3], argv[4])
+        image_smaller_worker(argv[2], argv[3], argv[4], argv[5] if len(argv) > 5 else "light")
         return 0
     if len(argv) >= 4 and argv[1] == "--notify-wait":
         notify_wait(argv[2], argv[3], argv[4] if len(argv) > 4 else None)
@@ -687,7 +1733,41 @@ def main(argv):
     if len(argv) == 3 and argv[1] == "--targets":
         print("\n".join(targets_for(argv[2])))
         return 0
-    if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim", "rotate", "crop", "redact", "background"):
+    if len(argv) == 3 and argv[1] == "--find-private":
+        import json
+        try:
+            print(json.dumps(find_private(argv[2])))
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            print(f"arka-convert: {e}", file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) == 3 and argv[1] == "--details-worker":
+        details_worker(argv[2])
+        return 0
+    if len(argv) == 3 and argv[1] == "--details":
+        import json
+        try:
+            print(json.dumps(file_details(argv[2])))
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            print(f"arka-convert: {e}", file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) in (4, 5) and argv[1] == "--waveform":
+        try:
+            save_waveform(argv[2], argv[3], argv[4] if len(argv) == 5 else "1")
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            print(f"arka-convert: {e}", file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) == 5 and argv[1] == "--frame":
+        try:
+            save_frame(argv[2], argv[3], argv[4])
+        except (RuntimeError, OSError) as e:
+            print(f"arka-convert: {e}", file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim", "rotate", "crop", "redact", "background",
+                                      "zip-all", "annotate", "split-media", "join-media", "bleep"):
         return run_edit(argv[1], argv[2:])
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
@@ -698,6 +1778,12 @@ def main(argv):
         signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
     fmt, files = argv[1].lower(), argv[2:]
     fmt = "jpg" if fmt == "jpeg" else fmt
+    level = "light"
+    if fmt.startswith("smaller:"):
+        fmt, level = "smaller", fmt.split(":", 1)[1]
+        if level not in SMALLER_LEVELS:
+            print(f"arka-convert: the level is one of {', '.join(SMALLER_LEVELS)}, not '{level}'", file=sys.stderr)
+            return 2
     # "smaller" means the smaller-... action that fits each file, so one menu entry covers a mixed selection.
     per_file = {"image": "smaller-image", "pdf": "smaller-pdf", "audio": "smaller-audio", "video": "smaller-video"}
     heavy = any(kind_of(f) in ("audio", "video", "office") for f in files) or fmt == "docx"
@@ -722,7 +1808,10 @@ def main(argv):
                 one = per_file.get(kind_of(f), "") if fmt == "smaller" else fmt
                 if not one:
                     raise RuntimeError("this kind of file can't be made smaller yet")
-                made += convert_one(f, one, progress_for(i, Path(f).name))
+                if fmt == "smaller" and level in FIT_LEVELS:
+                    made += fit_to_size(f, level, progress_for(i, Path(f).name))
+                else:
+                    made += convert_one(f, one, progress_for(i, Path(f).name), level)
             except Exception as e:  # one bad file does not stop the rest
                 failed.append(f"{Path(f).name}: {e}")
     except (SystemExit, KeyboardInterrupt):
@@ -732,10 +1821,9 @@ def main(argv):
     if failed:
         notify("Couldn't convert everything", "\n".join(failed[:4]), nid)
     elif len(made) == 1:
-        title = {"clean": "Removed hidden details", "smaller": "Made smaller", "zip": "Zipped"}.get(fmt, "Converted")
-        notify_done(title, made[0], nid)
+        notify_done(done_title(fmt), made[0], nid)
     else:
-        notify("Converted", f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the originals"), nid)
+        notify(done_title(fmt), f"{len(made)} files saved" + (" in Downloads" if SAVED_ELSEWHERE else " next to the originals"), nid)
     return 1 if failed else 0
 
 
