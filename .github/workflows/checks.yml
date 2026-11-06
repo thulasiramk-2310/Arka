@@ -19,6 +19,14 @@ on:
       - "scripts/test-flash-preflight.py"
       - "systemd/arka-bootc-status.*"
       - ".github/workflows/checks.yml"
+      - "convert/**"
+      - "arka-arm-boot-counter"
+      - "plymouth-theme-arkaos/**"
+      - "scripts/test-arka-convert.py"
+      - "scripts/test-wheel-formats.py"
+      - "scripts/test-edit-window.py"
+      - "scripts/test-arm-boot-counter.py"
+      - "scripts/qml/**"
   pull_request:
     paths:
       - "arkad/**"
@@ -37,6 +45,14 @@ on:
       - "scripts/test-flash-preflight.py"
       - "systemd/arka-bootc-status.*"
       - ".github/workflows/checks.yml"
+      - "convert/**"
+      - "arka-arm-boot-counter"
+      - "plymouth-theme-arkaos/**"
+      - "scripts/test-arka-convert.py"
+      - "scripts/test-wheel-formats.py"
+      - "scripts/test-edit-window.py"
+      - "scripts/test-arm-boot-counter.py"
+      - "scripts/qml/**"
   workflow_dispatch:
 
 permissions:
@@ -59,6 +75,8 @@ jobs:
         run: bash -n arkaos-firefox && python3 scripts/test-firefox-wrapper.py
       - name: Test that the format wheel offers only what arka-convert accepts
         run: python3 scripts/test-wheel-formats.py
+      - name: Test the boot counter's failure paths with fake commands
+        run: sh -n arka-arm-boot-counter && python3 scripts/test-arm-boot-counter.py
       - name: Test arka install (permission wording and the app list)
         run: python3 -I -m unittest discover -s apps -p 'test_*.py'
 
@@ -99,3 +117,30 @@ jobs:
           /tmp/sound-tests
           rustc --edition=2021 --test arka-shell/arka-update/src/operation.rs -o /tmp/update-tests
           /tmp/update-tests
+
+  convert:
+    runs-on: ubuntu-24.04
+    # The tools the image ships (ffmpeg, Pillow, mat2, tesseract, bubblewrap, Qt), so the converter, the
+    # wheel and the edit window are tested against the same versions. Privileged: arka-convert runs every
+    # tool in a bubblewrap sandbox, which needs user namespaces inside the job's container.
+    container:
+      image: docker.io/library/fedora:44
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the converters and Qt
+        run: |
+          dnf install -y -q ffmpeg-free python3-pillow poppler-utils ghostscript bubblewrap mat2 \
+            tesseract tesseract-langpack-eng cmake gcc-c++ extra-cmake-modules qt6-qtbase-devel \
+            qt6-qtdeclarative-devel qt6-qtmultimedia kf6-kglobalaccel-devel kf6-kwindowsystem-devel \
+            layer-shell-qt-devel dbus-daemon
+      - name: Test arka-convert with real files in the real sandbox
+        run: python3 scripts/test-arka-convert.py
+      - name: Test the wheel's slots against arka-convert
+        run: python3 scripts/test-wheel-formats.py
+      - name: Test the wheel's QML
+        run: QT_QPA_PLATFORM=offscreen /usr/lib64/qt6/bin/qmltestrunner -input scripts/qml/tst_format_wheel.qml
+      - name: Build the edit window and the wheel
+        run: cmake -S convert -B /tmp/convert-build -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/convert-build -j"$(nproc)"
+      - name: Drive the edit window and check what it saves
+        run: ARKA_EDIT=/tmp/convert-build/edit/arka-edit python3 scripts/test-edit-window.py

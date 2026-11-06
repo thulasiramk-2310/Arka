@@ -37,7 +37,7 @@ FROM docker.io/fedora:${FEDORA_VERSION} AS wheel-builder
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q cmake gcc-c++ extra-cmake-modules qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kglobalaccel-devel kf6-kwindowsystem-devel layer-shell-qt-devel
 COPY convert/wheel/ /build/
 RUN cmake -S /build -B /build/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build/out -j"$(nproc)"
-# The edit window (convert/edit): crop, black out, background, trim.
+# The edit window (convert/edit): crop, black out, annotate, background, trim, split, bleep.
 COPY convert/edit/ /build-edit/
 RUN cmake -S /build-edit -B /build-edit/out -DCMAKE_BUILD_TYPE=Release && cmake --build /build-edit/out -j"$(nproc)"
 
@@ -100,6 +100,8 @@ COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert
 COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
 COPY convert/arka-convert-office.desktop /usr/share/kio/servicemenus/arka-convert-office.desktop
 COPY convert/arka-smaller.desktop /usr/share/kio/servicemenus/arka-smaller.desktop
+COPY convert/arka-smaller-levels.desktop /usr/share/kio/servicemenus/arka-smaller-levels.desktop
+COPY convert/arka-zip.desktop /usr/share/kio/servicemenus/arka-zip.desktop
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
 COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
@@ -108,6 +110,8 @@ COPY convert/arka-edit-image.desktop /usr/share/kio/servicemenus/arka-edit-image
 COPY convert/arka-edit-pdf.desktop /usr/share/kio/servicemenus/arka-edit-pdf.desktop
 COPY convert/arka-edit-pdf-merge.desktop /usr/share/kio/servicemenus/arka-edit-pdf-merge.desktop
 COPY convert/arka-edit-media.desktop /usr/share/kio/servicemenus/arka-edit-media.desktop
+COPY convert/arka-edit-video.desktop /usr/share/kio/servicemenus/arka-edit-video.desktop
+COPY convert/arka-edit-media-join.desktop /usr/share/kio/servicemenus/arka-edit-media-join.desktop
 COPY convert/org.arkaos.edit.desktop /usr/share/applications/org.arkaos.edit.desktop
 COPY convert/org.arkaos.wheel.desktop /usr/share/applications/org.arkaos.wheel.desktop
 COPY convert/arka-wheel-autostart.desktop /etc/xdg/autostart/arka-wheel.desktop
@@ -614,8 +618,8 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bin
 # The format wheel (arka-wheel) needs Qt Quick, KGlobalAccel, KWindowSystem and
 # LayerShellQt, which Plasma already brings; listed so they stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
-    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 \
-      qt6-qtdeclarative kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 tesseract tesseract-langpack-eng \
+      qt6-qtdeclarative qt6-qtmultimedia kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
 # Git, offered next to VARA in setup's Advanced options.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf install --setopt=keepcache=True -y -q git-core
