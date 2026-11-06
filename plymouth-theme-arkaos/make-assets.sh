@@ -7,12 +7,15 @@
 # releases). No usable font is a build error, never a silent fallback.
 set -eu
 FONT=${1:-}
+# The wordmark is set in Inter, the face ArkaOS uses everywhere else (rsms-inter-fonts is in the image);
+# Liberation Sans Bold only where Inter is missing. No usable font is a build error.
 if [ -z "$FONT" ] || [ ! -f "$FONT" ]; then
-  FONT=$(fc-match -f '%{file}' 'Liberation Sans:bold' 2>/dev/null || true)
+  FONT=$(fc-match -f '%{file}' 'Inter:bold' 2>/dev/null || true)
+  case "$FONT" in *[Ii]nter*) ;; *) FONT=$(fc-match -f '%{file}' 'Liberation Sans:bold' 2>/dev/null || true) ;; esac
 fi
 case "$FONT" in
-  *LiberationSans-Bold*) [ -f "$FONT" ] ;;
-  *) echo "make-assets: Liberation Sans Bold not found (got '$FONT')" >&2; exit 1 ;;
+  *[Ii]nter*|*LiberationSans-Bold*) [ -f "$FONT" ] ;;
+  *) echo "make-assets: neither Inter nor Liberation Sans Bold was found (got '$FONT')" >&2; exit 1 ;;
 esac
 G="#4db491"
 
@@ -25,12 +28,23 @@ magick logo-src.png -background none -filter Lanczos -resize x372 -gravity cente
 magick -size 520x460 xc:none tri2.png
 magick tri1.png -channel A -blur 0x14 +channel -fill "$G" -colorize 100 \
   -channel A -evaluate multiply 0.85 +channel tri3.png
+# A light sweep across the logo, drawn ahead of time (Plymouth can't mask while it runs): 12 frames
+# of a soft diagonal band, cut to the logo's own shape. The script plays them once, after the logo appears.
+i=0
+while [ $i -lt 12 ]; do
+  x=$(( -100 + i * 60 ))
+  magick -size 520x460 xc:none -fill "rgba(255,255,255,0.85)" \
+    -draw "polygon $x,0 $((x + 110)),0 $((x - 10)),460 $((x - 120)),460" -blur 0x9 band.png
+  magick band.png tri1.png -compose DstIn -composite "shine$i.png"
+  i=$((i + 1))
+done
+rm -f band.png
 magick -size 800x140 xc:none -font "$FONT" -fill "$G" -pointsize 88 \
   -kerning 28 -gravity center -draw "text 0,0 'ARKA'" wordmark.png
 
 # Activity / progress pieces (stretched by the script).
 magick -size 16x6 xc:"$G" bar.png
-magick -size 16x6 xc:"#1e2630" barback.png
+magick -size 16x6 xc:"#2a3440" barback.png
 # Soft-edged segment for the indeterminate activity indicator.
 magick -size 6x80 gradient:none-"$G" -rotate -90 seg-l.png
 magick seg-l.png -flop seg-r.png

@@ -1,5 +1,7 @@
-// ArkaOS boot splash: three triangles fade in staggered, glow pulses, ARKA
-// wordmark rises beneath. Design tokens: bg #07080e, accent #4DB491.
+// ArkaOS boot splash. Starting: the logo grows in, a light sweeps across it once, the ARKA
+// wordmark slides up, and the glow keeps breathing. Shutting down or restarting: the logo is
+// there at once and glows once; nothing dims. Design tokens: bg #07080e,
+// accent #4DB491. No sound: the user chose a silent start.
 //
 // Normal boot shows an activity indicator, not a progress bar: Plymouth's
 // boot "progress" is an estimate from the previous boot and can stall or
@@ -38,7 +40,7 @@ fun place(sprite, img, cy) {
 
 // Text scales with the screen too ("Sans N" is a Pango font description).
 fun label(text, size, r, g, b) {
-    return Image.Text(text, r, g, b, 1, "Sans " + Math.Int(size * global.f));
+    return Image.Text(text, r, g, b, 1, "Inter, Inter Variable, Sans " + Math.Int(size * global.f));
 }
 
 mode = Plymouth.GetMode();
@@ -54,6 +56,13 @@ tri3.sprite = Sprite();
 mark.sprite = Sprite();
 tri1.sprite.SetOpacity(0);
 tri2.sprite.SetOpacity(0);
+// The light sweep: frames drawn by make-assets.sh, laid over the logo.
+global.shines = 12;
+for (i = 0; i < global.shines; i++) shine[i].src = Image("shine" + i + ".png");
+shine.sprite = Sprite();
+shine.sprite.SetZ(5);
+shine.sprite.SetOpacity(0);
+global.leaving = (mode == "shutdown" || mode == "reboot");
 tri3.sprite.SetOpacity(0);
 mark.sprite.SetOpacity(0);
 
@@ -102,6 +111,7 @@ fun layout() {
     global.tri3.image = scaled(tri3.src);
     global.mark.image = scaled(mark.src);
     tri1.sprite.SetImage(tri1.image);
+    for (i = 0; i < global.shines; i++) global.shine[i].image = scaled(shine[i].src);
     tri2.sprite.SetImage(tri2.image);
     tri3.sprite.SetImage(tri3.image);
     mark.sprite.SetImage(mark.image);
@@ -109,13 +119,14 @@ fun layout() {
     place(tri2.sprite, tri2.image, global.cy);
     place(tri3.sprite, tri3.image, global.cy);
     place(mark.sprite, mark.image, global.cy + 150 * global.f);
+    place(shine.sprite, shine[0].image, global.cy);
     if (status.text != "") {
         global.status.image = label(status.text, 20, 0.85, 0.88, 0.92);
         status.sprite.SetImage(status.image);
         place(status.sprite, status.image, global.cy + 230 * global.f);
     }
     global.bar.w = Math.Int(260 * global.f);
-    global.bar.h = Math.Max(2, Math.Int(3 * global.f));
+    global.bar.h = Math.Max(3, Math.Int(4 * global.f));
     global.bar.x = Math.Int(global.wx + global.sw / 2 - global.bar.w / 2);
     global.bar.y = Math.Int(global.wy + global.sh * 0.82);
     bar.back.SetImage(bar.backsrc.Scale(global.bar.w, global.bar.h));
@@ -150,14 +161,48 @@ fun refresh_callback() {
     global.counter++;
     t = global.counter / 50.0;   // refresh runs at 50 fps
 
-    // Staggered fade-in: tri1 0.0s, tri2 0.4s, tri3 0.8s, wordmark 1.3s.
-    tri1.sprite.SetOpacity(clamp01(t / 0.5));
-    tri2.sprite.SetOpacity(clamp01((t - 0.4) / 0.5) * 0.65);
-    if (t <= 1.8) tri3.sprite.SetOpacity(clamp01((t - 0.8) / 0.5) * 0.35);
-    else tri3.sprite.SetOpacity(0.25 + 0.15 * Math.Sin((t - 1.8) * 2.2));
-    a = clamp01((t - 1.3) / 0.6);
-    mark.sprite.SetOpacity(a);
-    status.sprite.SetOpacity(a);
+    if (global.leaving) {
+        // Shutting down or restarting: everything is there at once, the glow brightens once and
+        // settles, and the logo stays clear (not dimmed) until the power goes.
+        tri1.sprite.SetOpacity(1);
+        tri3.sprite.SetOpacity(0.25 + 0.35 * clamp01(1 - Math.Abs(t - 0.6) / 0.6));
+        mark.sprite.SetOpacity(1);
+        status.sprite.SetOpacity(1);
+        a = 1;
+    } else {
+        // Starting: the logo grows in from 88% with an ease-out, while it fades in.
+        g = clamp01(t / 0.7);
+        e = 1 - (1 - g) * (1 - g) * (1 - g);
+        if (t <= 0.75) {
+            sc = 0.88 + 0.12 * e;
+            img = tri1.image.Scale(Math.Int(tri1.image.GetWidth() * sc), Math.Int(tri1.image.GetHeight() * sc));
+            tri1.sprite.SetImage(img);
+            place(tri1.sprite, img, global.cy);
+        } else if (global.grown != 1) {
+            tri1.sprite.SetImage(tri1.image);
+            place(tri1.sprite, tri1.image, global.cy);
+            global.grown = 1;
+        }
+        tri1.sprite.SetOpacity(e);
+        tri2.sprite.SetOpacity(clamp01((t - 0.4) / 0.5) * 0.65);
+        if (t <= 1.8) tri3.sprite.SetOpacity(clamp01((t - 0.8) / 0.5) * 0.35);
+        else tri3.sprite.SetOpacity(0.25 + 0.15 * Math.Sin((t - 1.8) * 2.2));
+        // One light sweep across the logo, 0.9s to 1.6s.
+        if (t >= 0.9 && t < 1.6) {
+            n = Math.Int((t - 0.9) / 0.7 * global.shines);
+            if (n > global.shines - 1) n = global.shines - 1;
+            shine.sprite.SetImage(shine[n].image);
+            shine.sprite.SetOpacity(1);
+        } else {
+            shine.sprite.SetOpacity(0);
+        }
+        // The wordmark slides up 18 px into place as it appears.
+        a = clamp01((t - 1.3) / 0.6);
+        ea = 1 - (1 - a) * (1 - a) * (1 - a);
+        mark.sprite.SetOpacity(ea);
+        mark.sprite.SetY(Math.Int(global.wy + global.cy + 150 * global.f - mark.image.GetHeight() / 2 + 18 * global.f * (1 - ea)));
+        status.sprite.SetOpacity(a);
+    }
 
     bar.back.SetOpacity(a);
     if (global.updating == 0) {
@@ -259,6 +304,9 @@ fun display_normal_callback() {
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
 fun quit_callback() {
+    shine.sprite.SetOpacity(0);
+    tri1.sprite.SetImage(tri1.image);
+    place(tri1.sprite, tri1.image, global.cy);
     tri1.sprite.SetOpacity(1);
     mark.sprite.SetOpacity(1);
 }
