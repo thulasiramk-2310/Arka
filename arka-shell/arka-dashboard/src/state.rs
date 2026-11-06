@@ -14,12 +14,15 @@ pub struct ReliabilityState {
     pub temp_max: f64,     // -1.0 = unknown
     /// Top prediction as (summary, probability) if any — presented as *possible*.
     pub prediction: Option<(String, f64)>,
+    /// When arka-pulse took this sample (seconds since 1970); 0 = unknown. Shown on the Health page.
+    pub sampled_at: u64,
 }
 
 impl Default for ReliabilityState {
     fn default() -> Self {
         Self {
             available: false,
+            sampled_at: 0,
             health: "…".into(),
             summary: "Checking system health…".into(),
             cpu_util: -1.0,
@@ -94,5 +97,6 @@ pub enum StateUpdate {
     Full(Box<DashboardState>),
     EnforceResult(Result<(), String>),
     /// `bootc status` parsed, or why it could not be read.
-    Updates(Result<arka_update::status::UpdateStatus, String>),
+    /// The status and the time of the file it was read from.
+    Updates(Result<(arka_update::status::UpdateStatus, std::time::SystemTime), String>),
 }

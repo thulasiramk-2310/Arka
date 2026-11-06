@@ -28,11 +28,15 @@ fn build_window(app: &adw::Application) {
 
     dbus::start_worker(tx.clone());
 
+    // Design review only: DASH_SIZE=1920x1080 opens the window at that size, to see wide screens.
+    let (width, height) = std::env::var("DASH_SIZE").ok()
+        .and_then(|v| v.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))))
+        .unwrap_or((1100, 740));
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Privacy Dashboard")
-        .default_width(980)
-        .default_height(680)
+        .default_width(width)
+        .default_height(height)
         .build();
 
     let updater = ui::build(&window, tx);

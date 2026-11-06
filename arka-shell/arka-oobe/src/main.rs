@@ -219,6 +219,9 @@ fn css(dark: bool) -> String {
         // painful on real hardware. Text keeps at least 4.5:1 contrast.
         ("#f3f2ee", "#111111", "#5c5c5c", "#6b6b6b", "#d0cfca", "#e8e7e3", "#f3f2ee", "#2b2b2b", "#d6d5d0")
     };
+    // The line under an input or dropdown is a control, so it needs 3:1 against the page (WCAG 1.4.11);
+    // `line` is the quiet divider colour and is only used where nothing is being clicked or typed.
+    let fieldline = if dark { "#6b6f78" } else { "#7a7a74" };
     format!(
         "
 window, stack, .oobe-root, .oobe-page {{ background-color: {bg}; color: {fg}; }}
@@ -243,18 +246,18 @@ window, stack, .oobe-root, .oobe-page {{ background-color: {bg}; color: {fg}; }}
 
 entry.oobe-field, passwordentry.oobe-field {{
   background: none; background-color: transparent; color: {fg};
-  border: none; border-bottom: 1.5px solid {line}; border-radius: 0;
+  border: none; border-bottom: 1.5px solid {fieldline}; border-radius: 0;
   box-shadow: none; outline: none; font-size: 24px; min-height: 54px; padding: 0 2px;
 }}
 entry.oobe-field:focus-within, passwordentry.oobe-field:focus-within {{
   border-bottom: 1.5px solid {fg}; box-shadow: none; outline: none;
 }}
 entry.oobe-field text, passwordentry.oobe-field text {{ background: none; color: {fg}; caret-color: {fg}; }}
-entry.oobe-field text placeholder, passwordentry.oobe-field text placeholder {{ color: {faint}; }}
+entry.oobe-field text placeholder, passwordentry.oobe-field text placeholder {{ color: {faint}; opacity: 1; }}
 passwordentry.oobe-field image {{ color: {faint}; }}
 dropdown.oobe-field > button {{
   background: none; background-color: transparent; color: {fg};
-  border: none; border-bottom: 1.5px solid {line}; border-radius: 0;
+  border: none; border-bottom: 1.5px solid {fieldline}; border-radius: 0;
   box-shadow: none; outline: none; min-height: 54px; padding: 0 2px;
 }}
 dropdown.oobe-field > button:hover, dropdown.oobe-field > button:focus-visible, dropdown.oobe-field > button:checked {{
@@ -295,7 +298,7 @@ checkbutton.oobe-choice radio:checked {{ background-color: {fg}; border-color: {
 checkbutton.oobe-choice:focus-visible, checkbutton.oobe-choice:focus {{ outline: none; box-shadow: none; }}
 checkbutton.oobe-choice:focus-visible radio {{ outline: 2px solid {faint}; outline-offset: 3px; }}
 .oobe-choice-title {{ font-size: 18px; font-weight: 600; color: {fg}; }}
-expander.oobe-adv title {{ font-size: 15px; color: {muted}; }}
+expander.oobe-adv title {{ font-size: 15px; color: {muted}; min-height: 32px; padding: 4px 0; }}
 expander.oobe-adv arrow {{ color: {muted}; }}
 checkbutton.oobe-tool {{ padding: 8px 0; color: {fg}; }}
 checkbutton.oobe-tool check {{
@@ -318,7 +321,7 @@ entry.oobe-field.small {{ font-size: 18px; min-height: 44px; }}
 button.oobe-back:disabled {{ color: {faint}; opacity: 0.5; }}
 ",
         err = if dark { "#ff8a80" } else { "#b42318" },
-        ok = if dark { "#3ddc97" } else { "#0e8a5f" },
+        ok = if dark { "#3ddc97" } else { "#007c3d" },
         warn = if dark { "#fbbf5c" } else { "#b45309" },
     )
 }
@@ -347,10 +350,12 @@ fn page(title: &gtk4::Label, sub: &gtk4::Label, body: &impl IsA<gtk4::Widget>) -
         .maximum_size(640)
         .tightening_threshold(520)
         .child(&col)
-        .valign(gtk4::Align::Center)
+        // Anchored to the top, not centred: a short page used to sit lower than a tall one, so the
+        // heading jumped from step to step. Now every heading starts at the same height.
+        .valign(gtk4::Align::Start)
         .margin_start(24)
         .margin_end(24)
-        .margin_top(24)
+        .margin_top(80)
         .margin_bottom(24)
         .build();
     gtk4::ScrolledWindow::builder()
@@ -448,7 +453,7 @@ fn draw_mock(cr: &cairo::Context, w: f64, h: f64, dark: bool) {
         let _ = cr.fill();
     }
     rounded(cr, wx + 14.0, wy + wh - 26.0, 46.0, 14.0, 7.0);
-    cr.set_source_rgb(0.086, 0.78, 0.52);
+    cr.set_source_rgb(0.302, 0.706, 0.569);
     let _ = cr.fill();
     rounded(cr, w * 0.32, h - 26.0, w * 0.36, 16.0, 8.0);
     rgb(cr, dock);
@@ -563,7 +568,7 @@ fn build_ui(app: &adw::Application) {
             area.set_valign(gtk4::Align::Center);
             area.set_draw_func(|_, cr, w, h| {
                 let (w, h) = (w as f64, h as f64);
-                cr.set_source_rgb(0.086, 0.78, 0.52);
+                cr.set_source_rgb(0.302, 0.706, 0.569);
                 cr.set_line_width(1.8);
                 cr.set_line_join(cairo::LineJoin::Round);
                 cr.move_to(w / 2.0, 1.5);
@@ -778,7 +783,7 @@ fn build_ui(app: &adw::Application) {
         b.set_child(Some(&row));
         b
     };
-    let accent_green = accent_choice("Green", "The ArkaOS green.", (0.086, 0.78, 0.52));
+    let accent_green = accent_choice("Green", "The ArkaOS green.", (0.302, 0.706, 0.569));
     let accent_blue = accent_choice("Blue", "The blue of the ArkaOS logo.", (0.31, 0.525, 1.0));
     accent_blue.set_group(Some(&accent_green));
     accent_green.set_active(true);

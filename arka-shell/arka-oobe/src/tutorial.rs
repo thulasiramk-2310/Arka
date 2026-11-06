@@ -170,8 +170,21 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
     cr.move_to(0.0, BAR + 0.5);
     cr.line_to(W, BAR + 0.5);
     let _ = cr.stroke();
-    text(cr, "Pictures", 12.0, 17.0, 11.0, p.muted, 1.0, true, false);
-    text(cr, "-  o  x", W - 52.0, 17.0, 11.0, p.muted, 1.0, false, false);
+    text(cr, "Pictures", 12.0, 17.0, 12.0, p.muted, 1.0, true, false);
+    // Minimise, maximise and close drawn as shapes (they used to be the letters "- o x").
+    cr.set_source_rgba(p.muted.0, p.muted.1, p.muted.2, 1.0);
+    cr.set_line_width(1.3);
+    let x0 = W - 56.0;
+    cr.move_to(x0, 14.5);
+    cr.line_to(x0 + 9.0, 14.5);
+    let _ = cr.stroke();
+    cr.rectangle(x0 + 20.0, 9.5, 8.0, 8.0);
+    let _ = cr.stroke();
+    cr.move_to(x0 + 39.0, 9.5);
+    cr.line_to(x0 + 47.0, 17.5);
+    cr.move_to(x0 + 47.0, 9.5);
+    cr.line_to(x0 + 39.0, 17.5);
+    let _ = cr.stroke();
 
     // the files, and the copy once it exists
     let count = if st.stage == Stage::Done { TILES.len() + 1 } else { TILES.len() };
@@ -196,7 +209,7 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
         cr.rectangle(r.0 + 0.5, r.1 + 0.5, r.2, r.3);
         let _ = cr.stroke();
         icon(cr, kind, r.0 + r.2 / 2.0, r.1 + 32.0, if appear < 1.0 { p.muted } else { p.muted });
-        text(cr, &name, r.0 + r.2 / 2.0, r.1 + r.3 - 12.0, 11.0, p.fg, appear, true, true);
+        text(cr, &name, r.0 + r.2 / 2.0, r.1 + r.3 - 12.0, 12.0, p.fg, appear, true, true);
         cr.restore().ok();
     }
     let status = match st.stage {
@@ -292,10 +305,10 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
             let _ = cr.fill();
             cr.restore().ok();
             text(cr, "JPG", 0.0, -2.0, 10.0, p.muted, k, true, true);
-            text(cr, "holiday.jpg", 0.0, 12.0, 9.5, p.fg, k, false, true);
+            text(cr, "holiday.jpg", 0.0, 12.0, 10.5, p.fg, k, false, true);
         } else {
             text(cr, "Pick one", 0.0, -2.0, 10.5, p.fg, k, true, true);
-            text(cr, "holiday.jpg", 0.0, 12.0, 9.5, p.muted, k, false, true);
+            text(cr, "holiday.jpg", 0.0, 12.0, 10.5, p.muted, k, false, true);
         }
         cr.restore().ok();
     }

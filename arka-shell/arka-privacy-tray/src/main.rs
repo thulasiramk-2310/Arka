@@ -102,7 +102,6 @@ impl Tray for ArkaTray {
                     StandardItem {
                         label: format!("{}  —  {}", r.name, r.detail),
                         icon_name: icon.into(),
-                        enabled: false,
                         ..Default::default()
                     }
                     .into(),
@@ -139,7 +138,9 @@ impl Tray for ArkaTray {
 
 /// A non-interactive info line in the menu.
 fn info_row(label: String, icon_name: String) -> MenuItem<ArkaTray> {
-    StandardItem { label, icon_name, enabled: false, ..Default::default() }.into()
+    // Not disabled: a disabled row is drawn greyed out at about 2.5:1 contrast and looks broken. It
+    // stays non-interactive because the default action does nothing.
+    StandardItem { label, icon_name, ..Default::default() }.into()
 }
 
 // ── arkad (system bus, read-only) ────────────────────────────────────────────

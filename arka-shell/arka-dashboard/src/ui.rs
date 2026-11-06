@@ -53,6 +53,23 @@ fn now_secs() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
+/// "4:07:33 PM" -> "4:07 PM", "16:07:33" -> "16:07". The time follows the system's language settings
+/// (12 or 24 hours), like the clock in the top bar, instead of a fixed 24-hour format. Anything that
+/// does not look like hours:minutes:seconds is returned unchanged.
+fn without_seconds(full: &str) -> String {
+    let mut parts = full.splitn(3, ':');
+    let (Some(h), Some(m), Some(rest)) = (parts.next(), parts.next(), parts.next()) else { return full.to_string() };
+    let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits != 2 || h.is_empty() || m.len() != 2 || !m.chars().all(|c| c.is_ascii_digit()) {
+        return full.to_string();
+    }
+    format!("{h}:{m}{}", &rest[digits..])
+}
+
+fn clock_text(dt: &glib::DateTime) -> String {
+    dt.format("%X").map(|s| without_seconds(&s)).unwrap_or_else(|_| "??:??".to_string())
+}
+
 fn ago(secs: u64) -> String {
     match secs {
         0..=59 => format!("{secs} s ago"),
@@ -63,6 +80,11 @@ fn ago(secs: u64) -> String {
 
 /// A page: serif title, subtitle, then `body`, centred and scrollable.
 fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::ScrolledWindow {
+    page_sized(title, sub, body, 680, 560)
+}
+
+/// Like `page`, with the widest the content may grow and the width below which it starts to shrink.
+fn page_sized(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>, widest: i32, tightening: i32) -> gtk4::ScrolledWindow {
     let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     col.set_margin_top(32);
     col.set_margin_bottom(32);
@@ -74,7 +96,7 @@ fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::Scrolled
     col.append(&s);
     body.as_ref().set_margin_top(24);
     col.append(body);
-    let clamp = adw::Clamp::builder().maximum_size(680).tightening_threshold(560).child(&col).build();
+    let clamp = adw::Clamp::builder().maximum_size(widest).tightening_threshold(tightening).child(&col).build();
     gtk4::ScrolledWindow::builder()
         .vexpand(true)
         .hscrollbar_policy(gtk4::PolicyType::Never)
@@ -84,6 +106,9 @@ fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::Scrolled
 
 // --- privacy rows -----------------------------------------------------------
 
+/// The narrowest a setting row is drawn. Two columns need twice this plus the gap between them.
+const ROW_MIN_WIDTH: i32 = 360;
+
 #[derive(Clone, Copy, PartialEq)]
 enum Row { Checking, Configured, Attention, Unavailable, Stale, OffHere }
 
@@ -91,17 +116,28 @@ enum Row { Checking, Configured, Attention, Unavailable, Stale, OffHere }
 struct SettingRow { dot: gtk4::Box, state: gtk4::Label, act: gtk4::Label }
 
 impl SettingRow {
-    fn new(parent: &gtk4::Box, title: &str, does: &str) -> Self {
+    fn new(parent: &gtk4::FlowBox, title: &str, does: &str) -> Self {
         let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
         row.add_css_class("dash-row");
+        // A row is never squeezed below this, so two of them sit side by side only when the window
+        // is wide enough for both to stay readable.
+        row.set_width_request(ROW_MIN_WIDTH);
         let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         dot.add_css_class("dot");
         dot.set_valign(gtk4::Align::Start);
         dot.set_margin_top(7);
         let col = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
         col.set_hexpand(true);
-        col.append(&label(title, "dash-row-title"));
-        col.append(&label(does, "dash-row-sub"));
+        // The text wraps at a modest width, so a row's natural width is small enough for two to sit
+        // side by side in a wide window (GTK picks the number of columns from natural widths).
+        let (name, detail) = (label(title, "dash-row-title"), label(does, "dash-row-sub"));
+        for l in [&name, &detail] {
+            l.set_wrap(true);
+            l.set_max_width_chars(38);
+            l.set_xalign(0.0);
+        }
+        col.append(&name);
+        col.append(&detail);
         let act = label("", "dash-row-act");
         act.set_visible(false);
         col.append(&act);
@@ -111,7 +147,7 @@ impl SettingRow {
         row.append(&dot);
         row.append(&col);
         row.append(&state);
-        parent.append(&row);
+        parent.insert(&row, -1);
         SettingRow { dot, state, act }
     }
 
@@ -152,6 +188,7 @@ struct HealthRows {
     mem: gtk4::Label,
     temp: gtk4::Label,
     pred: gtk4::Label,
+    group: adw::PreferencesGroup,
 }
 
 fn value_row(title: &str, icon: &str) -> (adw::ActionRow, gtk4::Label) {
@@ -187,13 +224,14 @@ fn build_health_group() -> (adw::PreferencesGroup, HealthRows) {
     let (cpu_row, cpu)   = value_row("Processor", "computer-symbolic");
     let (mem_row, mem)   = value_row("Memory", "drive-harddisk-symbolic");
     let (temp_row, temp) = value_row("Temperature", "dialog-information-symbolic");
-    let (pred_row, pred) = value_row("Predicted instability", "dialog-warning-symbolic");
+    let (pred_row, pred) = value_row("Predicted instability", "emblem-system-symbolic");
     group.add(&cpu_row);
     group.add(&mem_row);
     group.add(&temp_row);
     group.add(&pred_row);
 
-    (group, HealthRows { verdict, verdict_badge, cpu, mem, temp, pred })
+    let rows = HealthRows { verdict, verdict_badge, cpu, mem, temp, pred, group: group.clone() };
+    (group, rows)
 }
 
 fn fmt_pct(v: f64) -> String {
@@ -229,7 +267,15 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
 
     rows.cpu.set_text(&fmt_pct(r.cpu_util));
     rows.mem.set_text(&fmt_pct(r.mem_pct));
-    rows.temp.set_text(&fmt_temp(r.temp_max));
+    // "—" alone does not say why; this does.
+    rows.temp.set_text(&if r.temp_max.is_finite() && r.temp_max >= 0.0 { fmt_temp(r.temp_max) } else { "No sensor reading".into() });
+    // When the numbers above were taken, so they are never mistaken for "right now".
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    rows.group.set_description(Some(&if r.sampled_at > 0 && r.sampled_at <= now {
+        format!("Your machine's reliability, watched locally and shared with no one. Sampled {}.", ago(now - r.sampled_at))
+    } else {
+        "Your machine's reliability, watched locally and shared with no one.".to_string()
+    }));
 
     // Predictions are a HEURISTIC — always framed as *possible*, never certain.
     match &r.prediction {
@@ -398,7 +444,7 @@ fn populate_timeline(container: &gtk4::Box) {
 
     for ev in &events {
         let time_str = glib::DateTime::from_unix_local(ev.ts as i64)
-            .and_then(|d| d.format("%H:%M").map(|s| s.to_string()))
+            .map(|d| clock_text(&d))
             .unwrap_or_else(|_| "??:??".to_string());
 
         let row = adw::ActionRow::new();
@@ -433,12 +479,25 @@ pub fn build(
     // ── Overview: what ArkaOS has set up, as last checked ────────────────────
     let rows_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     rows_box.add_css_class("dash-rows");
-    let dns = SettingRow::new(&rows_box, "Encrypted DNS", "Requires system DNS lookups to be encrypted.");
-    let mac = SettingRow::new(&rows_box, "Private network address", "Uses a random hardware address on network connections.");
-    let host = SettingRow::new(&rows_box, "Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own.");
-    let ipv6 = SettingRow::new(&rows_box, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
-    let sandbox = SettingRow::new(&rows_box, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");
-    let fw = SettingRow::new(&rows_box, "Firewall", "Rejects connections other computers try to open to this one.");
+    // The six settings: one column in a narrow window, two in a wide one, so a wide screen is used
+    // instead of leaving a thin strip down the middle.
+    let grid = gtk4::FlowBox::builder()
+        .selection_mode(gtk4::SelectionMode::None)
+        .homogeneous(true)
+        .min_children_per_line(1)
+        .max_children_per_line(2)
+        .column_spacing(48)
+        .row_spacing(0)
+        .activate_on_single_click(false)
+        .build();
+    grid.add_css_class("dash-grid");
+    rows_box.append(&grid);
+    let dns = SettingRow::new(&grid, "Encrypted DNS", "Requires system DNS lookups to be encrypted.");
+    let mac = SettingRow::new(&grid, "Private network address", "Uses a random hardware address on network connections.");
+    let host = SettingRow::new(&grid, "Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own.");
+    let ipv6 = SettingRow::new(&grid, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
+    let sandbox = SettingRow::new(&grid, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");
+    let fw = SettingRow::new(&grid, "Firewall", "Rejects connections other computers try to open to this one.");
 
     // Per-network exception for networks that block encrypted DNS (hotels,
     // captive portals). Shown only when DNS isn't encrypted right now.
@@ -499,7 +558,8 @@ pub fn build(
     overview_body.append(&fresh);
     overview_body.append(&actions);
     overview_body.append(&expander);
-    let overview = page("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.", &overview_body);
+    let overview = page_sized("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.",
+                              &overview_body, 1120, 820);
 
     // ── Activity ─────────────────────────────────────────────────────────────
     let timeline_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -534,6 +594,8 @@ pub fn build(
         "dash-note",
     );
     upd_note.set_margin_top(16);
+    let upd_stamp = label("", "dash-note");
+    upd_stamp.set_margin_top(16);
     let upd_err = label("", "dash-note");
     upd_err.set_visible(false);
     upd_err.set_margin_top(8);
@@ -544,6 +606,7 @@ pub fn build(
     open_updates.connect_clicked(|_| { let _ = std::process::Command::new("arka-update").spawn(); });
     let upd_body = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     upd_body.append(&upd_rows);
+    upd_body.append(&upd_stamp);
     upd_body.append(&upd_note);
     upd_body.append(&upd_err);
     upd_body.append(&open_updates);
@@ -658,13 +721,26 @@ pub fn build(
             };
             toast_overlay.add_toast(adw::Toast::new(&msg));
         }
-        StateUpdate::Updates(r) => apply_updates(r, &upd_vals, &upd_err),
+        StateUpdate::Updates(r) => apply_updates(r, &upd_vals, &upd_err, &upd_stamp),
     })
 }
 
 #[cfg(test)]
 mod presentation_tests {
     use super::*;
+
+    #[test]
+    fn clock_text_drops_seconds_in_both_12_and_24_hour_forms() {
+        assert_eq!(without_seconds("4:07:33 PM"), "4:07 PM");
+        assert_eq!(without_seconds("04:07:33 pm"), "04:07 pm");
+        assert_eq!(without_seconds("16:07:33"), "16:07");
+        assert_eq!(without_seconds("9:05:00"), "9:05");
+        // not hours:minutes:seconds: left alone rather than mangled
+        assert_eq!(without_seconds("noon"), "noon");
+        assert_eq!(without_seconds("16:07"), "16:07");
+        assert_eq!(without_seconds("16:7:33"), "16:7:33");
+        assert_eq!(without_seconds(":07:33"), ":07:33");
+    }
 
     #[test]
     fn unknown_health_numbers_are_not_formatted_as_measurements() {
@@ -743,10 +819,19 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label
     ));
 }
 
-fn apply_updates(r: Result<UpdateStatus, String>, vals: &[gtk4::Label], err: &gtk4::Label) {
+fn apply_updates(r: Result<(UpdateStatus, std::time::SystemTime), String>, vals: &[gtk4::Label], err: &gtk4::Label,
+                 stamp: &gtk4::Label) {
     match r {
-        Ok(u) => {
+        Ok((u, read_at)) => {
             err.set_visible(false);
+            // The status is published by a service every ten minutes. The time shown is the one the
+            // content above was read with, never a fresh look at a file that may have changed since.
+            let published = read_at.duration_since(std::time::UNIX_EPOCH).ok()
+                .and_then(|d| glib::DateTime::from_unix_local(d.as_secs() as i64).ok());
+            stamp.set_text(&match published {
+                Some(dt) => format!("Status as of {}, refreshed every ten minutes. It shows what is installed on this computer; it does not check the internet.", clock_text(&dt)),
+                None => "It shows what is installed on this computer; it does not check the internet.".to_string(),
+            });
             let ver = |d: &arka_update::status::Deployment| {
                 d.version.clone().or_else(|| d.image.clone()).unwrap_or_else(|| "Unknown".into())
             };
@@ -766,6 +851,7 @@ fn apply_updates(r: Result<UpdateStatus, String>, vals: &[gtk4::Label], err: &gt
             });
         }
         Err(e) => {
+            stamp.set_text("");
             for v in vals { v.set_text("—"); }
             err.set_text(&format!("Couldn't read the update status ({e}). Open Updates to check."));
             err.set_visible(true);

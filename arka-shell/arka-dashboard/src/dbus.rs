@@ -83,7 +83,7 @@ async fn worker_loop(tx: Sender<StateUpdate>) -> zbus::Result<()> {
             if tx.send(StateUpdate::Full(Box::default())).is_err() { return Ok(()); }
         }
         // Refresh even while the page stays open, including publication expiry.
-        if tx.send(StateUpdate::Updates(arka_update::status::read_published())).is_err() {
+        if tx.send(StateUpdate::Updates(arka_update::status::read_published_timed())).is_err() {
             return Ok(());
         }
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -143,6 +143,7 @@ async fn fetch_reliability(pulse: &PulseProxy<'_>) -> zbus::Result<ReliabilitySt
         mem_pct: pulse.mem_pct().await?,
         temp_max: pulse.temp_max().await?,
         prediction,
+        sampled_at,
     })
 }
 
@@ -164,7 +165,7 @@ pub fn call_enforce_all(tx: Sender<StateUpdate>) {
 /// that, in a terminal, with the user's password.
 pub fn fetch_updates(tx: Sender<StateUpdate>) {
     std::thread::spawn(move || {
-        let result = arka_update::status::read_published();
+        let result = arka_update::status::read_published_timed();
         tx.send(StateUpdate::Updates(result)).ok();
     });
 }

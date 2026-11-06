@@ -78,13 +78,25 @@ pub const PUBLISHED: &str = "/run/arkaos/bootc-status.json";
 
 /// Read the status published by arka-bootc-status.service (no privileges needed).
 pub fn read_published() -> Result<UpdateStatus, String> {
-    read_published_at(std::path::Path::new(PUBLISHED), std::time::SystemTime::now())
+    read_published_timed().map(|(status, _)| status)
+}
+
+/// The published status together with the file time it was read with, so a caller that shows
+/// "as of" a time shows the time of this very content, not of a file rewritten since.
+pub fn read_published_timed() -> Result<(UpdateStatus, std::time::SystemTime), String> {
+    read_published_at_timed(std::path::Path::new(PUBLISHED), std::time::SystemTime::now())
 }
 
 // The publisher runs every ten minutes. Allow scheduling jitter, not an
 // indefinitely trusted snapshot after a failed publication.
 const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(720);
+#[cfg(test)]
 fn read_published_at(path: &std::path::Path, now: std::time::SystemTime) -> Result<UpdateStatus, String> {
+    read_published_at_timed(path, now).map(|(status, _)| status)
+}
+
+fn read_published_at_timed(path: &std::path::Path, now: std::time::SystemTime)
+    -> Result<(UpdateStatus, std::time::SystemTime), String> {
     use std::io::Read;
     let mut file = std::fs::File::open(path).map_err(|e| format!("update status unavailable ({e})"))?;
     let modified = file.metadata().and_then(|m| m.modified()).map_err(|e| e.to_string())?;
@@ -92,7 +104,7 @@ fn read_published_at(path: &std::path::Path, now: std::time::SystemTime) -> Resu
     if age >= MAX_AGE { return Err("update status is stale; the publisher has not refreshed it".into()); }
     let mut json = String::new();
     file.read_to_string(&mut json).map_err(|e| e.to_string())?;
-    parse_status(&json)
+    parse_status(&json).map(|status| (status, modified))
 }
 
 pub fn parse_status(json: &str) -> Result<UpdateStatus, String> {
