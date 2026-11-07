@@ -6,6 +6,7 @@ Files are made in a temporary folder; nothing else on the system is touched.
 Run: python3 scripts/test-arka-convert.py
 """
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -356,6 +357,7 @@ class ArkaConvertTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("-odd name.jpg", self.names())
 
+    @unittest.skipIf(os.geteuid() == 0, "root writes into read-only folders (CI containers run as root)")
     def test_read_only_folder_gives_a_plain_reason(self):
         ro = self.dir / "ro"
         ro.mkdir()
@@ -460,9 +462,11 @@ class ArkaConvertTest(unittest.TestCase):
                 gps[1], gps[2], gps[3], gps[4] = "N", (12.0, 58.0, 30.0), "E", (77.0, 35.0, 10.0)
                 src = self.dir / name
                 im.save(src, fmt, quality=95, exif=exif)
-                self.assertEqual(Image.open(src).getexif().get(0x010F), "TestCameraMaker")  # it was there
+                with Image.open(src) as before:
+                    self.assertEqual(before.getexif().get(0x010F), "TestCameraMaker")  # it was there
                 self.assertEqual(convert("smaller-image", str(src)).returncode, 0)
-                after = Image.open(self.dir / f"geo (smaller){src.suffix}").getexif()
+                with Image.open(self.dir / f"geo (smaller){src.suffix}") as out:
+                    after = out.getexif()
                 self.assertIsNone(after.get(0x010F))
                 self.assertEqual(len(after.get_ifd(0x8825)), 0)
 
@@ -1026,6 +1030,43 @@ class MediaEditTest(unittest.TestCase):
         for bad in (["2", "1"], ["1"], ["x", "2"]):
             self.assertNotEqual(convert("bleep", str(src), *bad).returncode, 0, bad)
 
+    def test_picture_edits_leave_out_the_files_details(self):
+        """The edit window says a picture's copy leaves out its hidden details: EXIF and PNG text both."""
+        from PIL import Image, PngImagePlugin
+        info = PngImagePlugin.PngInfo()
+        info.add_text("Author", "R. Kumar")
+        exif = Image.Exif()
+        exif[0x010F] = "Pixel"
+        Image.new("RGB", (120, 80), (90, 120, 200)).save(self.dir / "shot.png", pnginfo=info, exif=exif)
+        Image.new("RGB", (120, 80), (90, 120, 200)).save(self.dir / "photo.jpg", exif=exif)
+        for name, op, args, made in [("shot.png", "crop", ["5", "5", "50", "40"], "shot (cropped).png"),
+                                     ("photo.jpg", "crop", ["5", "5", "50", "40"], "photo (cropped).jpg"),
+                                     ("shot.png", "background", ["#FFFFFF", "10"], "shot (with background).png"),
+                                     ("photo.jpg", "redact", ["5", "5", "20", "20"], "photo (redacted).jpg")]:
+            with self.subTest(op=op, name=name):
+                self.assertEqual(convert(op, str(self.dir / name), *args).returncode, 0)
+                with Image.open(self.dir / made) as out:
+                    self.assertNotIn("Author", out.info)
+                    self.assertEqual(len(out.getexif()), 0)
+
+    def test_a_bleeped_copy_leaves_out_the_details_and_a_trimmed_one_keeps_them(self):
+        """Bleep is for privacy: its copy has no title or names. Trim is not, and keeps them (the window says so)."""
+        src = self.dir / "tagged.mp3"
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=300:duration=5",
+                        "-metadata", "title=Board call", "-metadata", "artist=R. Kumar", str(src)], check=True)
+
+        def tags(path):
+            out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "json", str(path)],
+                                 capture_output=True, text=True, check=True).stdout
+            return {k.lower(): v for k, v in json.loads(out).get("format", {}).get("tags", {}).items()}
+        self.assertEqual(tags(src).get("artist"), "R. Kumar")
+        self.assertEqual(convert("bleep", str(src), "1", "2").returncode, 0)
+        bleeped = tags(self.dir / "tagged (bleeped).mp3")
+        self.assertNotIn("artist", bleeped)
+        self.assertNotIn("title", bleeped)
+        self.assertEqual(convert("trim", str(src), "1", "4").returncode, 0)
+        self.assertEqual(tags(self.dir / "tagged (trimmed).mp3").get("artist"), "R. Kumar")
+
     @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
     def test_bleep_in_a_video_keeps_the_picture(self):
         src = self.video()
@@ -1311,6 +1352,45 @@ class PrivacyToolsTest(unittest.TestCase):
         self.assertIn(["Model", "EOS R6"], groups["Camera or device"])
         self.assertIn(["Artist", "Ram K"], groups["People"])
         self.assertEqual(path.read_bytes()[:2], b"\xff\xd8")      # nothing was changed
+
+
+class DetailGroupsTest(unittest.TestCase):
+    """How hidden details are grouped for the edit window, on fields mat2 really reported."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = load_script()
+
+    def groups(self, fields):
+        return {g: [n for n, _ in rows] for g, rows in self.mod.group_details(fields)["groups"]}
+
+    def test_a_video_lists_its_encoder_not_its_container_structure(self):
+        # mat2's fields for an MP4 that ffmpeg made (Fedora 44, 2026-11-06).
+        fields = [("TimeScale", "44100"), ("Encoder", "Lavf63.1.101"), ("MajorBrand", "MP4 Base Media v1"),
+                  ("MinorVersion", "0.2.0"), ("CompatibleBrands", "['isom', 'mp41']"), ("MediaDataSize", "4346970"),
+                  ("MediaDataOffset", "48"), ("MovieHeaderVersion", "0"), ("PreferredRate", "1"),
+                  ("NextTrackID", "3"), ("TrackHeaderVersion", "0"), ("TrackID", "1"), ("TrackLayer", "0"),
+                  ("GraphicsMode", "srcCopy"), ("CompressorID", "avc1"), ("CompressorName", "Lavc63.1.101 libx264"),
+                  ("PixelAspectRatio", "1:1"), ("BufferSize", "0"), ("MaxBitrate", "2828597"),
+                  ("AverageBitrate", "0"), ("MediaHeaderVersion", "0"), ("HandlerDescription", "SoundHandler"),
+                  ("HandlerType", "Metadata"), ("HandlerVendorID", "Apple"), ("Rotation", "0")]
+        self.assertEqual(self.groups(fields), {"Software": ["Encoder", "CompressorName"]})
+        self.assertEqual(self.mod.group_details(fields)["total"], 25)          # all are still removed
+
+    def test_dates_are_moments_not_every_name_with_time(self):
+        got = self.groups([("DateTimeOriginal", "2026:11:04 09:12:00"), ("CreateDate", "2026:11:04"),
+                           ("OffsetTime", "+05:30"), ("ExposureTime", "1/120"), ("TimeScale", "600")])
+        self.assertEqual(got["Dates"], ["DateTimeOriginal", "CreateDate", "OffsetTime"])
+        self.assertNotIn("ExposureTime", got["Dates"])
+
+    def test_mp3_frames_are_grouped_by_what_they_say(self):
+        got = self.groups([("TPE1", "R. Kumar"), ("TDRC", "2026"), ("TSSE", "Lavf63.1.101"), ("TIT2", "Board call")])
+        self.assertEqual(got, {"People": ["TPE1"], "Dates": ["TDRC"], "Software": ["TSSE"], "Other": ["TIT2"]})
+
+    def test_a_photo_groups_location_camera_and_software(self):
+        got = self.groups([("GPSLatitude", "13 deg 4' 52.00\" N"), ("Make", "Pixel"), ("Model", "Pixel 8"),
+                           ("Software", "HDR+ 1.0"), ("Artist", "R. Kumar")])
+        self.assertEqual(list(got), ["Location", "Camera or device", "People", "Software"])
 
 
 class FinishedTitleTest(unittest.TestCase):

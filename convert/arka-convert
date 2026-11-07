@@ -1056,7 +1056,11 @@ def bleep_media(path, args, on_progress=None):
         if kind == "video" and info["width"] and ext != src.suffix.lower().lstrip("."):
             picture = ["-map", "0:v:0"] + picture_opts(ext)
         run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), "-filter_complex", graph,
-                             *picture, "-map", "[a]", "-sn", *sound_opts(ext), str(tmp)], info["seconds"], on_progress)
+                             *picture, "-map", "[a]", "-sn",
+                             # Bleeping is for privacy, so the copy leaves out the file's details too (title, names,
+                             # place), as a blacked-out video does. Trim and split keep them: they are not privacy tools.
+                             "-map_metadata", "-1", "-map_chapters", "-1",
+                             *sound_opts(ext), str(tmp)], info["seconds"], on_progress)
         return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} (bleeped)", ext)])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
@@ -1084,19 +1088,30 @@ def save_frame(path, at, out):
 DETAIL_GROUPS = [
     ("Location", r"gps|location|latitude|longitude|^city$|^country|sublocation|^state$|province"),
     ("Camera or device", r"^make$|model|lens|serial|camera|device|bodyserial|owner ?name"),
-    ("People", r"artist|author|creator(?!tool)|copyright|owner|by-?line|credit|lastmodifiedby|company|manager"),
-    ("Dates", r"date|time"),
-    ("Software", r"software|producer|creatortool|encoder|encoded|encodedby|^tsse$|^tenc$|application|^tool|history"),
+    # ID3 frames by their codes too: TPE1-4 performers, TCOM composer, TEXT lyricist, TOPE original artist.
+    ("People", r"artist|author|creator(?!tool)|copyright|owner|by-?line|credit|lastmodifiedby|company|manager"
+               r"|^tpe[1-4]$|^tcom$|^text$|^tope$|^tcop$"),
+    # Dates: fields that hold a moment (DateTimeOriginal, CreateDate, OffsetTime). Not every name
+    # with "time" in it: TimeScale and ExposureTime are not dates.
+    ("Dates", r"date|^time$|timestamp|offsettime|time(created|original|digitized|sent)|^tdrc$|^tyer$|^tdat$|^tdor$"),
+    ("Software", r"software|producer|creatortool|encoder|encoded|encodedby|^tsse$|^tenc$|application|^tool|history"
+                 r"|compressorname|handlername"),
 ]
 # Fields that only describe how the bytes are stored. They are removed too, but listing them
 # would bury the ones that say something about a person.
-DETAIL_SKIP = r"byteorder|^(image)?(width|height)$|bitspersample|colorspace|compression|resolution|ycbcr|orientation|^version$|filetype|mimetype|encoding"
+DETAIL_SKIP = (r"byteorder|^(image)?(width|height)$|bitspersample|colorspace|compression|resolution|ycbcr|orientation"
+               r"|^version$|filetype|mimetype|encoding"
+               # MP4 and QuickTime structure: brands, track and media headers, rates, sizes, offsets.
+               r"|majorbrand|minorversion|compatiblebrands|mediadata(size|offset)|headerversion|^preferred"
+               r"|nexttrackid|^track(id|layer|volume)$|graphicsmode|opcolor|compressorid|pixelaspectratio"
+               r"|buffersize|bitrate$|^handler(type|vendorid|description)$|^rotation$|matrixstructure|timescale"
+               r"|^(poster|preview|selection|current)(time|duration)$|^duration$|^balance$|framerate"
+               r"|^audio(format|channels|samplerate)$|^sourceimage|bitdepth")
 
 
 def details_worker(path):
     """Runs inside the sandbox: the hidden details mat2 would remove, as JSON on stdout."""
     import json
-    import re
     from libmat2 import parser_factory
     parser, _ = parser_factory.get_parser(path)
     if parser is None:
@@ -1111,17 +1126,22 @@ def details_worker(path):
             else:
                 yield f"{prefix}{k}", str(v)
 
-    groups, total = {}, 0
-    for key, value in flat(meta):
-        total += 1
+    print(json.dumps(group_details(list(flat(meta)))))
+
+
+def group_details(fields):
+    """[(key, value)] as mat2 names them -> {"supported", "total", "groups": [[group, [[name, value]]]]}."""
+    import re
+    groups = {}
+    for key, value in fields:
         name = key.split(" / ")[-1]
-        if re.search(DETAIL_SKIP, name, re.I):
+        squeezed = name.replace(" ", "")
+        if re.search(DETAIL_SKIP, squeezed, re.I):
             continue
-        group = next((g for g, pat in DETAIL_GROUPS if re.search(pat, name.replace(" ", ""), re.I)), "Other")
+        group = next((g for g, pat in DETAIL_GROUPS if re.search(pat, squeezed, re.I)), "Other")
         groups.setdefault(group, []).append([name, value[:200]])
     order = [g for g, _ in DETAIL_GROUPS] + ["Other"]
-    print(json.dumps({"supported": True, "total": total,
-                      "groups": [[g, groups[g]] for g in order if g in groups]}))
+    return {"supported": True, "total": len(fields), "groups": [[g, groups[g]] for g in order if g in groups]}
 
 
 def file_details(path):
