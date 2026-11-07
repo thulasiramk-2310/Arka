@@ -197,9 +197,9 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
         firewall,
         browser_ok,
         browser_detail: if browser_ok {
-            format!("Sandboxed — {browser}")
+            "Sees only your Downloads folder".to_string()
         } else {
-            format!("Not confirmed — {browser} / {sandbox}")
+            "Not confirmed".to_string()
         },
     })
 }

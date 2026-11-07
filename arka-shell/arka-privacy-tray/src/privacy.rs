@@ -58,9 +58,9 @@ impl Enforcement {
     /// The six setting rows, in a stable order.
     pub fn rows(&self) -> Vec<Row> {
         vec![
-            Row { name: "Hardware address", detail: if self.mac { "Randomized per network".into() } else { "Not randomized".into() }, active: self.mac },
+            Row { name: "Private network address", detail: if self.mac { "Random on each network".into() } else { "Not random".into() }, active: self.mac },
             Row {
-                name: "DNS",
+                name: "Encrypted DNS",
                 detail: if self.dns_user_off {
                     "Unencrypted on this network (your choice)".into()
                 } else {
@@ -68,10 +68,10 @@ impl Enforcement {
                 },
                 active: self.dns_ok,
             },
-            Row { name: "Hostname", detail: if self.hostname { "Masked to \u{201c}arka\u{201d}".into() } else { "Not masked".into() }, active: self.hostname },
-            Row { name: "IPv6", detail: if self.ipv6 { "Temporary addresses on".into() } else { "Temporary addresses off".into() }, active: self.ipv6 },
-            Row { name: "Browser", detail: self.browser_detail.clone(), active: self.browser_ok },
-            Row { name: "Firewall", detail: if self.firewall { "Incoming rules configured".into() } else { "Incoming rules not confirmed".into() }, active: self.firewall },
+            Row { name: "Computer name", detail: if self.hostname { "Kept as chosen in setup".into() } else { "Not as chosen in setup".into() }, active: self.hostname },
+            Row { name: "Temporary IPv6 addresses", detail: if self.ipv6 { "On".into() } else { "Off".into() }, active: self.ipv6 },
+            Row { name: "Sandboxed browser", detail: self.browser_detail.clone(), active: self.browser_ok },
+            Row { name: "Firewall", detail: if self.firewall { "Rejects incoming connections".into() } else { "Not confirmed".into() }, active: self.firewall },
         ]
     }
 
@@ -85,7 +85,7 @@ impl Enforcement {
     pub fn down(&self) -> Vec<&'static str> {
         self.rows()
             .into_iter()
-            .filter(|r| !r.active && !(r.name == "DNS" && self.dns_user_off))
+            .filter(|r| !r.active && !(r.name == "Encrypted DNS" && self.dns_user_off))
             .map(|r| r.name)
             .collect()
     }
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(level(&e, false), Level::Warn);
         let mut n = Notifier::new(60, 0);
         assert!(n.evaluate(&[], &e, 1000).is_none(), "no alarm for the user's own choice");
-        assert!(e.rows().iter().any(|r| r.name == "DNS" && r.detail.contains("your choice")));
+        assert!(e.rows().iter().any(|r| r.name == "Encrypted DNS" && r.detail.contains("your choice")));
     }
 
     #[test]
@@ -399,7 +399,7 @@ mod tests {
         d.mac = false;
         assert_eq!(level(&d, false), Level::Critical); // down beats everything
         assert_eq!(level(&d, true), Level::Critical);
-        assert_eq!(d.down(), vec!["Hardware address"]);
+        assert_eq!(d.down(), vec!["Private network address"]);
     }
 
     #[test]
