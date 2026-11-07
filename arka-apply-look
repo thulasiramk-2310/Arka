@@ -84,7 +84,11 @@ done
 if [ -d "$HOME/.config/crystal-dock" ]; then
     if pkill -u "$(id -u)" -x crystal-dock; then
         sleep 0.5
-        setsid crystal-dock >/dev/null 2>&1 < /dev/null &
+        # Start the dock as its own transient user service, not as a child of whoever ran this script.
+        # Run from ArkaOS Settings, a setsid'd dock still lived in Settings' cgroup: it did not show while
+        # Settings was open and was killed with it when Settings closed (seen 2026-11-06, Light to Dark).
+        systemd-run --user --quiet --collect --unit="arka-dock-$(date +%s)" /usr/libexec/arka-dock-start \
+            >/dev/null 2>&1 || setsid /usr/libexec/arka-dock-start >/dev/null 2>&1 < /dev/null &
     fi
 fi
 
