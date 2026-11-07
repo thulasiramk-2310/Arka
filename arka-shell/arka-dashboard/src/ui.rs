@@ -195,6 +195,14 @@ fn value_row(title: &str, icon: &str) -> (adw::ActionRow, gtk4::Label) {
     let val = gtk4::Label::new(Some("…"));
     val.set_valign(gtk4::Align::Center);
     val.add_css_class("dim-label");
+    // A long value (the prediction) wraps inside its own column. Without this it took the row's width and
+    // the title broke mid-word ("Predicte-d instabilit-y", seen in the booted image 2026-11-07).
+    val.set_wrap(true);
+    val.set_wrap_mode(gtk4::pango::WrapMode::WordChar);
+    val.set_width_chars(12); // minimum, so "20 %" never collapses to one character per line
+    val.set_max_width_chars(32);
+    val.set_xalign(1.0);
+    val.set_justify(gtk4::Justification::Right);
     row.add_suffix(&val);
     (row, val)
 }
@@ -238,6 +246,22 @@ fn fmt_temp(v: f64) -> String {
     if !v.is_finite() || v < 0.0 { "—".into() } else { format!("{v:.0}°C") }
 }
 
+/// The line under the verdict. The health service's diagnosis can carry a prediction ("Memory use
+/// approaching 90%...") even while the checks are Normal, which read as a contradiction. When the verdict is
+/// Normal and an estimate exists, say so plainly and leave the estimate to its own row.
+fn verdict_subtitle(health: &str, summary: &str, has_prediction: bool) -> String {
+    if health == "OK" && has_prediction {
+        "No monitored check needs attention right now. A trend estimate is listed below.".to_string()
+    } else {
+        summary.to_string()
+    }
+}
+
+/// The prediction row. The percentage is the estimator's rough likelihood, not a memory figure, so it says so.
+fn prediction_text(summary: &str, probability: f64) -> String {
+    format!("Estimated: possible {summary}. Rough likelihood {:.0}%.", probability * 100.0)
+}
+
 fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     if !r.available {
         rows.verdict.set_title("System health unavailable");
@@ -258,7 +282,7 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
         _      => ("Checking system health…", "…", false, true),
     };
     rows.verdict.set_title(title);
-    rows.verdict.set_subtitle(&glib::markup_escape_text(&r.summary));
+    rows.verdict.set_subtitle(&glib::markup_escape_text(&verdict_subtitle(&r.health, &r.summary, r.prediction.is_some())));
     set_badge(&rows.verdict_badge, badge, good, warn);
 
     rows.cpu.set_text(&fmt_pct(r.cpu_util));
@@ -276,7 +300,7 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     // Predictions are a HEURISTIC — always framed as *possible*, never certain.
     match &r.prediction {
         Some((summary, prob)) => {
-            rows.pred.set_text(&format!("Estimated: possible {summary} (~{:.0}%)", prob * 100.0))
+            rows.pred.set_text(&prediction_text(summary, *prob))
         }
         None => rows.pred.set_text("None estimated"),
     }
@@ -724,6 +748,24 @@ pub fn build(
 #[cfg(test)]
 mod presentation_tests {
     use super::*;
+
+    #[test]
+    fn a_normal_verdict_does_not_repeat_the_prediction_as_fact() {
+        let said = "Memory use approaching 90% \u{2014} likely within ~5 min";
+        // Normal + an estimate: the verdict line says nothing is wrong now; the estimate has its own row.
+        let line = verdict_subtitle("OK", said, true);
+        assert!(!line.contains("approaching"), "{line}");
+        assert!(line.contains("estimate"), "{line}");
+        // No estimate, or not Normal: the service's own text is shown unchanged.
+        assert_eq!(verdict_subtitle("OK", "System healthy", false), "System healthy");
+        assert_eq!(verdict_subtitle("WARN", said, true), said);
+    }
+
+    #[test]
+    fn the_prediction_row_labels_its_percentage_as_a_likelihood() {
+        let t = prediction_text("Memory use approaching 90%", 0.912);
+        assert_eq!(t, "Estimated: possible Memory use approaching 90%. Rough likelihood 91%.");
+    }
 
     #[test]
     fn clock_text_drops_seconds_in_both_12_and_24_hour_forms() {
