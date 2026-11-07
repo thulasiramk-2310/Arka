@@ -85,6 +85,9 @@ Rectangle {
     readonly property bool signin: stage === "signin"
     property bool busy: false
     property bool dimmed: false
+    // While dimmed, the clock and the hint sit above the dim layer in a light colour: dark text under
+    // the black layer read at about 1.8:1 (booted image, 2026-11-06).
+    readonly property color hiText: dimmed ? "#E8EAED" : c.textHi
     property bool askName: userModel.lastUser.length === 0
     property int sessionIndex: sessionModel.lastIndex >= 0 ? sessionModel.lastIndex : 0
     property string errorText: ""
@@ -420,6 +423,7 @@ Rectangle {
     // --- clock: big on lock, compact on sign-in ---------------------------------
     Column {
         id: clockCol
+        z: 3
         anchors.horizontalCenter: parent.horizontalCenter
         y: root.signin ? root.height * 0.075 : root.height * 0.15
         scale: root.signin ? 0.52 : 1
@@ -431,7 +435,7 @@ Rectangle {
         Text {
             id: dateLine
             anchors.horizontalCenter: parent.horizontalCenter
-            color: c.textHi
+            color: root.hiText
             opacity: 0.92
             font.family: c.font
             font.pixelSize: root.px(24)
@@ -442,7 +446,7 @@ Rectangle {
         Text {
             id: clock
             anchors.horizontalCenter: parent.horizontalCenter
-            color: c.textHi
+            color: root.hiText
             font.family: c.font
             font.pixelSize: root.px(168)
             font.weight: Font.DemiBold
@@ -470,7 +474,9 @@ Rectangle {
         Keys.onPressed: function (event) {
             if (root.signin) return
             var t = event.text
-            var printable = t.length === 1 && t.charCodeAt(0) >= 32 && t.charCodeAt(0) !== 127
+            // Type-ahead: a letter typed on the clock starts the password. Not Space: it is the usual
+            // key to wake a screen, and it put a stray space into the password (booted image, 2026-11-06).
+            var printable = t.length === 1 && t.charCodeAt(0) > 32 && t.charCodeAt(0) !== 127
             root.toSignin(printable ? t : "")
             event.accepted = true
         }
@@ -484,6 +490,7 @@ Rectangle {
     }
 
     Column {
+        z: 3
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: root.height * 0.09
@@ -496,7 +503,7 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.px(22); height: root.px(22)
             Glyph {   // chevron up, breathing
-                tint: c.textHi
+                tint: root.hiText
                 strokeW: 2.2
                 PathMove { x: 6; y: 15 }
                 PathLine { x: 12; y: 9 }
@@ -512,7 +519,7 @@ Rectangle {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Press any key or click to sign in"
-            color: c.textHi
+            color: root.hiText
             opacity: 0.85
             font.family: c.font
             font.pixelSize: root.px(15)
