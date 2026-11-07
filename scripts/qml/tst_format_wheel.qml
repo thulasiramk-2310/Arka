@@ -255,4 +255,30 @@ TestCase {
         compare(picker.formats.indexOf("smaller:10mb") >= 0, true)
         compare(picker.label("smaller:25mb"), "Under 25 MB")
     }
+
+    function test_the_middle_says_what_a_format_slot_does() {
+        picker.open(["file:///tmp/clip.mp4"], false)        // the format wheel, not the edit wheel
+        const i = picker.formats.findIndex(f => picker.targets.indexOf(f) >= 0)
+        verify(i >= 0, "no format slot in " + picker.formats)
+        picker.hover = i
+        compare(picker.hubText(), "Make a " + picker.label(picker.formats[i]) + " copy")
+        const more = picker.formats.indexOf("more")
+        if (more >= 0) {
+            picker.hover = more
+            compare(picker.hubText(), "More choices")
+        }
+        picker.hover = -1
+        compare(picker.hubText(), "Pick one")
+    }
+
+    function test_the_ring_keeps_clear_of_the_dock_at_the_bottom() {
+        picker.open(["file:///tmp/photo.jpg"], false)
+        picker.placed = false
+        picker.place(picker.width / 2, picker.height - 2)       // a file right above the dock
+        verify(picker.cy + picker.outerR <= picker.height - picker.dockClear,
+               "ring bottom " + (picker.cy + picker.outerR) + " reaches the dock band below " + (picker.height - picker.dockClear))
+        picker.placed = false
+        picker.place(picker.width / 2, 2)                        // the top edge keeps its small margin
+        compare(picker.cy, picker.outerR + 8)
+    }
 }

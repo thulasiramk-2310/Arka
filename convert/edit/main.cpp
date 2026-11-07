@@ -23,6 +23,8 @@
 #include <QImageReader>
 #include <QProcess>
 #include <QIcon>
+#include <QPainter>
+#include <QPen>
 #include <QQmlApplicationEngine>
 #include <QQuickImageProvider>
 #include <QQmlContext>
@@ -39,10 +41,30 @@ class IconProvider : public QQuickImageProvider
 {
 public:
     IconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
-    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &requested) override
+    // "NAME" or "NAME?tint=RRGGBB": a tinted icon is drawn in that one colour, the colour of the words beside
+    // it. "arka-box" is drawn here: an outlined box (the theme's rectangle icons are all filled).
+    QPixmap requestPixmap(const QString &request, QSize *size, const QSize &requested) override
     {
+        const QString id = request.section('?', 0, 0);
+        const QColor tint(QStringLiteral("#") + request.section(QStringLiteral("?tint="), 1, 1));
         const int side = requested.width() > 0 ? requested.width() : 32;
-        QPixmap pm = QIcon::fromTheme(id).pixmap(side, side);
+        QPixmap pm;
+        if (id == QLatin1String("arka-box")) {
+            pm = QPixmap(side, side);
+            pm.fill(Qt::transparent);
+            QPainter paint(&pm);
+            paint.setRenderHint(QPainter::Antialiasing);
+            const qreal w = side / 11.0;   // the theme's line weight at this size
+            paint.setPen(QPen(tint.isValid() ? tint : QColor(0x23, 0x26, 0x29), w));
+            paint.drawRoundedRect(QRectF(side * 0.18, side * 0.18, side * 0.64, side * 0.64), w, w);
+        } else {
+            pm = QIcon::fromTheme(id).pixmap(side, side);
+            if (tint.isValid() && !pm.isNull()) {
+                QPainter paint(&pm);
+                paint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+                paint.fillRect(pm.rect(), tint);
+            }
+        }
         if (size)
             *size = pm.size();
         return pm;
@@ -67,7 +89,7 @@ class Edit : public QObject
 public:
     QString m_tool;
     QString m_file;
-    bool m_autoFind = false;    // "Hide private text": Black out that starts by finding private text
+    bool m_autoFind = false;    // "Find private text": Black out that starts by finding private text
     QString m_frame;            // for a video: one frame, saved where m_tmp is
     QString m_wave;             // for sound and video: the waveform, saved where m_tmp is
     QTemporaryDir m_tmp;
@@ -209,6 +231,11 @@ public:
     }
 
     Q_INVOKABLE void openFile() const { QDesktopServices::openUrl(fileUrl()); }
+    // Whether the icon theme has this icon: a button whose icon is missing shows only its words.
+    Q_INVOKABLE bool hasIcon(const QString &name) const
+    {
+        return name == QLatin1String("arka-box") || QIcon::hasThemeIcon(name);   // arka-box is drawn by the provider
+    }
 
     // Opens the folder with this file selected, as the file manager's own "Show in folder" does.
     Q_INVOKABLE void showInFolder() const

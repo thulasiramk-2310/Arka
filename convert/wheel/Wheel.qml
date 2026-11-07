@@ -13,6 +13,7 @@ Window {
     readonly property real k: Math.max(0.72, Math.min(1.0, Screen.height * 0.30 / 380))
     readonly property real outerR: 190 * k
     readonly property real innerR: 70 * k
+    readonly property real dockClear: 88
     property real cx: width / 2
     property real cy: height / 2
     property bool placed: false
@@ -32,17 +33,21 @@ Window {
 
     // The ArkaOS look, as on the wallpaper: a flat field, hairlines, no gloss or glow.
     // Green appears once, as a short line on the slot you are on.
-    readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 0.97) : Qt.rgba(241 / 255, 243 / 255, 245 / 255, 0.97)
-    readonly property color slotFill: "transparent"
-    readonly property color slotOnFill: dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10)
-    readonly property color idleInk: dark ? "#B4B8C2" : "#3F4755"
-    readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.18)
+    readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 28 / 255, 0.97) : Qt.rgba(221 / 255, 225 / 255, 230 / 255, 0.97)
+    readonly property color slotFill: dark ? "#1C1F26" : "#F7F8F9"
+    // The slot you are on: a green tint as well as the green edge, so the choice does not rest on line weight.
+    readonly property color slotOnFill: dark ? "#2A5A4C" : "#BFE0D1"
+    readonly property color idleInk: dark ? "#D2D6DD" : "#2A313C"   // a slot not under the pointer: still clearly live
+    readonly property color slotEdge: dark ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(20 / 255, 24 / 255, 31 / 255, 0.46)
     readonly property color hubFill: dark ? Qt.rgba(20 / 255, 22 / 255, 27 / 255, 1) : Qt.rgba(241 / 255, 243 / 255, 245 / 255, 1)
     // A clear edge on any wallpaper: light on dark, dark on light.
-    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.46)
+    readonly property color rim: dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.52)
     readonly property color ink: dark ? "#ECEFF3" : "#14181F"
     readonly property color muted: dark ? "#A3ABB6" : "#5B6472"
     readonly property color accent: "#4DB491"     // ArkaOS's own colour, not the desktop accent
+    // The ring around the slot you are on: on the light look the brand green is too pale for a mark that
+    // must be seen (2.3:1), so a deeper green draws it (3.6:1).
+    readonly property color accentEdge: dark ? accent : "#1F7A5C"
     readonly property color accentInk: "#06281B"
 
     // Sentence case everywhere; format names stay as they are written (PNG, MP3).
@@ -58,8 +63,8 @@ Window {
                                     annotate: "Annotate", bleep: "Bleep", "split-media": "Split", join: "Join in name order",
                                     smaller: "Smaller", clean: "Remove details", "hide-private": "Find private text" })
     // A theme icon for each edit, so a slot is recognised before it is read. Formats stay as words.
-    readonly property var icons: ({ more: "overflow-menu", crop: "transform-crop", annotate: "draw-freehand", redact: "draw-rectangle",
-                                    background: "color-fill", smaller: "zoom-out", clean: "document-cleanup", "hide-private": "edit-find",
+    readonly property var icons: ({ more: "overflow-menu", crop: "transform-crop", annotate: "draw-freehand", redact: "view-hidden",
+                                    background: "color-fill", smaller: "view-restore", clean: "document-cleanup", "hide-private": "document-scan",
                                     "rotate-left": "object-rotate-left", "rotate-right": "object-rotate-right",
                                     trim: "edit-cut", "split-media": "view-split-left-right", split: "view-split-left-right",
                                     bleep: "audio-volume-muted", join: "media-playlist-append", merge: "media-playlist-append",
@@ -70,6 +75,17 @@ Window {
         if (!edit && isVideo() && f === "mp3") return "MP3 audio"
         if (!edit && f === "zip" && files.length > 1) return "ZIP each"
         return names[f] || f.toUpperCase()   // an unknown format name is written as formats are
+    }
+    // The file-type icon of a format slot, from the icon theme (the generic one where the theme has none).
+    function formatIcon(f) {
+        const m = { png: "image-png", jpg: "image-jpeg", tiff: "image-tiff", bmp: "image-bmp", webp: "image-x-generic",
+                    avif: "image-x-generic", pdf: "x-office-document", "smaller-pdf": "x-office-document", mp3: "audio-mpeg",
+                    wav: "audio-x-wav", flac: "audio-flac", ogg: "audio-ogg", opus: "audio-x-generic", m4a: "audio-mp4",
+                    mp4: "video-mp4", mkv: "video-x-matroska", webm: "video-webm", zip: "application-zip",
+                    "zip-all": "application-zip", docx: "x-office-document", text: "text-x-generic" }
+        if (m[f]) return m[f]
+        if (String(f).indexOf("smaller") === 0) return "view-restore"
+        return ""
     }
     // What a slot does, for screen readers (and anyone who wonders before picking).
     function describe(f) {
@@ -102,8 +118,24 @@ Window {
         const name = String(files[0]).split("/").pop()
         try { return decodeURIComponent(name) } catch (e) { return name }
     }
+    readonly property var effects: ({ crop: "Choose what to keep", annotate: "Draw and write on it", redact: "Cover parts in black",
+                                      "hide-private": "Suggest boxes over private text", background: "Set it on a colour",
+                                      smaller: "Choose how much smaller", clean: "A copy without hidden details",
+                                      "rotate-left": "A copy turned left", "rotate-right": "A copy turned right",
+                                      trim: "Keep one part", "split-media": "Cut it in two", bleep: "A tone over words",
+                                      join: "One file, in name order", merge: "One PDF, in name order",
+                                      split: "One PDF per page", more: "More choices", zip: "Put it in a ZIP",
+                                      "zip-all": "All in one ZIP", "smaller-image": "A smaller copy", "smaller-pdf": "A smaller copy",
+                                      "smaller-audio": "A smaller copy", "smaller-video": "A smaller copy" })
+    readonly property var targets: ["png", "jpg", "webp", "avif", "tiff", "bmp", "pdf", "mp3", "wav", "flac", "ogg", "opus",
+                                    "m4a", "mp4", "mkv", "webm", "docx", "text"]
     function hubText() {
-        if (hover >= 0 && hover < formats.length) return label(formats[hover])
+        // The middle says what picking the slot does, in other words than the slot's own label.
+        if (hover >= 0 && hover < formats.length) {
+            const f = formats[hover]
+            if (!edit && targets.indexOf(f) >= 0) return "Make a " + label(f) + " copy"
+            return effects[f] || effects[String(f).split(":")[0]] || label(f)
+        }
         return clickMode ? "Pick one" : (files.length ? "Drop on one" : "Drop a file")   // nothing hovered yet
     }
 
@@ -168,7 +200,9 @@ Window {
     function place(x, y) {
         if (placed) return
         cx = Math.max(outerR + 8, Math.min(width - outerR - 8, x))
-        cy = Math.max(outerR + 8, Math.min(height - outerR - 8, y))
+        // Keep clear of the dock at the bottom: it reserves no space (it hides under windows), so near the
+        // bottom edge the ring covered it (booted image, 2026-11-06). About 80 px tall at 1080p.
+        cy = Math.max(outerR + 8, Math.min(height - outerR - dockClear, y))
         placed = true
         wheel.setBlur(cx, cy, shapeR, innerR)
         enter.restart()
@@ -274,6 +308,12 @@ Window {
         if (tip < 0) return pts
         return pts.slice(tip + 1).concat(pts.slice(0, tip))
     }
+    function trimShort(pts, t) {
+        const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
+        while (pts.length > 2 && d(pts[0], pts[1]) < t) pts.splice(1, 1)
+        while (pts.length > 2 && d(pts[pts.length - 1], pts[pts.length - 2]) < t) pts.splice(pts.length - 2, 1)
+        return pts
+    }
     function cutCorners(pts, corners, cut) {
         const out = []
         for (let q = 0; q < pts.length; q++) {
@@ -295,10 +335,13 @@ Window {
         const step = 360 / n, mid = -90 + i * step, d = 3
         const b0 = (mid - step / 2) * Math.PI / 180, b1 = (mid + step / 2) * Math.PI / 180
         const wedge = (pts) => clipHalf(clipHalf(pts, -Math.sin(b0), Math.cos(b0), d), Math.sin(b1), -Math.cos(b1), d)
-        const outer = chain(wedge(octPoints(Ro))), inner = chain(wedge(octPoints(Ri))).reverse()
+        // A cut that lands just past an octagon corner leaves a sliver of the next side: a kink a few pixels
+        // long. Drop such slivers, so every slot edge is a clean line.
+        const outer = trimShort(chain(wedge(octPoints(Ro))), 10 * k), inner = trimShort(chain(wedge(octPoints(Ri))), 10 * k).reverse()
         const all = outer.concat(inner)
         const m = outer.length
-        return svg(cutCorners(all, [0, m - 1, m, all.length - 1], 14 * k))
+        // Only the outer corners are cut: on the short inner edge a cut left a small kink at each end.
+        return svg(cutCorners(all, [0, m - 1], 14 * k))
     }
 
     Connections {
@@ -369,6 +412,20 @@ Window {
         opacity: 0
         transformOrigin: Item.Center
 
+        // A soft shadow under the ring, so it sits above the windows behind it. Stacked translucent
+        // octagons, because the wheel draws without a GPU, where blur effects are not available.
+        Repeater {
+            model: 16
+            delegate: Shape {
+                required property int index
+                anchors.fill: parent
+                ShapePath {
+                    fillColor: Qt.rgba(20 / 255, 24 / 255, 31 / 255, win.dark ? 0.032 : 0.012); strokeColor: "transparent"
+                    PathSvg { path: win.octagonPath(win.shapeR - 4 + index * 1.6, 5) }
+                }
+            }
+        }
+
         // The donut, hollow in the middle so nothing is picked by accident.
         Shape {
             anchors.fill: parent
@@ -413,27 +470,41 @@ Window {
                     preferredRendererType: Shape.CurveRenderer
                     ShapePath {
                         // The slot you are on: an accent edge, clear for low vision too.
-                        strokeColor: slotItem.on ? win.accent : win.slotEdge
+                        strokeColor: slotItem.on ? win.accentEdge : win.slotEdge
                         strokeWidth: slotItem.on ? 2 : 1
-                        joinStyle: ShapePath.MiterJoin
+                        joinStyle: ShapePath.RoundJoin     // a miter left spurs at the sharp inner corners
                         fillRule: ShapePath.OddEvenFill
                         fillColor: slotItem.on ? win.slotOnFill : win.slotFill
                         PathSvg { path: slotItem.path }
                     }
                 }
                 Column {
-                    readonly property string iconName: win.icons[slotItem.modelData] || ""
-                    width: Math.max(72, 100 * win.k)
+                    // Actions get an icon; a format is its name, set large (the theme's file icons looked alike).
+                    readonly property bool isFormat: win.targets.indexOf(slotItem.modelData) >= 0
+                    readonly property string iconName: win.edit ? (win.icons[slotItem.modelData] || "") : ""
+                    width: Math.max(118, 128 * win.k)   // wide enough for "Find private text" on one line
                     x: win.outerR + slotItem.r * Math.cos(slotItem.mid) - width / 2
                     y: slotItem.ym - height / 2
                     spacing: 5
-                    Image {
-                        visible: parent.iconName.length > 0
+                    Item {   // "More": three dots in the label's colour, clearer than the theme's thin glyph
+                        visible: slotItem.modelData === "more" && win.edit   // the format wheel is words only
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.max(18, Math.round(24 * win.k)); height: width
+                        width: Math.max(24, Math.round(28 * win.k)); height: width
+                        Row {
+                            anchors.centerIn: parent; spacing: 4
+                            Repeater { model: 3; Rectangle { width: 5; height: 5; radius: 2.5
+                                                             color: slotItem.on ? win.ink : win.idleInk } }
+                        }
+                    }
+                    Image {
+                        visible: parent.iconName.length > 0 && slotItem.modelData !== "more"
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(24, Math.round(28 * win.k)); height: width
                         sourceSize: Qt.size(width * 2, height * 2)
-                        source: parent.iconName.length && win.iconsReady ? "image://icon/" + parent.iconName : ""
-                        opacity: slotItem.on ? 1 : 0.78
+                        // Left empty (the space kept, so every slot lines up) when the theme lacks the icon.
+                        source: parent.iconName.length && win.iconsReady
+                                && (typeof wheel.hasIcon !== "function" || wheel.hasIcon(parent.iconName))
+                                ? "image://icon/" + parent.iconName + "?tint=" + String(slotItem.on ? win.ink : win.idleInk).substr(1) : ""
                     }
                     Text { textFormat: Text.PlainText;
                         width: parent.width
@@ -441,9 +512,10 @@ Window {
                         wrapMode: Text.WordWrap
                         text: win.label(slotItem.modelData)
                         color: slotItem.on ? win.ink : win.idleInk
-                        font.pixelSize: Math.max(12, 13 * win.k)
-                        font.weight: Font.DemiBold
-                        font.letterSpacing: 0.3
+                        // One size per ring: the format wheel is words, so they are set larger; the edit wheel has icons.
+                        font.pixelSize: win.edit ? Math.max(13, 14 * win.k) : Math.max(15, 16 * win.k)
+                        font.weight: Font.DemiBold   // the same when chosen: the fill and edge say which
+                        font.letterSpacing: text.length > 12 ? 0 : 0.3   // long labels keep clear of the slot's edges
                     }
                 }
             }
@@ -500,7 +572,7 @@ Window {
                 horizontalAlignment: Text.AlignHCenter
                 text: win.sizeLabel
                 color: win.muted
-                font.pixelSize: 11
+                font.pixelSize: 12
                 font.letterSpacing: 0.4
             }
         }
@@ -515,15 +587,34 @@ Window {
         x: Math.max(8, Math.min(win.width - width - 8, win.cx - width / 2))
         y: win.cy + win.outerR + 12 + height > win.height - 6 ? win.cy - win.outerR - 12 - height
                                                               : win.cy + win.outerR + 12
-        width: keyHintText.implicitWidth + 28; height: 30; radius: 15
-        antialiasing: true
-        color: win.surface; border.color: win.rim
+        width: keyHintText.implicitWidth + 28; height: 32
+        color: "transparent"
+        // The ring's own shape language: corners cut at 45 degrees, not a round pill.
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: win.surface; strokeColor: win.rim; strokeWidth: 1; joinStyle: ShapePath.MiterJoin
+                readonly property real c: 9
+                readonly property real w: keyHint.width - 0.5
+                readonly property real h: keyHint.height - 0.5
+                startX: c; startY: 0.5
+                PathLine { x: keyHint.width - 9.5; y: 0.5 }
+                PathLine { x: keyHint.width - 0.5; y: 9.5 }
+                PathLine { x: keyHint.width - 0.5; y: keyHint.height - 9.5 }
+                PathLine { x: keyHint.width - 9.5; y: keyHint.height - 0.5 }
+                PathLine { x: 9.5; y: keyHint.height - 0.5 }
+                PathLine { x: 0.5; y: keyHint.height - 9.5 }
+                PathLine { x: 0.5; y: 9.5 }
+                PathLine { x: 9.5; y: 0.5 }
+            }
+        }
         Text { textFormat: Text.PlainText;
             id: keyHintText
             anchors.centerIn: parent
-            color: win.ink; font.pixelSize: 12
+            color: win.ink; font.pixelSize: 13
             text: win.levelMode ? "Light keeps the most quality, Strong makes the smallest file; a size is kept only if reached. Esc to cancel"
-                                : "Arrow keys to choose, Enter to pick, Esc to cancel"
+                                : "Click, or use the arrow keys and Enter · Esc to cancel"
         }
     }
 

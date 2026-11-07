@@ -21,6 +21,10 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 EDIT = os.environ.get("ARKA_EDIT", "")
 CONVERT = ROOT / "convert" / "arka-convert"
+PLAYER = ROOT / "convert" / "edit" / "Player.qml"
+# The only line a window may print: Qt Multimedia names its FFmpeg when a sound or video tool loads
+# the player. Anything else on stderr (a QML warning, an audio-device error) fails the test.
+ALLOWED = ("qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg",)
 
 
 def ready():
@@ -47,8 +51,8 @@ class EditWindowTest(unittest.TestCase):
                    # The screenshot hook also closes a window that is left with nothing to save.
                    ARKA_EDIT_SCREENSHOT=str(self.dir / "config" / "last.png"))
         done = subprocess.run([EDIT, tool, str(path), *extra], env=env, capture_output=True, text=True, timeout=120)
-        warnings = [l for l in done.stderr.splitlines() if "qml" in l.lower() or "warning" in l.lower()]
-        self.assertEqual(warnings, [], "the window printed warnings")
+        noise = [l for l in done.stderr.splitlines() if l.strip() and not l.startswith(ALLOWED)]
+        self.assertEqual(noise, [], "the window printed to stderr")
         return done
 
     def wait_for(self, name, seconds=60):
@@ -61,6 +65,22 @@ class EditWindowTest(unittest.TestCase):
                 return found
             time.sleep(0.3)
         self.fail(f"no file with '{name}' was saved; have {sorted(p.name for p in self.dir.iterdir())}")
+
+    def crop_geometry(self):
+        """Where the crop box is in the last screenshot: its accent-coloured frame, left of the side panel."""
+        from PIL import Image
+        with Image.open(self.dir / "config" / "last.png") as im:
+            rgb = im.convert("RGB")
+            w, h = rgb.size
+            xs, ys = [], []
+            for y in range(80, h - 160):
+                for x in range(0, w - 290):
+                    r, g, b = rgb.getpixel((x, y))
+                    if abs(r - 0x4D) < 12 and abs(g - 0xB4) < 12 and abs(b - 0x91) < 12:
+                        xs.append(x); ys.append(y)
+        self.assertTrue(xs, "the crop box was not found on screen")
+        left, right, top, bottom = min(xs), max(xs), min(ys), max(ys)
+        return {"right": right - 3, "middle": (top + bottom) // 2, "half": (right - left) // 2}
 
     def picture(self):
         from PIL import Image
@@ -113,7 +133,7 @@ class EditWindowTest(unittest.TestCase):
         self.wait_for("(bleeped)")
 
     def test_hide_private_text_starts_with_the_suggested_boxes(self):
-        """The wheel's "Hide private text": the window asks for suggestions at once and adds them as boxes."""
+        """The wheel's "Find private text": the window asks for suggestions at once and adds them as boxes."""
         from PIL import Image
         src = self.picture()
         fake = self.bin / "arka-convert"
@@ -129,14 +149,47 @@ class EditWindowTest(unittest.TestCase):
             self.assertEqual(rgb.getpixel((100, 50)), (0, 0, 0))          # inside the suggested box
             self.assertEqual(rgb.getpixel((500, 300)), (255, 255, 255))   # elsewhere untouched
 
+    def test_zoom_in_makes_the_same_drag_cover_less(self):
+        """After one zoom in (x1.5), a drag across the same screen area covers 1/1.5 as much in each direction."""
+        from PIL import Image
+        src = self.picture()
+        drag = "p 330 280;m 360 300;m 410 340;r 410 340"
+        self.run_window("redact", src, drag + ";k enter")
+        plain = self.wait_for("(redacted)")[0]
+        zoomed_src = self.dir / "zoomed.png"
+        shutil.copy(src, zoomed_src)
+        # The "+" button sits on the title's line, at the right of the picture's area.
+        self.run_window("redact", zoomed_src, "p 742 38;r 742 38;" + drag + ";k enter")
+        zoomed = self.wait_for("zoomed (redacted)")[0]
+
+        def black(path):
+            with Image.open(path) as im:
+                return sum(1 for px in im.convert("L").get_flattened_data() if px < 20)
+        ratio = black(plain) / max(1, black(zoomed))
+        self.assertTrue(1.8 < ratio < 2.8, f"area ratio {ratio:.2f}, expected about 2.25")
+
     def test_crop_to_a_square(self):
         from PIL import Image
         src = self.picture()
         # The "1:1" shape button sits second in the row of shapes, then Enter.
-        self.run_window("crop", src, "p 112 590;r 112 590;k enter")
+        done = self.run_window("crop", src, "p 112 590;r 112 590;k enter")
+        self.assertNotIn("multimedia", done.stderr)                  # pictures never load the player
         out = self.wait_for("(cropped)")[0]
         with Image.open(out) as im:
             self.assertEqual(im.size, (500, 500))
+
+    def test_crop_by_dragging_a_side(self):
+        from PIL import Image
+        src = self.picture()
+        # Free shape: the right side's handle, dragged left by half the picture's width on screen.
+        self.run_window("crop", src, "m 1 1")                       # a first look, to find the box on screen
+        geo = self.crop_geometry()
+        x, y = geo["right"], geo["middle"]
+        self.run_window("crop", src, f"p {x} {y};m {x - 60} {y};m {x - geo['half']} {y};r {x - geo['half']} {y};k enter")
+        out = self.wait_for("(cropped)")[0]
+        with Image.open(out) as im:
+            self.assertEqual(im.size[1], 500)                         # as tall as before
+            self.assertTrue(350 <= im.size[0] <= 450, im.size)          # about half as wide
 
     def test_background_adds_room_around_the_picture(self):
         from PIL import Image
@@ -157,6 +210,82 @@ class EditWindowTest(unittest.TestCase):
                               text=True, timeout=30)
         self.assertEqual(done.returncode, 2)
         self.assertIn("usage", done.stderr)
+
+
+def qmltestrunner():
+    """Qt 6's qmltestrunner. A plain `qmltestrunner` on PATH can be Qt 5's, which cannot read these tests."""
+    for d in ("/usr/lib64/qt6/bin", "/usr/lib/qt6/bin"):
+        if os.access(f"{d}/qmltestrunner", os.X_OK):
+            return f"{d}/qmltestrunner"
+    return shutil.which("qmltestrunner6") or shutil.which("qmltestrunner-qt6")
+
+
+@unittest.skipUnless(qmltestrunner() and shutil.which("ffmpeg"), "needs qmltestrunner (Qt 6) and ffmpeg")
+class PlayerTest(unittest.TestCase):
+    """Player.qml on its own: plays a part and stops at its end. No sound device is needed: without
+    one, Qt Multimedia plays against a clock."""
+
+    def test_sound(self):
+        self.play(["-f", "lavfi", "-i", "sine=frequency=300:duration=6"], "talk.wav")
+
+    def test_video(self):
+        # mpeg4 and aac are encoders that Fedora's ffmpeg-free has too.
+        self.play(["-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=6", "-f", "lavfi", "-i",
+                   "sine=frequency=300:duration=6", "-c:v", "mpeg4", "-c:a", "aac", "-shortest"], "clip.mp4")
+
+    def play(self, make, name):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            sound = tmp / name
+            subprocess.run(["ffmpeg", "-loglevel", "error", *make, str(sound)], check=True)
+            (tmp / "Player.qml").write_text(PLAYER.read_text())
+            (tmp / "tst_player.qml").write_text(PLAYER_TEST.replace("SOUND", sound.as_uri()))
+            env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_FORCE_STDERR_LOGGING="1",
+                       XDG_RUNTIME_DIR=str(tmp), PULSE_SERVER="unix:/nonexistent", PIPEWIRE_REMOTE="/nonexistent")
+            done = subprocess.run([qmltestrunner(), "-input", str(tmp / "tst_player.qml")], env=env,
+                                  capture_output=True, text=True, timeout=120)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn(" 0 failed", done.stdout)
+            self.assertEqual(done.stdout.count("PASS   : qmltestrunner::Player::test_"), 4, done.stdout)
+            self.assertNotIn("qml:", done.stderr)
+
+
+PLAYER_TEST = """
+import QtQuick
+import QtTest
+
+TestCase {
+    name: "Player"
+    width: 200; height: 100
+    Player { id: p; source: "SOUND" }
+
+    function cleanup() { if (p.playing) p.toggle(0, 0); tryVerify(() => !p.playing, 3000) }
+
+    function test_a_the_file_is_opened_only_on_play() {
+        verify(!p.opened)
+    }
+    function test_b_a_part_plays_and_stops_at_its_end() {
+        p.toggle(1, 2)
+        tryVerify(() => p.playing, 3000)
+        tryVerify(() => !p.playing, 5000)
+        verify(p.position >= 1.9 && p.position < 2.6, "stopped at " + p.position)
+        compare(p.error, "")
+    }
+    function test_c_the_old_position_does_not_stop_the_next_part() {
+        p.toggle(3, 4)                               // ends at 4 s: later than the next part's end
+        tryVerify(() => !p.playing && p.position >= 3.9, 5000)
+        p.toggle(1, 2)
+        tryVerify(() => p.playing && p.position > 1.2 && p.position < 2, 3000)
+        tryVerify(() => !p.playing, 5000)
+        verify(p.position >= 1.9 && p.position < 2.6, "stopped at " + p.position)
+    }
+    function test_d_a_part_with_no_length_plays_nothing() {
+        p.toggle(2, 2.01)
+        wait(300)
+        verify(!p.playing)
+    }
+}
+"""
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@
 #include <QIcon>
 #include <QLocale>
 #include <QPalette>
+#include <QPainter>
 #include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -120,12 +121,21 @@ class IconProvider : public QQuickImageProvider
 {
 public:
     IconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
-    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &requested) override
+    // "NAME" or "NAME?tint=RRGGBB": a tinted icon is drawn in that one colour (its shape kept), so the
+    // theme's coloured file-type icons sit in the ring in the same ink as the words under them.
+    QPixmap requestPixmap(const QString &request, QSize *size, const QSize &requested) override
     {
+        const QString id = request.section('?', 0, 0);
+        const QColor tint(QStringLiteral("#") + request.section(QStringLiteral("?tint="), 1, 1));
         const QString generic = id.section('-', 0, 0) + QStringLiteral("-x-generic");
         QIcon icon = QIcon::hasThemeIcon(id) ? QIcon::fromTheme(id) : QIcon::fromTheme(generic);
         const int side = requested.width() > 0 ? requested.width() : 48;
         QPixmap pm = icon.pixmap(side, side);
+        if (tint.isValid() && !pm.isNull()) {
+            QPainter paint(&pm);
+            paint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            paint.fillRect(pm.rect(), tint);
+        }
         if (size)
             *size = pm.size();
         return pm;
@@ -144,6 +154,8 @@ public:
     QColor accent() const { return QGuiApplication::palette().color(QPalette::Highlight); }
 
     Q_INVOKABLE bool hasIcons() const { return true; }   // the "icon" image provider is registered
+    // Whether the icon theme has this icon: a slot whose icon is missing shows only its words.
+    Q_INVOKABLE bool hasIcon(const QString &name) const { return QIcon::hasThemeIcon(name); }
 
     Q_INVOKABLE bool dark() const
     {
