@@ -308,8 +308,10 @@ exactly that: we haven't tried it.
   *ZIP* on the wheel puts any file in its own ZIP. A ZIP bundles a file; it does
   not make pictures, sound or video smaller. Word, Excel and PowerPoint files (and
   their OpenDocument twins) become PDFs through LibreOffice. A PDF that has text
-  can become a Word file, but the layout will differ, and a scanned PDF is refused
-  because ArkaOS has no text recognition yet. Everything runs in the same sandbox
+  can become a Word file, but the layout will differ. A scanned PDF is not turned
+  into a Word file (it says so); *Text (OCR)* on the wheel saves the words in a
+  scan or picture as a text file instead, and text recognition makes mistakes,
+  more so on poor scans. Everything runs in the same sandbox
   with no network access. Tested in a VM (2026-11-01) with real files, inside the image's own sandbox: a photo
   went from 6.3 MB to 1.8 MB (camera and location details gone), a PNG from 6.9 to 6.5 MB, a WAV from 882 KB
   to 21 KB as MP3, a video from 3.7 MB to 0.6 MB (H.264, 720p; the OpenH264 encoder works in the image), and
