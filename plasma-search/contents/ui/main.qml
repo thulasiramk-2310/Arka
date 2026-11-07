@@ -17,7 +17,8 @@ PlasmoidItem {
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
     P5Support.DataSource { id: run; engine: "executable"; onNewData: (s, d) => disconnectSource(s) }
-    function open() { run.connectSource("dbus-send --session --type=method_call --dest=org.kde.krunner /App org.kde.krunner.App.display") }
+    // Opens ArkaOS's own launcher with its search field focused (raw KRunner looked like another system).
+    function open() { run.connectSource("dbus-send --session --type=method_call --dest=org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu") }
 
     fullRepresentation: Item {
         id: btn

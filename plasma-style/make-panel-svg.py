@@ -46,7 +46,9 @@ DIALOG = dict(
     HINT_TB=10,
     THICK=False,
     SH_Y=6, SH_SIGMA=10, SH_ALPHA=0.28,
-    FILL=0.94,
+    # Opaque: at 0.94 the windows behind showed through as ghosted text wherever KWin draws no blur
+    # (a VM, a computer without GL), and popups read as glass. Seen in the booted image 2026-11-06.
+    FILL=1.0,
 )
 C = 8           # size of the stretchable edge and centre pieces
 BORDER = 0.12   # border opacity, as a fraction of the text colour

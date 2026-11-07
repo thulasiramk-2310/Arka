@@ -205,6 +205,8 @@ Item {
 
                 anchors.fill: parent
                 placeholderText: i18nc("@info:placeholder", "Search apps and settings")
+                // Plasma's default placeholder measured 3.4:1; this keeps it clearly a hint but readable.
+                placeholderTextColor: Qt.alpha(Kirigami.Theme.textColor, 0.72)
                 focus: true
                 background: null
                 // Without Plasma's frame there are no frame margins, so keep a
