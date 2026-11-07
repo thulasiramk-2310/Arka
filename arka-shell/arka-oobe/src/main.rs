@@ -137,6 +137,17 @@ fn parse_zone_table(table: &str) -> Vec<String> {
     zones
 }
 
+/// The first widget of type `T` inside `w`, depth first. For reaching parts GTK builds itself.
+fn descendant<T: IsA<gtk4::Widget>>(w: &gtk4::Widget) -> Option<T> {
+    let mut child = w.first_child();
+    while let Some(c) = child {
+        if let Ok(t) = c.clone().downcast::<T>() { return Some(t); }
+        if let Some(t) = descendant::<T>(&c) { return Some(t); }
+        child = c.next_sibling();
+    }
+    None
+}
+
 fn load_zones() -> Vec<String> {
     let table = std::fs::read_to_string("/usr/share/zoneinfo/zone1970.tab").unwrap_or_default();
     parse_zone_table(&table)
@@ -846,6 +857,19 @@ fn build_ui(app: &adw::Application) {
     {
         let r = zone_refresh.clone();
         zone_drop.connect_selected_notify(move |_| r());
+    }
+    // Enter in the search box picks the first match, as in any search list (GTK's dropdown ignores it).
+    // The list matches anywhere in the name, ignoring case, so the first match is found the same way.
+    if let (Some(search), Some(pop)) = (descendant::<gtk4::SearchEntry>(zone_drop.upcast_ref()),
+                                        descendant::<gtk4::Popover>(zone_drop.upcast_ref())) {
+        let (drop, zones) = (zone_drop.clone(), zones.clone());
+        search.connect_activate(move |e| {
+            let q = e.text().to_lowercase();
+            if let Some(i) = zones.iter().position(|z| z.to_lowercase().contains(q.trim())) {
+                drop.set_selected(i as u32);
+                pop.popdown();
+            }
+        });
     }
     zone_refresh();
     let zone_body = gtk4::Box::new(gtk4::Orientation::Vertical, 14);

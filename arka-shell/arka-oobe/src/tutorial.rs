@@ -19,11 +19,16 @@ const H: f64 = 290.0;
 const BAR: f64 = 26.0;
 const RING_R: f64 = 108.0;
 const HUB_R: f64 = 36.0;
-const SLICES: [&str; 3] = ["PNG", "WEBP", "PDF"];
-const MENU: [&str; 10] = [
-    "Open", "Copy", "Move to Trash", "-", "Convert to", "Edit picture", "Edit with the edit wheel",
-    "Convert with the format wheel", "-", "Properties",
+// The real wheel's slots for a picture, clockwise from the top. The practice picks one of the first
+// FORMATS; Smaller and More are drawn so the wheel looks as it really does, but are not used here.
+const SLICES: [&str; 6] = ["PNG", "WebP", "AVIF", "PDF", "Smaller", "More"];
+const FORMATS: usize = 4;
+// The real right-click menu, in its order (shortened: the rest of Dolphin's entries are left out).
+const MENU: [&str; 11] = [
+    "Open", "Copy", "Move to Trash", "-", "Convert to", "Edit picture", "Make smaller",
+    "Convert with the format wheel", "Edit with the edit wheel", "-", "Properties",
 ];
+const SUBMENUS: [&str; 3] = ["Convert to", "Edit picture", "Make smaller"];
 const WHEEL_ITEM: usize = 7;
 const TILES: [(&str, Kind); 6] = [
     ("holiday.jpg", Kind::Image), ("notes.pdf", Kind::Doc), ("track.mp3", Kind::Audio),
@@ -96,7 +101,8 @@ fn slice_at(x: f64, y: f64) -> Option<usize> {
         return None;
     }
     let a = dy.atan2(dx).to_degrees();
-    Some((((a + 150.0).rem_euclid(360.0)) / 120.0).floor() as usize % 3)
+    let i = (((a + 120.0).rem_euclid(360.0)) / 60.0).floor() as usize % SLICES.len();
+    (i < FORMATS).then_some(i)
 }
 
 fn in_rect(x: f64, y: f64, r: (f64, f64, f64, f64)) -> bool {
@@ -246,7 +252,7 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
                 let _ = cr.fill();
             }
             text(cr, MENU[i], MENU_X + 12.0, top + 15.0, 11.5, if hot { p.bg } else { p.fg }, a, i == WHEEL_ITEM, false);
-            if MENU[i] == "Convert to" {
+            if SUBMENUS.contains(&MENU[i]) {
                 text(cr, ">", MENU_X + MENU_W - 18.0, top + 15.0, 11.5, if hot { p.bg } else { p.muted }, a, false, false);
             }
         }
@@ -269,9 +275,10 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
         cr.set_line_width(1.0);
         let _ = cr.stroke();
         for (i, name) in SLICES.iter().enumerate() {
-            let a0 = (-150.0 + 120.0 * i as f64 + 4.0) * PI / 180.0;
-            let a1 = (-150.0 + 120.0 * (i + 1) as f64 - 4.0) * PI / 180.0;
+            let a0 = (-120.0 + 60.0 * i as f64 + 3.0) * PI / 180.0;
+            let a1 = (-120.0 + 60.0 * (i + 1) as f64 - 3.0) * PI / 180.0;
             let hot = st.hover == Some(i);
+            let unused = i >= FORMATS;
             slot(cr, outer - 6.5, HUB_R + 6.5, a0, a1);
             if hot {
                 cr.set_source_rgba(p.fg.0, p.fg.1, p.fg.2, 0.12 * k);
@@ -285,7 +292,7 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
             let m = (a0 + a1) / 2.0;
             let r = (RING_R + HUB_R) / 2.0 + 6.0;
             let (lr, lg, lb) = if hot { p.fg } else { p.muted };
-            text(cr, name, m.cos() * r, m.sin() * r + 4.0, 12.5, (lr, lg, lb), k, true, true);
+            text(cr, name, m.cos() * r, m.sin() * r + 4.0, 11.5, (lr, lg, lb), if unused { 0.45 * k } else { k }, !unused, true);
         }
         octagon(cr, HUB_R, 0.0, 0.0);
         cr.set_source_rgba(p.bg.0, p.bg.1, p.bg.2, k);
@@ -295,7 +302,7 @@ fn draw(cr: &cairo::Context, w: f64, h: f64, st: &State, dark: bool) {
         let _ = cr.stroke();
         if let Some(i) = st.hover {
             // the green pointer tick, on the middle's edge, facing the slot you are on
-            let m = (-90.0 + 120.0 * i as f64) * PI / 180.0;
+            let m = (-90.0 + 60.0 * i as f64) * PI / 180.0;
             let edge = oct_edge(HUB_R, m);
             cr.save().ok();
             cr.translate(m.cos() * (edge + 6.0), m.sin() * (edge + 6.0));

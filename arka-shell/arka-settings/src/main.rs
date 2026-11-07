@@ -29,6 +29,10 @@ fn build_ui(app: &adw::Application) {
     .status-ok     { color: @accent; font-size: 12px; font-weight: 600; }
     .status-warn   { color: @warn; font-size: 12px; font-weight: 600; }
     .kbd           { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: @text_lo; }
+    /* Row captions at 4.5:1 or better: Adwaita's dimmed subtitles measured 4.17:1 on white. */
+    row .subtitle { opacity: 0.8; }
+    /* The chosen Light/Dark and Green/Blue: the accent fill, not a grey that read about 2:1 against its neighbour. */
+    .linked > button:checked { background-color: @accent_bg_color; color: @accent_fg_color; }
     ");
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
@@ -37,7 +41,7 @@ fn build_ui(app: &adw::Application) {
     );
 
     let hb = adw::HeaderBar::new();
-    hb.set_show_title(false);
+    hb.set_show_title(true);   // "Settings": an empty header strip read as unfinished
 
     // Sidebar navigation
     let nav = adw::NavigationSplitView::new();
@@ -53,7 +57,7 @@ fn build_ui(app: &adw::Application) {
         ("Appearance", "applications-graphics-symbolic"),
         ("Privacy",    "security-high-symbolic"),
         ("Internet",   "network-wireless-symbolic"),
-        ("Updates",    "software-update-available-symbolic"),
+        ("Updates",    "system-software-update-symbolic"),
         ("Developer tools", "applications-development-symbolic"),
         ("Advanced",   "utilities-terminal-symbolic"),
     ];
@@ -166,7 +170,12 @@ fn page_general() -> gtk4::Widget {
         .unwrap_or_else(|_| "0.1".into());
     let ver_row = adw::ActionRow::new();
     ver_row.set_title("ArkaOS version");
-    ver_row.set_subtitle(ver.trim());
+    // The release name, and the image build the dashboard and Updates show, so the two never seem to disagree.
+    let build = arka_update::status::read_published().ok().and_then(|s| s.installed.version);
+    ver_row.set_subtitle(&match build {
+        Some(b) => format!("{} · build {}", ver.trim(), b.trim()),
+        None => ver.trim().to_string(),
+    });
     about_group.add(&ver_row);
 
     let host_row = adw::ActionRow::new();

@@ -78,13 +78,9 @@ fn ago(secs: u64) -> String {
     }
 }
 
-/// A page: serif title, subtitle, then `body`, centred and scrollable.
+/// A page: serif title, subtitle, then `body`, centred and scrollable. Every page has the same width,
+/// so the title does not jump when you switch pages; Overview's settings need it to sit two to a row.
 fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::ScrolledWindow {
-    page_sized(title, sub, body, 680, 560)
-}
-
-/// Like `page`, with the widest the content may grow and the width below which it starts to shrink.
-fn page_sized(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>, widest: i32, tightening: i32) -> gtk4::ScrolledWindow {
     let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     col.set_margin_top(32);
     col.set_margin_bottom(32);
@@ -96,7 +92,7 @@ fn page_sized(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>, widest: i32
     col.append(&s);
     body.as_ref().set_margin_top(24);
     col.append(body);
-    let clamp = adw::Clamp::builder().maximum_size(widest).tightening_threshold(tightening).child(&col).build();
+    let clamp = adw::Clamp::builder().maximum_size(1120).tightening_threshold(820).child(&col).build();
     gtk4::ScrolledWindow::builder()
         .vexpand(true)
         .hscrollbar_policy(gtk4::PolicyType::Never)
@@ -223,7 +219,7 @@ fn build_health_group() -> (adw::PreferencesGroup, HealthRows) {
 
     let (cpu_row, cpu)   = value_row("Processor", "computer-symbolic");
     let (mem_row, mem)   = value_row("Memory", "drive-harddisk-symbolic");
-    let (temp_row, temp) = value_row("Temperature", "dialog-information-symbolic");
+    let (temp_row, temp) = value_row("Temperature", "temperature-normal-symbolic");
     let (pred_row, pred) = value_row("Predicted instability", "emblem-system-symbolic");
     group.add(&cpu_row);
     group.add(&mem_row);
@@ -328,7 +324,7 @@ fn event_icon(cat: &str, ev: &str) -> &'static str {
         "hostname" => "computer-symbolic",
         "ipv6"     => "preferences-system-network-symbolic",
         "sandbox"  => "security-high-symbolic",
-        "system"   => "dialog-information-symbolic",
+        "system"   => "emblem-system-symbolic",   // not dialog-information: Breeze draws it blue
         _          => "emblem-system-symbolic",
     }
 }
@@ -558,8 +554,8 @@ pub fn build(
     overview_body.append(&fresh);
     overview_body.append(&actions);
     overview_body.append(&expander);
-    let overview = page_sized("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.",
-                              &overview_body, 1120, 820);
+    let overview = page("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.",
+                        &overview_body);
 
     // ── Activity ─────────────────────────────────────────────────────────────
     let timeline_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);

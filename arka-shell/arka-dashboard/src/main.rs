@@ -49,6 +49,14 @@ fn build_window(app: &adw::Application) {
         glib::ControlFlow::Continue
     });
 
+    // Esc closes the dashboard, as it does the launcher and other read-only panels.
+    let keys = gtk4::EventControllerKey::new();
+    let w = window.clone();
+    keys.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk4::gdk::Key::Escape { w.close(); glib::Propagation::Stop } else { glib::Propagation::Proceed }
+    });
+    window.add_controller(keys);
+
     window.present();
     arka_shell_common::theme::preview_shot(&window);
 }

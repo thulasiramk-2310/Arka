@@ -115,6 +115,7 @@ name = "arka-settings"
 version = "0.1.0"
 dependencies = [
  "arka-shell-common",
+ "arka-update",
  "gtk4",
  "libadwaita",
 ]
