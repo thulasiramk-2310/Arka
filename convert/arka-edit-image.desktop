@@ -19,12 +19,12 @@ Icon=draw-freehand
 [Desktop Action redact]
 Name=Black out parts...
 Exec=arka-edit redact %f
-Icon=draw-rectangle
+Icon=view-hidden
 
 [Desktop Action private]
 Name=Find private text...
 Exec=arka-edit redact %f --find-private
-Icon=edit-find
+Icon=document-scan
 
 [Desktop Action background]
 Name=Add a background...

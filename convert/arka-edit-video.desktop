@@ -19,7 +19,7 @@ Icon=transform-crop
 [Desktop Action redact]
 Name=Black out parts...
 Exec=arka-edit redact %f
-Icon=draw-rectangle
+Icon=view-hidden
 
 [Desktop Action split]
 Name=Split in two...

@@ -100,7 +100,6 @@ COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert
 COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
 COPY convert/arka-convert-office.desktop /usr/share/kio/servicemenus/arka-convert-office.desktop
 COPY convert/arka-smaller.desktop /usr/share/kio/servicemenus/arka-smaller.desktop
-COPY convert/arka-smaller-levels.desktop /usr/share/kio/servicemenus/arka-smaller-levels.desktop
 COPY convert/arka-zip.desktop /usr/share/kio/servicemenus/arka-zip.desktop
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
