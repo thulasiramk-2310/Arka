@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the read-only system image out of the file manager's device list
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/arka-hide-system-image
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+#!/bin/sh
+# arka-hide-system-image: keep the read-only system image ("/", a composefs overlay) out of file
+# managers' device lists. It always reads 100% full, so Dolphin showed it as an unnamed device with a
+# red bar beside the real disk (booted image, 2026-11-06). It stays mounted and readable; this only
+# adds the x-gvfs-hide option, which KDE's Solid and GNOME's GVfs honour, to libmount's record of
+# userspace mount options in /run/mount/utab. The record is lost at reboot, so this runs every boot.
+set -eu
+[ "$(findmnt -no FSTYPE /)" = overlay ] || exit 0
+id=$(findmnt -no ID /)
+src=$(findmnt -no SOURCE /)
+mkdir -p /run/mount
+# libmount locks utab with this file while it rewrites it.
+exec 9>/run/mount/utab.lock
+flock 9
+grep -q " TARGET=/ " /run/mount/utab 2>/dev/null && exit 0
+printf 'ID=%s SRC=%s TARGET=/ ROOT=/ OPTS=x-gvfs-hide\n' "$id" "$src" >> /run/mount/utab

@@ -87,6 +87,8 @@ COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/generic/panel_1.co
 COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/generic/appearance.conf
 COPY arka-rtc-mode /usr/libexec/arka-rtc-mode
 COPY systemd/arka-rtc-mode.service /usr/lib/systemd/system/arka-rtc-mode.service
+COPY arka-hide-system-image /usr/libexec/arka-hide-system-image
+COPY systemd/arka-hide-system-image.service /usr/lib/systemd/system/arka-hide-system-image.service
 COPY arka-dns-after-clock /usr/libexec/arka-dns-after-clock
 COPY systemd/arka-dns-after-clock.service /usr/lib/systemd/system/arka-dns-after-clock.service
 COPY tmpfiles/arkaos-arkasetup.conf /usr/lib/tmpfiles.d/arkaos-arkasetup.conf
@@ -625,7 +627,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
 COPY --from=files / /
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
-    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert /usr/bin/arka && \
+    chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-hide-system-image /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert /usr/bin/arka && \
     mkdir -p /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d && \
     printf '[Service]\nExecStart=\nExecStart=/usr/bin/bootc upgrade --quiet\n' \
       > /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/10-arkaos-no-auto-reboot.conf && \
@@ -658,7 +660,7 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
     printf '\n# ArkaOS: also ask these time servers by address. With a dead clock battery the date\n# starts wrong, DNS then rejects every answer, and a time service that needs DNS\n# can never fix the date. Cloudflare and Google answer on fixed addresses.\nserver 162.159.200.1 iburst\nserver 162.159.200.123 iburst\nserver 216.239.35.0 iburst\nserver 216.239.35.4 iburst\n' >> /etc/chrony.conf && \
     mkdir -p /usr/share/arkaos/arkasetup && \
     cp -a /var/home/arkasetup/.bash_profile /var/home/arkasetup/.hushlogin /usr/share/arkaos/arkasetup/ && \
-    systemctl enable arkad.service arka-pulsed.service arka-rtc-mode.service arka-dns-after-clock.service
+    systemctl enable arkad.service arka-pulsed.service arka-rtc-mode.service arka-hide-system-image.service arka-dns-after-clock.service
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
