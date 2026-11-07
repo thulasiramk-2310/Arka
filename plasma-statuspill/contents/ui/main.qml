@@ -36,8 +36,8 @@ PlasmoidItem {
     readonly property string level: stale ? "none" : configured === total ? "ok" : "partial"
     readonly property string label: !values ? i18n("Privacy status unavailable")
                                  : stale ? i18n("Privacy check is out of date")
-                                 : configured === total ? i18n("%1 of %2 settings configured", configured, total)
-                                 : i18n("%1 of %2 settings configured, check Privacy", configured, total)
+                                 : configured === total ? i18n("Privacy: %1 of %2 settings in place", configured, total)
+                                 : i18n("Privacy: %1 of %2 settings in place, open to see which", configured, total)
     readonly property color dot: level === "ok" ? Kirigami.Theme.positiveTextColor : level === "partial" ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.disabledTextColor
 
     P5Support.DataSource {
