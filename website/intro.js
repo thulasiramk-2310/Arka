@@ -16,7 +16,7 @@
 
   /* ---------- styles ---------- */
   var css = '\
-#ai{position:fixed;inset:0;z-index:99999;background:#f4f5f7;overflow:hidden;font-family:var(--sans);color:#111317;-webkit-font-smoothing:antialiased;--ink:#111317;--ink2:#4a505b;--line:#dfe3e8;--ac:#4db491;--acd:#0b7a53}\
+#ai{position:fixed;inset:0;z-index:99999;background:#f4f5f7;overflow:hidden;overscroll-behavior:contain;font-family:var(--sans);color:#111317;-webkit-font-smoothing:antialiased;--ink:#111317;--ink2:#4a505b;--line:#dfe3e8;--ac:#4db491;--acd:#0b7a53}\
 #ai *{box-sizing:border-box}\
 #ai .s{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}\
 #ai .bg{position:absolute;inset:-200px;background:radial-gradient(40% 40% at 25% 20%,#fff 0,rgba(255,255,255,0) 70%),radial-gradient(35% 35% at 80% 85%,rgba(77,180,145,.07) 0,rgba(77,180,145,0) 70%)}\
@@ -64,9 +64,10 @@
 #ai .seg u{position:absolute;top:6px;bottom:6px;left:6px;width:142px;background:#111317;border-radius:999px;z-index:0}\
 #ai .cur{position:absolute;left:0;top:0;width:48px;height:48px;pointer-events:none}\
 #ai .rip{position:absolute;width:90px;height:90px;margin:-45px 0 0 -45px;border:3px solid var(--ac);border-radius:50%}\
-#ai .skip{position:absolute;right:28px;bottom:26px;z-index:3;background:rgba(255,255,255,.8);border:1px solid var(--line);color:var(--ink2);border-radius:999px;padding:8px 18px;font:500 15px var(--sans);cursor:pointer}\
+#ai .skip{position:absolute;right:28px;bottom:26px;z-index:3;background:rgba(255,255,255,.8);border:1px solid var(--line);color:var(--ink2);border-radius:999px;padding:8px 18px;font:500 15px var(--sans);cursor:pointer;touch-action:manipulation}\
 #ai .skip:hover{color:var(--ink)}\
 #ai .skip:focus-visible{outline:2px solid var(--ac);outline-offset:3px}\
+#ai .pause{right:210px}\
 #ai .prog{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--ac);z-index:3}';
 
   /* ---------- DOM ---------- */
@@ -141,6 +142,7 @@ function launch() {
   var st = document.createElement('style'); st.textContent = css; root.appendChild(st);
   var stage = document.createElement('div'); stage.className = 's'; stage.innerHTML = html; root.appendChild(stage);
   var skip = document.createElement('button'); skip.className = 'skip'; skip.type = 'button'; skip.textContent = 'Skip intro (Esc)'; root.appendChild(skip);
+  var pause = document.createElement('button'); pause.className = 'skip pause'; pause.type = 'button'; root.appendChild(pause);
   var prog = document.createElement('div'); prog.className = 'prog'; root.appendChild(prog);
   var htmlEl = document.documentElement, prevOverflow = htmlEl.style.overflow;
   htmlEl.style.overflow = 'hidden';
@@ -410,26 +412,37 @@ function launch() {
   }
 
   /* ---------- player ---------- */
-  var raf = 0, last = 0, now = 0, done = false;
+  var raf = 0, last = 0, now = 0, done = false, paused = false, go = false;
+  var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function setPaused(p) {
+    paused = p; pause.textContent = p ? 'Play (Space)' : 'Pause (Space)';
+    if (p) cancelAnimationFrame(raf); else if (go && !done) { last = 0; raf = requestAnimationFrame(loop); }
+  }
   function finish() {
     if (done) return; done = true; cancelAnimationFrame(raf);
     htmlEl.style.overflow = prevOverflow; host.remove(); removeEventListener('keydown', onKey);
     active = false; if (opener && opener.focus) opener.focus();
   }
-  function onKey(e) { if (e.key === 'Escape') finish(); }
+  function onKey(e) {
+    if (e.key === 'Escape') finish();
+    else if (e.key === 'Tab') { e.preventDefault(); (shadow.activeElement === skip ? pause : skip).focus(); }
+    else if (e.key === ' ' && !(shadow.activeElement && shadow.activeElement.tagName === 'BUTTON')) { e.preventDefault(); setPaused(!paused); }
+  }
   function loop(ts) {
     if (!last) last = ts; var dt = Math.min(.1, (ts - last) / 1000); last = ts; now += dt;
     if (now >= DUR) { finish(); return; }
     render(now); raf = requestAnimationFrame(loop);
   }
   skip.addEventListener('click', finish);
+  pause.addEventListener('click', function () { setPaused(!paused); });
+  setPaused(reduce);
   K.pill.addEventListener('click', function () { finish(); });
   addEventListener('keydown', onKey);
   window.ArkaIntro = { seek: function (t) { now = t; render(t); }, duration: DUR, skip: finish };
   render(0);
   if (mode !== 'seek') {
-    var imgs = [].slice.call(stage.querySelectorAll('img')), go = false;
-    var start = function () { if (!go && !done) { go = true; skip.focus(); raf = requestAnimationFrame(loop); } };
+    var imgs = [].slice.call(stage.querySelectorAll('img'));
+    var start = function () { if (!go && !done) { go = true; pause.focus(); if (!paused) raf = requestAnimationFrame(loop); } };
     Promise.all(imgs.map(function (i) { return i.complete ? 1 : new Promise(function (r) { i.onload = i.onerror = r; }); })).then(start);
     setTimeout(start, 2500);
   }

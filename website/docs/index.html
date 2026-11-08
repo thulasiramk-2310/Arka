@@ -3,10 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06070C">
 <title>ArkaOS Documentation — Developer Preview</title>
 <meta name="description" content="ArkaOS documentation — what runs today, what's being validated, and what does not exist yet.">
 <style>
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; scroll-padding-top: 96px; color-scheme: dark; }
+  [id] { scroll-margin-top: 96px; }
+  a, button { touch-action: manipulation; }
+  @media (max-width: 860px) { .dgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 0 !important; } .dgrid > nav { position: static !important; padding: 24px 0 8px !important; } }
+  .skip { position: absolute; left: -999px; } .skip:focus { left: 16px; top: 12px; background: #06070C; color: #EEF1F6; padding: 8px 12px; z-index: 99; border-radius: 6px; }
   body { margin: 0; background: #06070C; color: #EEF1F6; font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   * { box-sizing: border-box; }
   a { color: #4DB491; text-decoration: none; }
@@ -22,6 +28,7 @@
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <div style="min-height:100vh;background:#06070C">
 
   <header style="position:sticky;top:0;z-index:40;background:rgba(6,7,12,.9);backdrop-filter:blur(10px);border-bottom:1px solid #1C2230">
@@ -41,7 +48,7 @@
     </nav>
   </header>
 
-  <div style="max-width:1280px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr);gap:48px;align-items:start">
+  <div class="dgrid" style="max-width:1280px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr);gap:48px;align-items:start">
 
     <nav aria-label="Documentation" style="position:sticky;top:90px;padding:44px 0;display:flex;flex-direction:column;gap:26px;min-width:0">
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -60,7 +67,7 @@
       <p style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8B93A3;line-height:1.7;border-top:1px solid #1C2230;padding-top:22px">Docs track the preview branch.<br>Anything unverified is labelled.</p>
     </nav>
 
-    <main style="padding:44px 0 96px;min-width:0;max-width:78ch">
+    <main id="main" style="padding:44px 0 96px;min-width:0;max-width:78ch">
 
       <p style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.16em;color:#8B93A3">DOCUMENTATION</p>
       <h1 style="margin-top:14px;font-size:clamp(32px,4.4vw,46px);font-weight:700;letter-spacing:-.025em;line-height:1.08">ArkaOS, documented as it actually is.</h1>
@@ -104,7 +111,7 @@
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">There is no installer ISO to download yet; one can be built from source with scripts/make-iso.sh. Three routes work today. Start with the virtual machine unless you are testing hardware support on purpose.</p>
 
         <h3 style="margin-top:36px;font-size:19px;font-weight:600;display:flex;align-items:center;gap:10px">Run in a VM <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#4DB491;border:1px solid rgba(77,180,145,.4);border-radius:4px;padding:4px 8px">RECOMMENDED</span></h3>
-        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">QEMU/KVM with 4 GB of RAM and 40 GB of disk. Use only a disposable image file and no physical disk passthrough. Test rollback and personal-data preservation inside that guest.</p>
+        <p style="margin-top:12px;font-size:15px;line-height:1.65;color:#8B93A3">QEMU/KVM with 4&nbsp;GB of RAM and 40&nbsp;GB of disk. Use only a disposable image file and no physical disk passthrough. Test rollback and personal-data preservation inside that guest.</p>
         <pre style="margin-top:16px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.8;color:#EEF1F6;overflow-x:auto">qemu-system-x86_64 \
   -enable-kvm -m 4096 -smp 4 \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
@@ -133,12 +140,12 @@ bootc-image-builder --type qcow2 arkaos:dev</pre>
 
       <section id="prove" style="margin-top:72px;border-top:1px solid #1C2230;padding-top:36px">
         <p style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#4DB491">03</p>
-        <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What we prove / what we don't</h2>
+        <h2 style="margin-top:12px;font-size:30px;font-weight:700;letter-spacing:-.02em">What we prove / what we don’t</h2>
         <p style="margin-top:18px;font-size:16px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">Configured means a checked setting is in place, not that you are protected. These rows describe expected mechanisms, not live checks of your machine. Missing or stale observations remain unknown; every candidate needs fresh image tests.</p>
 
         <div style="margin-top:28px;display:flex;flex-direction:column;gap:2px">
           <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) 110px;gap:16px;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#8B93A3;border-bottom:1px solid #1C2230">
-            <span>MECHANISM</span><span>WHAT IT DOES — AND DOESN'T</span><span style="text-align:right">STATE</span>
+            <span>MECHANISM</span><span>WHAT IT DOES — AND DOESN’T</span><span style="text-align:right">STATE</span>
           </div>
           <div id="proofRows"></div>
         </div>
@@ -190,7 +197,7 @@ last re-check          14s ago</pre>
         </ul>
 
         <h3 id="updates" style="margin-top:44px;font-size:21px;font-weight:600;color:#EAB94A">Updates &amp; rollback</h3>
-        <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The OS is delivered as a container-native image. An update fetches a new image and stages it for the next boot; updates never restart the computer on their own. After you restart into it, greenboot runs start-up checks. If they fail, or the new version fails before the desktop starts (a kernel panic or an early-boot error), the computer restarts, and after three failed boots it goes back to the previous version by itself. ArkaOS adds two fixes to greenboot 0.16.4: upstream never recorded which version to go back to, because the unit that records it was not stopped at shutdown; and GRUB's boot counter is armed as soon as an update is staged, so an early failure restarts and falls back instead of waiting at a recovery screen. Tested in a VM on 11 October 2026: a deliberately broken update went back after three failed boots with nobody touching the computer, an update that could not start went back within about 30 seconds, a healthy update stayed installed across restarts, an update that failed to apply at shutdown left the current version in place instead of rolling it back, bootc rollback still went back by hand, and the test files in /home and /var were unchanged. This was tested in a VM, not on real hardware.</p>
+        <p style="margin-top:14px;font-size:15.5px;line-height:1.7;color:#C6CCD8;text-wrap:pretty">The OS is delivered as a container-native image. An update fetches a new image and stages it for the next boot; updates never restart the computer on their own. After you restart into it, greenboot runs start-up checks. If they fail, or the new version fails before the desktop starts (a kernel panic or an early-boot error), the computer restarts, and after three failed boots it goes back to the previous version by itself. ArkaOS adds two fixes to greenboot 0.16.4: upstream never recorded which version to go back to, because the unit that records it was not stopped at shutdown; and GRUB’s boot counter is armed as soon as an update is staged, so an early failure restarts and falls back instead of waiting at a recovery screen. Tested in a VM on 11 October 2026: a deliberately broken update went back after three failed boots with nobody touching the computer, an update that could not start went back within about 30 seconds, a healthy update stayed installed across restarts, an update that failed to apply at shutdown left the current version in place instead of rolling it back, bootc rollback still went back by hand, and the test files in /home and /var were unchanged. This was tested in a VM, not on real hardware.</p>
         <pre style="margin-top:18px;background:#0E1119;border:1px solid #1C2230;border-radius:9px;padding:18px;font-size:12.5px;line-height:1.9;color:#EEF1F6;overflow-x:auto">$ bootc upgrade          # stage the next image
 $ systemctl reboot       # boot into it
 $ bootc rollback         # go back to the previous version at the next boot</pre>
@@ -346,13 +353,14 @@ $ bootc rollback         # go back to the previous version at the next boot</pre
     btn.innerHTML = '<span style="font-size:15.5px;font-weight:500">' + f.q + '</span>' +
       '<span class="ic" style="font-family:' + MONO + ';font-size:18px;color:#8B93A3;flex:0 0 auto;transition:transform .25s ease,color .25s ease">+</span>';
     var body = document.createElement("div");
+    body.id = "faq-" + faqList.children.length; body.setAttribute("aria-hidden", "true"); btn.setAttribute("aria-controls", body.id);
     body.style.cssText = "overflow:hidden;max-height:0;opacity:0;transition:max-height .3s ease,opacity .3s ease";
     body.innerHTML = '<p style="font-size:14.5px;line-height:1.7;color:#8B93A3;padding:0 4px 20px;max-width:70ch">' + f.a + '</p>';
     btn.addEventListener("click", function () {
       var open = body.style.maxHeight !== "0px" && body.style.maxHeight !== "";
       body.style.maxHeight = open ? "0px" : "320px";
       body.style.opacity = open ? "0" : "1";
-      btn.setAttribute("aria-expanded", open ? "false" : "true");
+      btn.setAttribute("aria-expanded", open ? "false" : "true"); body.setAttribute("aria-hidden", open ? "true" : "false");
       var ic = btn.querySelector(".ic");
       ic.style.transform = open ? "rotate(0deg)" : "rotate(45deg)";
       ic.style.color = open ? "#8B93A3" : "#4DB491";

@@ -10,6 +10,8 @@
 <meta property="og:type" content="website">
 <meta property="og:image" content="img/desktop-light.png">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111317" media="(prefers-color-scheme: dark)">
 <!-- No fonts, scripts or images from other sites: visiting this page sends
      nothing to anyone but the host. -->
 <style>
@@ -35,7 +37,7 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-underline-offset: 3px; }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+a:focus-visible, button:focus-visible, video:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 .skip { position: absolute; left: -999px; } .skip:focus { left: 16px; top: 12px; background: var(--bg); padding: 8px 12px; z-index: 9; }
 
@@ -139,6 +141,10 @@ html { overflow-x: clip; }
   .hero::before, .hw > span, .hero .tag, .hero .lead, .hero .ctas, .hero .shot, .hd, .hd .r, .hd .r b::before, .hd .s1, .hd .s2s, .hd .hn { animation: none !important; }
 }
 button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+:root[data-theme="light"] { color-scheme: light; } :root[data-theme="dark"] { color-scheme: dark; }
+a, button { touch-action: manipulation; }
+h1, h2, h3 { text-wrap: balance; }
+main { overflow-x: clip; }
 </style>
 </head>
 <body>
@@ -168,17 +174,17 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
     <div class="hcopy">
     <span class="tag">Developer preview — not ready for everyday use</span>
     <h1><span class="hw"><span style="--i:0">A</span></span> <span class="hw"><span style="--i:1">Linux</span></span> <span class="hw"><span style="--i:2">desktop</span></span> <span class="hw"><span style="--i:3">that</span></span> <span class="hw"><span style="--i:4">sets</span></span> <span class="hw"><span style="--i:5">up</span></span> <span class="hw"><span style="--i:6">your</span></span> <span class="hw"><span style="--i:7">privacy,</span></span> <span class="hw"><span style="--i:8">and</span></span> <span class="hw"><span style="--i:9">shows</span></span> <span class="hw"><span style="--i:10">you</span></span> <span class="hw"><span style="--i:11">where</span></span> <span class="hw"><span style="--i:12">it</span></span> <span class="hw"><span style="--i:13">stands.</span></span></h1>
-    <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system on disk when it updates. It's built on Fedora and KDE Plasma.</p>
+    <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system on disk when it updates. It’s built on Fedora and KDE Plasma.</p>
     <div class="ctas">
       <a class="pill" href="#try">Try it in a virtual machine</a>
-      <a class="pill quiet" href="#honest">What we can and can't show</a>
+      <a class="pill quiet" href="#honest">What we can and can’t show</a>
     </div>
     </div>
-    <div class="hvis"><div class="hd" aria-hidden="true"><div class="hb"><svg viewBox="0 0 24 24"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#4db491" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#4db491"/></svg>Privacy Dashboard</div><h2>Privacy</h2><p class="hsub">What ArkaOS has set up on this computer. Covers only what&#39;s listed here.</p><div class="r" style="--i:0"><div><b>Encrypted DNS</b><i>Requires system DNS lookups to be encrypted.</i></div><span class="stw"><span class="s1" style="--i:0">Checking</span><span class="s2s" style="--i:0">Configured</span></span></div><div class="r" style="--i:1"><div><b>Private network address</b><i>Uses a random hardware address on network connections.</i></div><span class="stw"><span class="s1" style="--i:1">Checking</span><span class="s2s" style="--i:1">Configured</span></span></div><div class="r" style="--i:2"><div><b>Computer name</b><i>Keeps the name chosen in setup: &quot;arka&quot; unless you picked your own.</i></div><span class="stw"><span class="s1" style="--i:2">Checking</span><span class="s2s" style="--i:2">Configured</span></span></div><div class="r" style="--i:3"><div><b>Temporary IPv6 addresses</b><i>Uses temporary IPv6 addresses that change over time.</i></div><span class="stw"><span class="s1" style="--i:3">Checking</span><span class="s2s" style="--i:3">Configured</span></span></div><div class="r" style="--i:4"><div><b>Sandboxed browser</b><i>Opens Firefox in a sandbox that sees only your Downloads folder.</i></div><span class="stw"><span class="s1" style="--i:4">Checking</span><span class="s2s" style="--i:4">Configured</span></span></div><div class="r" style="--i:5"><div><b>Firewall</b><i>Rejects connections other computers try to open to this one.</i></div><span class="stw"><span class="s1" style="--i:5">Checking</span><span class="s2s" style="--i:5">Configured</span></span></div><p class="hn">Checked just now.</p></div></div>
+    <div class="hvis"><div class="hd" aria-hidden="true"><div class="hb"><svg viewBox="0 0 24 24"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#4db491" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#4db491"/></svg>Privacy Dashboard</div><h2>Privacy</h2><p class="hsub">What ArkaOS has set up on this computer. Covers only what’s listed here.</p><div class="r" style="--i:0"><div><b>Encrypted DNS</b><i>Requires system DNS lookups to be encrypted.</i></div><span class="stw"><span class="s1" style="--i:0">Checking</span><span class="s2s" style="--i:0">Configured</span></span></div><div class="r" style="--i:1"><div><b>Private network address</b><i>Uses a random hardware address on network connections.</i></div><span class="stw"><span class="s1" style="--i:1">Checking</span><span class="s2s" style="--i:1">Configured</span></span></div><div class="r" style="--i:2"><div><b>Computer name</b><i>Keeps the name chosen in setup: “arka” unless you picked your own.</i></div><span class="stw"><span class="s1" style="--i:2">Checking</span><span class="s2s" style="--i:2">Configured</span></span></div><div class="r" style="--i:3"><div><b>Temporary IPv6 addresses</b><i>Uses temporary IPv6 addresses that change over time.</i></div><span class="stw"><span class="s1" style="--i:3">Checking</span><span class="s2s" style="--i:3">Configured</span></span></div><div class="r" style="--i:4"><div><b>Sandboxed browser</b><i>Opens Firefox in a sandbox that sees only your Downloads folder.</i></div><span class="stw"><span class="s1" style="--i:4">Checking</span><span class="s2s" style="--i:4">Configured</span></span></div><div class="r" style="--i:5"><div><b>Firewall</b><i>Rejects connections other computers try to open to this one.</i></div><span class="stw"><span class="s1" style="--i:5">Checking</span><span class="s2s" style="--i:5">Configured</span></span></div><p class="hn">Checked just now.</p></div></div>
   </div>
   <div class="wrap" style="padding-bottom:56px">
     <figure class="shot">
-      <img src="img/desktop-light.png" width="1440" height="900" alt="The ArkaOS desktop in its light look: a slim top bar with the date and system tray, the ArkaOS Dock at the bottom, and a pale wallpaper with the ArkaOS triangle drawn in thin lines.">
+      <img src="img/desktop-light.png" width="1440" height="900" fetchpriority="high" decoding="async" alt="The ArkaOS desktop in its light look: a slim top bar with the date and system tray, the ArkaOS Dock at the bottom, and a pale wallpaper with the ArkaOS triangle drawn in thin lines.">
       <figcaption class="note">The ArkaOS desktop in the light look, from a test in a virtual machine. You choose light or dark during setup.</figcaption>
     </figure>
   </div>
@@ -191,7 +197,7 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
       <figure class="shot">
         <video controls preload="none" playsinline width="1440" height="900" poster="img/desktop-light.png" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
           <source src="media/arkaos-tour.mp4" type="video/mp4">
-          A short recording of ArkaOS setup and desktop. Your browser can't play it here; the screenshots below show the same screens.
+          A short recording of ArkaOS setup and desktop. Your browser can’t play it here; the screenshots below show the same screens.
         </video>
         <figcaption class="note">No captions are spoken; on-screen labels say what each step is.</figcaption>
       </figure>
@@ -200,9 +206,9 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
       <figure class="shot">
         <video controls preload="none" playsinline width="1440" height="1010" poster="img/format-wheel.jpg" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
           <source src="media/format-wheel-demo.mp4" type="video/mp4">
-          A short walkthrough of converting a picture to WebP with the format wheel. Your browser can't play it here.
+          A short walkthrough of converting a picture to WebP with the format wheel. Your browser can’t play it here.
         </video>
-        <figcaption class="note">A picture, 346 KB as a PNG, saved as a 14 KB WebP. The original is not changed.</figcaption>
+        <figcaption class="note">A picture, 346&nbsp;KB as a PNG, saved as a 14&nbsp;KB WebP. The original is not changed.</figcaption>
       </figure>
     </div>
   </section>
@@ -213,15 +219,15 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
       <div class="three">
         <div>
           <h3>Privacy settings, already on</h3>
-          <p>Settings you'd normally look up and change by hand are set when the system starts, and checked again while it runs. If one stops being in place, ArkaOS says so.</p>
+          <p>Settings you’d normally look up and change by hand are set when the system starts, and checked again while it runs. If one stops being in place, ArkaOS says so.</p>
         </div>
         <div>
           <h3>Updates that wait for you</h3>
-          <p>A new version is prepared next to the one you're using and takes over only when you restart. Updates never restart your computer on their own, and the previous version is kept on disk. If a new version fails its start-up checks, or doesn't start at all, ArkaOS tries it three times and then goes back to the previous version by itself.</p>
+          <p>A new version is prepared next to the one you’re using and takes over only when you restart. Updates never restart your computer on their own, and the previous version is kept on disk. If a new version fails its start-up checks, or doesn’t start at all, ArkaOS tries it three times and then goes back to the previous version by itself.</p>
         </div>
         <div>
           <h3>Plain answers, no score</h3>
-          <p>The Privacy dashboard lists each setting as <em>Configured</em> or <em>Needs attention</em> and when it was last checked. It never gives you a percentage or says you're "protected".</p>
+          <p>The Privacy dashboard lists each setting as <em>Configured</em> or <em>Needs attention</em> and when it was last checked. It never gives you a percentage or says you’re “protected”.</p>
         </div>
       </div>
     </div>
@@ -233,28 +239,28 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
       <p class="lead" style="margin-top:14px">Right-click a file in Dolphin, or drag it and press a key for a ring of choices. Each job runs in a sandbox with no network access, and the result is a new copy next to the original. Nothing is overwritten.</p>
       <div class="rows">
         <div class="row"><div><b>Convert to another format</b><span>Pictures to PNG, JPEG, WebP or PDF. A PDF to one picture per page, or to a Word file (the layout will differ). Sound to MP3, FLAC, WAV, Ogg, Opus or AAC. Video to MP4, MKV or WebM, or just its sound. Word and Excel files to PDF.</span></div><div class="state ok">Tested in a VM</div></div>
-        <div class="row"><div><b>Make smaller</b><span>Pictures, sound, video and PDFs, at Light, Medium or Strong, or to fit under 10 MB or 25 MB. A copy is kept only if it really is smaller. The levels and size targets are new.</span></div><div class="state test">Partly tested</div></div>
-        <div class="row"><div><b>Remove hidden details</b><span>Saves a copy without the details you can't see, such as where a photo was taken or who wrote a document, using mat2. It removes what mat2 knows about, not what is in the picture or sound itself.</span></div><div class="state ok">Tested in a VM</div></div>
-        <div class="row"><div><b>Edit a picture</b><span>Crop, black out parts, annotate (pens, arrows, boxes, highlights and text), add a background, rotate. Black out replaces the pixels in the copy, so what was under a box can't be read back from it. Annotate is new.</span></div><div class="state test">Partly tested</div></div>
+        <div class="row"><div><b>Make smaller</b><span>Pictures, sound, video and PDFs, at Light, Medium or Strong, or to fit under 10&nbsp;MB or 25&nbsp;MB. A copy is kept only if it really is smaller. The levels and size targets are new.</span></div><div class="state test">Partly tested</div></div>
+        <div class="row"><div><b>Remove hidden details</b><span>Saves a copy without the details you can’t see, such as where a photo was taken or who wrote a document, using mat2. It removes what mat2 knows about, not what is in the picture or sound itself.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Edit a picture</b><span>Crop, black out parts, annotate (pens, arrows, boxes, highlights and text), add a background, rotate. Black out replaces the pixels in the copy, so what was under a box can’t be read back from it. Annotate is new.</span></div><div class="state test">Partly tested</div></div>
         <div class="row"><div><b>Find private text</b><span>Reads the words in a picture on this computer and suggests boxes over text that looks like an email address, a phone number or a card number, for you to check and black out. It can miss some, so look before you save.</span></div><div class="state ok">Seen working in a VM</div></div>
         <div class="row"><div><b>Read the text in a picture or PDF</b><span>Saves the words it finds as a text file. Text recognition makes mistakes, more so on poor scans.</span></div><div class="state test">Checked with tests</div></div>
-        <div class="row"><div><b>Edit sound and video</b><span>Trim, split in two, join several into one, and bleep out parts, with playback so you can hear the part before saving. Trimmed, split and bleeped copies keep the file's hidden details; use Remove hidden details if you don't want them.</span></div><div class="state test">Partly tested</div></div>
+        <div class="row"><div><b>Edit sound and video</b><span>Trim, split in two, join several into one, and bleep out parts, with playback so you can hear the part before saving. Trimmed, split and bleeped copies keep the file’s hidden details; use Remove hidden details if you don’t want them.</span></div><div class="state test">Partly tested</div></div>
         <div class="row"><div><b>Format wheel and edit wheel</b><span>Drag a file and press Meta+Alt+C for a ring of the formats it can become, or Meta+Alt+E for a ring of edits. The right-click menu opens the same rings for clicking.</span></div><div class="state ok">Tested in a VM</div></div>
       </div>
-      <p class="note" style="margin-top:14px">"Partly tested" means some of it was used in a VM and the rest so far only by automated tests. "Checked with tests" means automated tests only.</p>
+      <p class="note" style="margin-top:14px">“Partly tested” means some of it was used in a VM and the rest so far only by automated tests. “Checked with tests” means automated tests only.</p>
     </div>
   </section>
 
   <section id="desktop">
     <div class="wrap">
       <h2>Your desktop</h2>
-      <p class="lead" style="margin-top:14px">KDE Plasma underneath, with ArkaOS's own setup, dock, launcher and settings on top. Everything stays changeable.</p>
+      <p class="lead" style="margin-top:14px">KDE Plasma underneath, with ArkaOS’s own setup, dock, launcher and settings on top. Everything stays changeable.</p>
       <div class="rows">
         <div class="row"><div><b>Setup that asks first</b><span>Light or Dark, a green or blue accent, your time zone (type any part of its name), a computer name, then a short practice with the format wheel.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Dock, launcher and top bar</b><span>A dock at the bottom instead of a taskbar, a launcher with search behind the Meta key, and a top bar on every screen with the privacy status.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Night light and reduce motion</b><span>Warmer colours from 8 pm to 6 am on fixed times, so no location is asked for, and a switch that turns off most animations.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Keyboard shortcuts page</b><span>Meta+/ lists the shortcuts. In a VM we pressed 19 of the 24 listed shortcuts and they did what the page says; the rest were not checked.</span></div><div class="state ok">Tested in a VM</div></div>
-        <div class="row"><div><b>VARA and Git, if you want them</b><span>Under Advanced options, setup can install VARA, version control with undo and integrity checks, and set up Git. VARA's Hub, a web view only this computer can reach, is off until you switch it on. This VARA version passed its own tests but hasn't been tried inside ArkaOS yet.</span></div><div class="state test">Not yet in ArkaOS</div></div>
+        <div class="row"><div><b>VARA and Git, if you want them</b><span>Under Advanced options, setup can install VARA, version control with undo and integrity checks, and set up Git. VARA’s Hub, a web view only this computer can reach, is off until you switch it on. This VARA version passed its own tests but hasn’t been tried inside ArkaOS yet.</span></div><div class="state test">Not yet in ArkaOS</div></div>
       </div>
     </div>
   </section>
@@ -262,24 +268,24 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
   <section id="privacy">
     <div class="wrap">
       <h2>The privacy settings</h2>
-      <p class="lead" style="margin-top:14px">What each one does, in plain words, and how far we've tested it.</p>
+      <p class="lead" style="margin-top:14px">What each one does, in plain words, and how far we’ve tested it.</p>
       <div class="rows">
         <div class="row"><div><b>Encrypted DNS</b><span>Website-name lookups are sent encrypted (to Quad9). On a network that blocks this, you can allow unencrypted lookups on that network only, and the dashboard says so (this option is new and still being tested).</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Private network address</b><span>Uses a random hardware (MAC) address on networks, so networks see a different device ID.</span></div><div class="state ok">Tested in a VM</div></div>
-        <div class="row"><div><b>Computer name</b><span>Setup asks for a name for this computer. The default, "arka", is the same on every ArkaOS computer, so the name alone doesn't point to your computer. A name you choose yourself might.</span></div><div class="state ok">Tested in a VM</div></div>
+        <div class="row"><div><b>Computer name</b><span>Setup asks for a name for this computer. The default, “arka”, is the same on every ArkaOS computer, so the name alone doesn’t point to your computer. A name you choose yourself might.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Temporary IPv6 addresses</b><span>Uses IPv6 addresses that change over time.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Sandboxed browser</b><span>Firefox runs in a sandbox that can see your Downloads folder but not the rest of your files.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Firewall</b><span>Rejects connections other computers try to open to this one.</span></div><div class="state ok">Tested in a VM</div></div>
         <div class="row"><div><b>Kernel hardening</b><span>Stricter memory and kernel settings that make some attacks harder.</span></div><div class="state ok">Tested in a VM</div></div>
       </div>
-      <p class="note" style="margin-top:14px">"Configured" means a checked setting is in place. It doesn't mean you can't be tracked: websites, accounts and apps can still identify you.</p>
+      <p class="note" style="margin-top:14px">“Configured” means a checked setting is in place. It doesn’t mean you can’t be tracked: websites, accounts and apps can still identify you.</p>
       <div class="pair">
         <figure>
-          <img src="img/setup-privacy-light.png" width="1440" height="900" alt="The last step of ArkaOS setup, titled Your privacy settings, listing six settings including the firewall, each marked Configured, with the note Checked just now.">
+          <img src="img/setup-privacy-light.png" width="1440" height="900" loading="lazy" decoding="async" alt="The last step of ArkaOS setup, titled Your privacy settings, listing six settings including the firewall, each marked Configured, with the note Checked just now.">
           <figcaption class="note">Setup shows where each setting stands before you start.</figcaption>
         </figure>
         <figure>
-          <img src="img/dashboard-light.png" width="1440" height="900" alt="The ArkaOS Privacy dashboard listing six settings, each marked Configured, with the note Checked 44 seconds ago.">
+          <img src="img/dashboard-light.png" width="1440" height="900" loading="lazy" decoding="async" alt="The ArkaOS Privacy dashboard listing six settings, each marked Configured, with the note Checked 44 seconds ago.">
           <figcaption class="note">The Privacy dashboard, any time afterwards.</figcaption>
         </figure>
       </div>
@@ -288,13 +294,13 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
 
   <section id="honest">
     <div class="wrap">
-      <h2>What we can show, and what we can't</h2>
+      <h2>What we can show, and what we can’t</h2>
       <p class="lead" style="margin-top:14px">Every item sits in exactly one column. We move something left only after testing it.</p>
       <div class="cols">
         <div>
           <h3>Tested</h3>
           <ul>
-            <li>The privacy settings above marked "Tested in a VM"</li>
+            <li>The privacy settings above marked “Tested in a VM”</li>
             <li>Setup with a light or dark look, then your desktop</li>
             <li>Read-only system files at runtime</li>
             <li>Going back to the previous version on its own after a broken update, keeping a good update, and going back by hand with one command (in a VM on 11 October 2026; the first two also on one real laptop on 12 October 2026)</li>
@@ -314,10 +320,10 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
         <div>
           <h3>Not yet</h3>
           <ul>
-            <li>A downloadable installer. One with disk encryption on by default is built and works in a VM, but isn't published yet.</li>
-            <li>Secure Boot with ArkaOS's own keys</li>
+            <li>A downloadable installer. One with disk encryption on by default is built and works in a VM, but isn’t published yet.</li>
+            <li>Secure Boot with ArkaOS’s own keys</li>
             <li>Support for a wide range of hardware</li>
-            <li>Anonymity of any kind. ArkaOS doesn't hide who you are online.</li>
+            <li>Anonymity of any kind. ArkaOS doesn’t hide who you are online.</li>
           </ul>
         </div>
       </div>
@@ -327,11 +333,11 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
   <section id="try">
     <div class="wrap">
       <h2>Try it</h2>
-      <p class="lead" style="margin-top:14px">There's no installer to download yet. A virtual machine is the safest way to look around.</p>
+      <p class="lead" style="margin-top:14px">There’s no installer to download yet. A virtual machine is the safest way to look around.</p>
       <div class="try">
         <div>
           <h3>In a virtual machine</h3>
-          <p>Recommended. Nothing touches your computer's disk.</p>
+          <p>Recommended. Nothing touches your computer’s disk.</p>
           <a href="docs/#getting-started">Getting started →</a>
         </div>
         <div>
@@ -370,7 +376,13 @@ button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
     if (t) return t;
     return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
-  function show() { btn.textContent = current() === 'dark' ? 'Light' : 'Dark'; }
+  function show() {
+    var dark = current() === 'dark';
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.setAttribute('aria-label', 'Switch to ' + (dark ? 'light' : 'dark') + ' mode');
+    var bg = dark ? '#111317' : '#ffffff';
+    [].forEach.call(document.querySelectorAll('meta[name="theme-color"]'), function (m) { m.removeAttribute('media'); m.setAttribute('content', bg); });
+  }
   try { var saved = localStorage.getItem('arka-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
   show();
   btn.addEventListener('click', function () {
