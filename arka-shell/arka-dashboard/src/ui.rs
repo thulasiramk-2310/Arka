@@ -169,7 +169,7 @@ impl SettingRow {
         self.act.set_text(if st == Row::OffHere {
             "You allowed unencrypted DNS on the network you're connected to. Other networks still require encryption."
         } else {
-            "Try Re-apply settings below. If it stays this way, the Activity page shows what arkad saw."
+            "Try Re-apply settings below. If it stays this way, the Activity page shows what ArkaOS saw."
         });
     }
 }
@@ -199,7 +199,7 @@ fn value_row(title: &str, icon: &str) -> (adw::ActionRow, gtk4::Label) {
     // the title broke mid-word ("Predicte-d instabilit-y", seen in the booted image 2026-11-07).
     val.set_wrap(true);
     val.set_wrap_mode(gtk4::pango::WrapMode::WordChar);
-    val.set_width_chars(12); // minimum, so "20 %" never collapses to one character per line
+    val.set_width_chars(18); // minimum: "20%" never collapses to one character per line and "No sensor reading" stays on one line
     val.set_max_width_chars(32);
     val.set_xalign(1.0);
     val.set_justify(gtk4::Justification::Right);
@@ -258,8 +258,10 @@ fn verdict_subtitle(health: &str, summary: &str, has_prediction: bool) -> String
 }
 
 /// The prediction row. The percentage is the estimator's rough likelihood, not a memory figure, so it says so.
-fn prediction_text(summary: &str, probability: f64) -> String {
-    format!("Estimated: possible {summary}. Rough likelihood {:.0}%.", probability * 100.0)
+fn prediction_text(summary: &str) -> String {
+    // No likelihood figure: the predictor is not calibrated against field data yet, so a percentage would claim
+    // more than we can show. The words "estimated" and "possible" carry the honest meaning.
+    format!("Estimated: possible {summary}.")
 }
 
 fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
@@ -299,8 +301,8 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
 
     // Predictions are a HEURISTIC — always framed as *possible*, never certain.
     match &r.prediction {
-        Some((summary, prob)) => {
-            rows.pred.set_text(&prediction_text(summary, *prob))
+        Some((summary, _)) => {
+            rows.pred.set_text(&prediction_text(summary))
         }
         None => rows.pred.set_text("None estimated"),
     }
@@ -338,6 +340,21 @@ fn parse_log_line(line: &str) -> Option<LogEvent> {
         ev:  extract_str(line, "ev")?,
         msg: extract_str(line, "msg")?,
     })
+}
+
+/// The name the rest of the app uses for a setting, so Activity, the tray and the Overview agree.
+/// An unknown category is shown as logged rather than guessed at.
+fn category_label(cat: &str) -> String {
+    match cat {
+        "dns"      => "Encrypted DNS".into(),
+        "mac"      => "Private network address".into(),
+        "hostname" => "Computer name".into(),
+        "ipv6"     => "Temporary IPv6 addresses".into(),
+        "sandbox"  => "Sandboxed browser".into(),
+        "firewall" => "Firewall".into(),
+        "system"   => "System".into(),
+        other      => other.to_string(),
+    }
 }
 
 fn event_icon(cat: &str, ev: &str) -> &'static str {
@@ -381,23 +398,26 @@ fn weekly_report_card(all: &[LogEvent]) -> adw::PreferencesGroup {
         "Recorded events · last 7 days"
     }));
 
-    let stats: [(&str, String, &str); 3] = [
-        ("Privacy events", week.len().to_string(), "view-list-symbolic"),
+    let stats: [(&str, &str, String, &str); 3] = [
+        ("Privacy events", "Everything recorded this week", week.len().to_string(), "view-list-symbolic"),
         (
             "Drift events",
+            "A setting stopped matching what was set",
             drifts.to_string(),
             "security-high-symbolic",
         ),
         (
             "Recovery events",
+            "A setting was put back",
             recovered.to_string(),
             "view-refresh-symbolic",
         ),
     ];
 
-    for (title, value, icon_name) in stats {
+    for (title, subtitle, value, icon_name) in stats {
         let row = adw::ActionRow::new();
         row.set_title(title);
+        row.set_subtitle(subtitle);
         let icon = gtk4::Image::from_icon_name(icon_name);
         row.add_prefix(&icon);
         let val = gtk4::Label::new(Some(&value));
@@ -447,7 +467,7 @@ fn populate_timeline(container: &gtk4::Box) {
         let lbl = gtk4::Label::new(Some("No events today yet"));
         lbl.add_css_class("dim-label");
 
-        let sub = gtk4::Label::new(Some("arkad logs privacy events here as they happen"));
+        let sub = gtk4::Label::new(Some("ArkaOS logs privacy events here as they happen"));
         sub.add_css_class("dim-label");
         sub.add_css_class("caption");
 
@@ -469,7 +489,7 @@ fn populate_timeline(container: &gtk4::Box) {
 
         let row = adw::ActionRow::new();
         row.set_title(&glib::markup_escape_text(&ev.msg));
-        row.set_subtitle(&glib::markup_escape_text(&format!("{time_str}  ·  {}", ev.cat)));
+        row.set_subtitle(&glib::markup_escape_text(&format!("{time_str}  ·  {}", category_label(&ev.cat))));
 
         let icon = gtk4::Image::from_icon_name(event_icon(&ev.cat, &ev.ev));
         icon.set_pixel_size(16);
@@ -584,7 +604,7 @@ pub fn build(
     // ── Activity ─────────────────────────────────────────────────────────────
     let timeline_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     populate_timeline(&timeline_content);
-    let activity = page("Activity", "What arkad recorded on this computer. Nothing here leaves it.", &timeline_content);
+    let activity = page("Activity", "What ArkaOS recorded on this computer. Nothing here leaves it.", &timeline_content);
 
     // ── Health (arka-pulse: read-only, estimates labelled as such) ───────────
     let (health_group, health_rows) = build_health_group();
@@ -762,9 +782,10 @@ mod presentation_tests {
     }
 
     #[test]
-    fn the_prediction_row_labels_its_percentage_as_a_likelihood() {
-        let t = prediction_text("Memory use approaching 90%", 0.912);
-        assert_eq!(t, "Estimated: possible Memory use approaching 90%. Rough likelihood 91%.");
+    fn the_prediction_row_shows_no_likelihood_figure() {
+        let t = prediction_text("Memory use approaching 90%");
+        assert_eq!(t, "Estimated: possible Memory use approaching 90%.");
+        assert!(!t.contains("likelihood"));
     }
 
     #[test]
@@ -1003,4 +1024,23 @@ fn update_dns_box(s: &DashboardState, bx: &gtk4::Box, note: &gtk4::Label, btn: &
         *target.borrow_mut() = Some((mode == "allow", conn));
         bx.set_visible(true);
     });
+}
+
+#[cfg(test)]
+mod category_label_tests {
+    use super::category_label;
+
+    #[test]
+    fn activity_uses_the_same_names_as_the_overview_and_the_tray() {
+        assert_eq!(category_label("hostname"), "Computer name");
+        assert_eq!(category_label("ipv6"), "Temporary IPv6 addresses");
+        assert_eq!(category_label("mac"), "Private network address");
+        assert_eq!(category_label("dns"), "Encrypted DNS");
+        assert_eq!(category_label("sandbox"), "Sandboxed browser");
+    }
+
+    #[test]
+    fn an_unknown_category_is_shown_as_logged() {
+        assert_eq!(category_label("somethingnew"), "somethingnew");
+    }
 }
