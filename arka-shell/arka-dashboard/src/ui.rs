@@ -184,6 +184,7 @@ struct HealthRows {
     mem: gtk4::Label,
     temp: gtk4::Label,
     pred: gtk4::Label,
+    pred_row: adw::ActionRow,
     group: adw::PreferencesGroup,
 }
 
@@ -234,7 +235,7 @@ fn build_health_group() -> (adw::PreferencesGroup, HealthRows) {
     group.add(&temp_row);
     group.add(&pred_row);
 
-    let rows = HealthRows { verdict, verdict_badge, cpu, mem, temp, pred, group: group.clone() };
+    let rows = HealthRows { verdict, verdict_badge, cpu, mem, temp, pred, pred_row, group: group.clone() };
     (group, rows)
 }
 
@@ -264,6 +265,12 @@ fn prediction_text(summary: &str) -> String {
     format!("Estimated: possible {summary}.")
 }
 
+/// "Normal" describes the monitored checks right now. When a trend estimate is also listed, say "now" so the green
+/// badge is not read as a promise about the next ten minutes.
+fn verdict_badge_text(badge: &str, has_prediction: bool) -> String {
+    if badge == "Normal" && has_prediction { "Normal now".to_string() } else { badge.to_string() }
+}
+
 fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     if !r.available {
         rows.verdict.set_title("System health unavailable");
@@ -273,6 +280,7 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
         rows.mem.set_text("—");
         rows.temp.set_text("—");
         rows.pred.set_text("—");
+        rows.pred_row.set_subtitle("");
         return;
     }
 
@@ -285,7 +293,7 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     };
     rows.verdict.set_title(title);
     rows.verdict.set_subtitle(&glib::markup_escape_text(&verdict_subtitle(&r.health, &r.summary, r.prediction.is_some())));
-    set_badge(&rows.verdict_badge, badge, good, warn);
+    set_badge(&rows.verdict_badge, &verdict_badge_text(badge, r.prediction.is_some()), good, warn);
 
     rows.cpu.set_text(&fmt_pct(r.cpu_util));
     rows.mem.set_text(&fmt_pct(r.mem_pct));
@@ -300,11 +308,16 @@ fn apply_health(r: &crate::state::ReliabilityState, rows: &HealthRows) {
     }));
 
     // Predictions are a HEURISTIC — always framed as *possible*, never certain.
+    // The value stays short; the sentence sits under the title at full width instead of in a squeezed column.
     match &r.prediction {
         Some((summary, _)) => {
-            rows.pred.set_text(&prediction_text(summary))
+            rows.pred.set_text("Possible");
+            rows.pred_row.set_subtitle(&glib::markup_escape_text(&prediction_text(summary)));
         }
-        None => rows.pred.set_text("None estimated"),
+        None => {
+            rows.pred.set_text("None estimated");
+            rows.pred_row.set_subtitle("");
+        }
     }
 }
 
@@ -608,7 +621,7 @@ pub fn build(
 
     // ── Health (arka-pulse: read-only, estimates labelled as such) ───────────
     let (health_group, health_rows) = build_health_group();
-    let health = page("Health", "Watched locally by arka-pulse. Predictions are estimates, never certainties.", &health_group);
+    let health = page("Health", "Watched locally on this computer. Predictions are estimates, never certainties.", &health_group);
 
     // ── Updates & recovery ───────────────────────────────────────────────────
     let upd_rows = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -1042,5 +1055,22 @@ mod category_label_tests {
     #[test]
     fn an_unknown_category_is_shown_as_logged() {
         assert_eq!(category_label("somethingnew"), "somethingnew");
+    }
+}
+
+#[cfg(test)]
+mod verdict_badge_tests {
+    use super::verdict_badge_text;
+
+    #[test]
+    fn normal_says_now_only_when_an_estimate_is_listed() {
+        assert_eq!(verdict_badge_text("Normal", true), "Normal now");
+        assert_eq!(verdict_badge_text("Normal", false), "Normal");
+    }
+
+    #[test]
+    fn other_verdicts_are_never_reworded() {
+        assert_eq!(verdict_badge_text("Warning", true), "Warning");
+        assert_eq!(verdict_badge_text("Critical", true), "Critical");
     }
 }
