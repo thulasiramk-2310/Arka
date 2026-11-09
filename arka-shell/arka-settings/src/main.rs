@@ -159,6 +159,7 @@ fn page_general() -> gtk4::Widget {
     group.add(&al_row);
     let lock_row = adw::ActionRow::new();
     lock_row.set_title("Screen locking");
+    lock_row.set_subtitle("Opens Plasma's screen locking settings");
     lock_row.set_activatable(true);
     lock_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_screenlocker").spawn(); });
     group.add(&lock_row);
@@ -179,7 +180,7 @@ fn page_general() -> gtk4::Widget {
     about_group.add(&ver_row);
 
     let host_row = adw::ActionRow::new();
-    host_row.set_title("Network name");
+    host_row.set_title("Computer name");
     let hostname = Command::new("hostname").output()
         .ok().and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_else(|| "arka".into());
