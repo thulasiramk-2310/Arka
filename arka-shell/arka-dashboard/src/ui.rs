@@ -114,7 +114,7 @@ struct SettingRow { dot: gtk4::Box, state: gtk4::Label, act: gtk4::Label }
 impl SettingRow {
     fn new(parent: &gtk4::FlowBox, title: &str, does: &str) -> Self {
         let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
-        row.add_css_class("dash-row");
+        row.add_css_class("dash-card");
         // A row is never squeezed below this, so two of them sit side by side only when the window
         // is wide enough for both to stay readable.
         row.set_width_request(ROW_MIN_WIDTH);
@@ -171,6 +171,49 @@ impl SettingRow {
         } else {
             "Try Re-apply settings below. If it stays this way, the Activity page shows what ArkaOS saw."
         });
+    }
+}
+
+/// The card above the settings: how many of the six are in place, as a count, never a score.
+struct Summary { dot: gtk4::Box, title: gtk4::Label, segs: Vec<gtk4::Box> }
+
+impl Summary {
+    fn set(&self, states: &[Row]) {
+        let in_place = states.iter().filter(|s| **s == Row::Configured).count();
+        let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere)).count();
+        let unknown = states.iter().all(|s| matches!(s, Row::Unavailable));
+        self.title.set_text(&summary_title(states));
+        for c in ["ok", "warn"] { self.dot.remove_css_class(c); }
+        if !unknown {
+            self.dot.add_css_class(if attention > 0 { "warn" } else if in_place == states.len() { "ok" } else { "none" });
+        }
+        for (seg, st) in self.segs.iter().zip(states) {
+            for c in ["ok", "warn"] { seg.remove_css_class(c); }
+            match st {
+                Row::Configured => seg.add_css_class("ok"),
+                Row::Attention | Row::OffHere => seg.add_css_class("warn"),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// "6 of 6 settings in place", "5 of 6 in place, 1 needs attention", or that nothing can be checked.
+fn summary_title(states: &[Row]) -> String {
+    if states.iter().all(|s| matches!(s, Row::Unavailable)) {
+        return "Can't check right now".to_string();
+    }
+    if states.iter().any(|s| *s == Row::Checking) {
+        return "Checking…".to_string();
+    }
+    let n = states.len();
+    let in_place = states.iter().filter(|s| **s == Row::Configured).count();
+    let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere)).count();
+    match attention {
+        0 if in_place == n => format!("{n} of {n} settings in place"),
+        0 => format!("{in_place} of {n} settings in place"),
+        1 => format!("{in_place} of {n} in place, 1 needs attention"),
+        a => format!("{in_place} of {n} in place, {a} need attention"),
     }
 }
 
@@ -539,7 +582,7 @@ pub fn build(
         .homogeneous(true)
         .min_children_per_line(1)
         .max_children_per_line(2)
-        .column_spacing(48)
+        .column_spacing(12)
         .row_spacing(0)
         .activate_on_single_click(false)
         .build();
@@ -586,18 +629,49 @@ pub fn build(
     }
 
     let fresh = label("Checking…", "dash-note");
-    fresh.set_margin_top(14);
 
     let reapply = gtk4::Button::with_label("Re-apply settings");
     reapply.add_css_class("pill");
-    reapply.set_halign(gtk4::Align::Start);
     let reapply_note = label("Asks for an administrator password.", "dash-note");
-    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    actions.set_margin_top(20);
-    reapply_note.set_valign(gtk4::Align::Center);
-    reapply_note.set_hexpand(true);
+    reapply_note.set_xalign(1.0);
+    let actions = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    actions.set_valign(gtk4::Align::Center);
+    actions.set_halign(gtk4::Align::End);
+    reapply.set_halign(gtk4::Align::End);
     actions.append(&reapply);
     actions.append(&reapply_note);
+
+    // Summary card: a count of what is in place and one segment per setting. Not a score.
+    let sum_dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    sum_dot.add_css_class("dot");
+    sum_dot.set_valign(gtk4::Align::Center);
+    let sum_title = label("Checking…", "dash-sum-title");
+    let sum_head = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+    sum_head.append(&sum_dot);
+    sum_head.append(&sum_title);
+    let seg_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    seg_row.set_homogeneous(true);
+    seg_row.set_halign(gtk4::Align::Start);
+    seg_row.set_size_request(360, -1);
+    let mut segs = Vec::new();
+    for _ in 0..6 {
+        let s = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        s.add_css_class("seg");
+        seg_row.append(&s);
+        segs.push(s);
+    }
+    let sum_col = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+    sum_col.set_hexpand(true);
+    sum_col.append(&sum_head);
+    sum_col.append(&seg_row);
+    sum_col.append(&fresh);
+    let sum_card = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
+    sum_card.add_css_class("dash-card");
+    sum_card.add_css_class("dash-summary");
+    sum_card.set_margin_bottom(16);
+    sum_card.append(&sum_col);
+    sum_card.append(&actions);
+    let summary = Summary { dot: sum_dot, title: sum_title, segs };
 
     let tech = label("", "mono");
     tech.set_wrap_mode(gtk4::pango::WrapMode::WordChar);
@@ -607,9 +681,8 @@ pub fn build(
     expander.set_margin_top(24);
 
     let overview_body = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    overview_body.append(&sum_card);
     overview_body.append(&rows_box);
-    overview_body.append(&fresh);
-    overview_body.append(&actions);
     overview_body.append(&expander);
     let overview = page("Privacy", "What ArkaOS has set up on this computer. Covers only what's listed here.",
                         &overview_body);
@@ -625,7 +698,7 @@ pub fn build(
 
     // ── Updates & recovery ───────────────────────────────────────────────────
     let upd_rows = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    upd_rows.add_css_class("dash-rows");
+    upd_rows.add_css_class("dash-list");
     let mut upd_vals = Vec::new();
     for t in ["Installed version", "Downloaded update", "Restart needed", "Previous version"] {
         let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
@@ -762,7 +835,7 @@ pub fn build(
     // ── updater ──────────────────────────────────────────────────────────────
     Box::new(move |update: StateUpdate| match update {
         StateUpdate::Full(s) => {
-            apply_privacy(&s, [&dns, &mac, &host, &ipv6, &sandbox, &fw], &fresh, &tech);
+            apply_privacy(&s, [&dns, &mac, &host, &ipv6, &sandbox, &fw], &summary, &fresh, &tech);
             update_dns_box(&s, &dns_box, &dns_note, &dns_btn, &dns_target);
             apply_health(&s.reliability, &health_rows);
         }
@@ -792,6 +865,24 @@ mod presentation_tests {
         // No estimate, or not Normal: the service's own text is shown unchanged.
         assert_eq!(verdict_subtitle("OK", "System healthy", false), "System healthy");
         assert_eq!(verdict_subtitle("WARN", said, true), said);
+    }
+
+    #[test]
+    fn the_summary_counts_settings_and_never_claims_more_than_it_checked() {
+        use Row::*;
+        assert_eq!(summary_title(&[Configured; 6]), "6 of 6 settings in place");
+        assert_eq!(summary_title(&[Attention, Configured, Configured, Configured, Configured, Configured]),
+                   "5 of 6 in place, 1 needs attention");
+        assert_eq!(summary_title(&[OffHere, Attention, Configured, Configured, Configured, Configured]),
+                   "4 of 6 in place, 2 need attention");
+        // Stale rows are not counted as in place.
+        assert_eq!(summary_title(&[Stale, Configured, Configured, Configured, Configured, Configured]),
+                   "5 of 6 settings in place");
+        assert_eq!(summary_title(&[Unavailable; 6]), "Can't check right now");
+        assert_eq!(summary_title(&[Checking, Configured, Configured, Configured, Configured, Configured]), "Checking…");
+        for t in [summary_title(&[Configured; 6]), summary_title(&[Unavailable; 6])] {
+            assert!(!t.contains('%') && !t.contains("score") && !t.contains("safe"), "{t}");
+        }
     }
 
     #[test]
@@ -845,9 +936,10 @@ mod presentation_tests {
     }
 }
 
-fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label, tech: &gtk4::Label) {
+fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], summary: &Summary, fresh: &gtk4::Label, tech: &gtk4::Label) {
     if !s.available {
         for r in rows { r.set(Row::Unavailable); }
+        summary.set(&[Row::Unavailable; 6]);
         fresh.set_text("The ArkaOS privacy service isn't answering. Statuses can't be shown until it does.");
         tech.set_text("Service: org.arka.arkad on the system D-Bus — not reachable");
         return;
@@ -866,9 +958,11 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], fresh: &gtk4::Label
         (st, br) => b(st.is_active() && br.is_isolated()),
     };
     let states = [dns, b(s.mac_randomization), b(s.hostname_privacy), b(s.ipv6_privacy), sandbox, b(s.firewall)];
-    for (r, st) in rows.into_iter().zip(states) {
-        r.set(if stale && st != Row::Checking { Row::Stale } else { st });
+    let shown = states.map(|st| if stale && st != Row::Checking { Row::Stale } else { st });
+    for (r, st) in rows.into_iter().zip(shown) {
+        r.set(st);
     }
+    summary.set(&shown);
     fresh.set_text(&if s.last_check == 0 {
         "Waiting for the privacy service's first check…".to_string()
     } else if s.last_check > now {

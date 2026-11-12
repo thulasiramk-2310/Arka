@@ -5,8 +5,9 @@
 
 .dash-title {
     font-family: 'Noto Serif', serif;
-    font-size: 34px;
-    font-weight: 500;
+    font-size: 40px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
 }
 
 .dash-sub {
@@ -20,8 +21,35 @@
 }
 
 .dash-rows {
-    border-bottom: 1px solid alpha(@window_fg_color, 0.12);
 }
+
+/* Cards: the summary, each setting, and the Updates list. Solid surfaces with a thin border,
+ * no shadows or gradients, so they read the same in Light and Dark. */
+.dash-card {
+    background-color: @card_bg_color;
+    border: 1px solid alpha(@window_fg_color, 0.10);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+}
+.dash-summary { padding: 22px 26px; border-radius: 16px; }
+.dash-sum-title { font-size: 20px; font-weight: 600; }
+
+.seg {
+    min-height: 6px;
+    border-radius: 999px;
+    background-color: alpha(@window_fg_color, 0.14);
+}
+.seg.ok   { background-color: @success_color; }
+.seg.warn { background-color: @warning_color; }
+
+.dash-list {
+    background-color: @card_bg_color;
+    border: 1px solid alpha(@window_fg_color, 0.10);
+    border-radius: 16px;
+    padding: 0 22px;
+}
+.dash-list .dash-row:first-child { border-top: none; }
 
 .dash-row-title { font-size: 15px; font-weight: 600; }
 .dash-row-sub   { font-size: 14px; color: alpha(@window_fg_color, 0.75); }
@@ -36,9 +64,16 @@
 .dot.ok   { background-color: @success_color; }
 .dot.warn { background-color: @warning_color; }
 
-.state      { font-size: 13px; font-weight: 600; color: alpha(@window_fg_color, 0.75); }
+.state      { font-size: 12px; font-weight: 600; color: alpha(@window_fg_color, 0.75); }
+.dash-card .state {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background-color: alpha(@window_fg_color, 0.07);
+}
 .state.ok   { color: @success_color; }
+.dash-card .state.ok   { background-color: alpha(@success_color, 0.14); }
 .state.warn { color: @warning_color; }
+.dash-card .state.warn { background-color: alpha(@warning_color, 0.16); }
 
 .dash-note { font-size: 13px; color: alpha(@window_fg_color, 0.75); }
 
