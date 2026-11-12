@@ -19,23 +19,36 @@ PlasmoidItem {
     // The name opens the launcher, as the mark beside it does: people click either.
     P5Support.DataSource { id: run; engine: "executable"; onNewData: (s, d) => disconnectSource(s) }
 
-    fullRepresentation: RowLayout {
-        spacing: Kirigami.Units.largeSpacing
-        Layout.minimumWidth: name.implicitWidth + (Plasmoid.configuration.showTagline ? tagSize.implicitWidth + spacing : 0)
-        Layout.preferredWidth: name.implicitWidth + (Plasmoid.configuration.showTagline ? tagSize.implicitWidth + spacing : 0)
+    fullRepresentation: Item {
+        readonly property real rowWidth: name.implicitWidth + (Plasmoid.configuration.showTagline ? tagSize.implicitWidth + row.spacing : 0)
+        Layout.minimumWidth: rowWidth
+        Layout.preferredWidth: rowWidth
+        Layout.fillHeight: true
+        implicitHeight: row.implicitHeight
         Accessible.role: Accessible.Button
         Accessible.name: "ArkaOS" + (Plasmoid.configuration.showTagline ? ", " + Plasmoid.configuration.tagline : "")
-        Text { id: name; text: "ArkaOS"; color: Kirigami.Theme.textColor; font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.25; font.weight: Font.DemiBold }
-        Text { id: tagSize; visible: false; text: Plasmoid.configuration.tagline; font: Kirigami.Theme.smallFont }
-        Text {
-            id: tag
-            visible: Plasmoid.configuration.showTagline
-            text: Plasmoid.configuration.tagline
-            color: Kirigami.Theme.disabledTextColor; font: Kirigami.Theme.smallFont
-            elide: Text.ElideRight
+
+        RowLayout {
+            id: row
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            spacing: Kirigami.Units.largeSpacing
+            Text { id: name; text: "ArkaOS"; color: Kirigami.Theme.textColor; font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.25; font.weight: Font.DemiBold }
+            Text { id: tagSize; visible: false; text: Plasmoid.configuration.tagline; font: Kirigami.Theme.smallFont }
+            Text {
+                id: tag
+                visible: Plasmoid.configuration.showTagline
+                Layout.fillWidth: true
+                text: Plasmoid.configuration.tagline
+                color: Kirigami.Theme.disabledTextColor; font: Kirigami.Theme.smallFont
+                elide: Text.ElideRight
+            }
         }
-        TapHandler {
-            onTapped: run.connectSource("dbus-send --session --type=method_call --dest=org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu")
+        // Covers the whole widget, so a click anywhere on the name opens the launcher.
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: run.connectSource("dbus-send --session --type=method_call --dest=org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu")
         }
     }
 }
