@@ -580,6 +580,12 @@ k.update(Id="org.arkaos."+v+".desktop", Name="ArkaOS "+v.title(), Description="T
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q \
       firewalld greenboot greenboot-default-health-checks && \
     systemctl enable firewalld.service && \
+    # No SSH server until the user turns on remote login (decided 2026-11-13): Fedora's presets enable
+    # sshd, and only the firewall kept port 22 closed. The preset file also wins on first boot, when
+    # systemd applies presets again. The VM test harness reaches the guest over vsock, which
+    # systemd-ssh-generator serves without sshd.service.
+    printf 'disable sshd.service\ndisable sshd.socket\n' > /usr/lib/systemd/system-preset/10-arka-no-sshd.preset && \
+    systemctl disable sshd.service sshd.socket && \
     for u in $(rpm -ql greenboot | grep -E '^/usr/lib/systemd/system/[^/]+\.service$' | xargs -n1 basename); do \
       systemctl enable "$u" && echo "greenboot: enabled $u"; \
     done
