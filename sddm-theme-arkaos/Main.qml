@@ -74,10 +74,14 @@ Rectangle {
         readonly property color warn:      root.light ? "#b45309" : "#f2c766"
         readonly property color scrim:     root.light ? "#ffffff" : "#000000"
         readonly property string font:     "Inter"
+        readonly property string serif:    "Noto Serif"
+        // Soft accent: the account circle and the ring around the password field.
+        readonly property color accentSoft: Qt.rgba(accent.r, accent.g, accent.b, root.light ? 0.16 : 0.24)
     }
 
     // One scale factor so 1366x768 laptops and 2560x1600 panels both look right.
-    readonly property real s: Math.max(0.75, Math.min(1.6, Math.min(width / 1920, height / 1080)))
+    // Never below 0.85: at 0.75 a 1440x900 laptop drew the hint and pills at 10-11 px (VM, 12 November 2026).
+    readonly property real s: Math.max(0.85, Math.min(1.6, Math.min(width / 1920, height / 1080)))
     function px(v) { return Math.round(v * s) }
 
     // --- state -----------------------------------------------------------------
@@ -88,7 +92,11 @@ Rectangle {
     // While dimmed, the clock and the hint sit above the dim layer in a light colour: dark text under
     // the black layer read at about 1.8:1 (booted image, 2026-11-06).
     readonly property color hiText: dimmed ? "#E8EAED" : c.textHi
-    property bool askName: userModel.lastUser.length === 0
+    // Who signs in: the last user, or, on a computer with one account that nobody has signed in to
+    // yet, that account. Only when neither is known does the screen ask for a username.
+    readonly property string onlyUser: userInfo.count === 1 && userInfo.itemAt(0) ? userInfo.itemAt(0).n : ""
+    readonly property string knownUser: userModel.lastUser.length > 0 ? userModel.lastUser : onlyUser
+    property bool askName: knownUser.length === 0
     property int sessionIndex: sessionModel.lastIndex >= 0 ? sessionModel.lastIndex : 0
     property string errorText: ""
 
@@ -173,7 +181,8 @@ Rectangle {
         saturation: 0.1
         brightness: root.light ? 0.06 : -0.08
         autoPaddingEnabled: false
-        opacity: root.signin ? 1 : 0
+        // The light look keeps the wallpaper sharp on sign-in: dark text reads on it without a blur.
+        opacity: root.signin && !root.light ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 380; easing.type: Easing.OutCubic } }
     }
     // Software rendering can't blur, so the sign-in scrim goes much darker.
@@ -181,7 +190,8 @@ Rectangle {
     Rectangle {   // overall scrim
         anchors.fill: parent
         color: c.scrim
-        opacity: root.signin ? (root.softwareGfx ? 0.86 : 0.52) : 0.18
+        opacity: root.light ? (root.signin ? 0.30 : 0.10)
+               : root.signin ? (root.softwareGfx ? 0.86 : 0.52) : 0.18
         Behavior on opacity { NumberAnimation { duration: 380 } }
     }
     Rectangle {   // top fade so the clock reads on any wallpaper
@@ -343,18 +353,23 @@ Rectangle {
         return rn.length > 0 ? rn : userField.text
     }
 
-    // --- top bar: brand left, status right ---------------------------------------
+    // --- brand, bottom left on the lock stage: the ArkaOS logo and the release stage ---
     Row {
-        anchors { left: parent.left; top: parent.top; margins: root.px(28) }
+        z: 3
+        anchors { left: parent.left; bottom: parent.bottom; leftMargin: root.px(40); bottomMargin: root.px(40) }
         spacing: root.px(10)
-        ArkaMark { width: root.px(22); height: width; anchors.verticalCenter: parent.verticalCenter }
+        opacity: root.signin ? 0 : 1
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 260 } }
+        ArkaMark { width: root.px(20); height: width; anchors.verticalCenter: parent.verticalCenter }
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "ArkaOS"
-            color: c.textHi
+            text: "ArkaOS · Developer preview"
+            color: root.hiText
+            opacity: 0.85
             font.family: c.font
-            font.pixelSize: root.px(15)
-            font.weight: Font.DemiBold
+            font.pixelSize: root.px(14)
+            font.weight: Font.Medium
         }
     }
 
@@ -424,33 +439,37 @@ Rectangle {
     Column {
         id: clockCol
         z: 3
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: root.signin ? root.height * 0.075 : root.height * 0.15
+        // Lock: large and to the left, as in the design. Sign-in: smaller and centred above the account.
+        x: root.signin ? (root.width - width * scale) / 2 : root.width * 0.083
+        y: root.signin ? root.height * 0.13 : root.height * 0.27
         scale: root.signin ? 0.52 : 1
-        transformOrigin: Item.Top
+        transformOrigin: Item.TopLeft
+        Behavior on x { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
         spacing: root.px(2)
         Behavior on y { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
 
         Text {
             id: dateLine
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.left: root.signin ? undefined : parent.left
+            anchors.horizontalCenter: root.signin ? parent.horizontalCenter : undefined
             color: root.hiText
             opacity: 0.92
             font.family: c.font
-            font.pixelSize: root.px(24)
-            font.weight: Font.Medium
-            function upd() { text = Qt.formatDate(new Date(), "dddd, d MMMM") }
+            font.pixelSize: root.px(26)
+            font.weight: Font.Normal
+            function upd() { text = Qt.formatDate(new Date(), "dddd d MMMM") }
             Component.onCompleted: upd()
         }
         Text {
             id: clock
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.left: root.signin ? undefined : parent.left
+            anchors.horizontalCenter: root.signin ? parent.horizontalCenter : undefined
             color: root.hiText
             font.family: c.font
-            font.pixelSize: root.px(168)
-            font.weight: Font.DemiBold
-            font.letterSpacing: -root.px(6)
+            font.pixelSize: root.px(196)
+            font.weight: Font.Light
+            font.letterSpacing: -root.px(9)
             function upd() {
                 var twelve = Qt.locale().timeFormat(Locale.ShortFormat).indexOf("AP") >= 0
                 text = Qt.formatTime(new Date(), twelve ? "h:mm" : "HH:mm")
@@ -499,23 +518,6 @@ Rectangle {
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 260 } }
 
-        Item {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: root.px(22); height: root.px(22)
-            Glyph {   // chevron up, breathing
-                tint: root.hiText
-                strokeW: 2.2
-                PathMove { x: 6; y: 15 }
-                PathLine { x: 12; y: 9 }
-                PathLine { x: 18; y: 15 }
-            }
-            SequentialAnimation on opacity {
-                running: !root.signin
-                loops: Animation.Infinite
-                NumberAnimation { from: 0.35; to: 1; duration: 900; easing.type: Easing.InOutSine }
-                NumberAnimation { from: 1; to: 0.35; duration: 900; easing.type: Easing.InOutSine }
-            }
-        }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Press any key or click to sign in"
@@ -552,21 +554,14 @@ Rectangle {
         // Account picture (or initial) with a soft accent halo.
         Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.px(120); height: width
-            Rectangle {
-                anchors.centerIn: parent
-                width: parent.width + root.px(14); height: width; radius: width / 2
-                color: "transparent"
-                border.width: root.px(6)
-                border.color: Qt.rgba(c.accentFg.r, c.accentFg.g, c.accentFg.b, 0.18)
-            }
+            width: root.px(88); height: width
             Rectangle {
                 id: avatar
                 anchors.fill: parent
                 radius: width / 2
-                color: root.light ? Qt.rgba(0, 0, 0, 0.06) : Qt.rgba(1, 1, 1, 0.12)
-                border.width: 2
-                border.color: c.accentFg
+                color: c.accentSoft
+                border.width: 1
+                border.color: c.glassLine
                 property string pic: root.userRole(userField.text, "ic")
                 Image {
                     id: pic
@@ -594,10 +589,10 @@ Rectangle {
                     anchors.centerIn: parent
                     visible: pic.status !== Image.Ready
                     text: (userField.text.length > 0 ? userField.text.charAt(0) : "?").toUpperCase()
-                    color: c.textHi
-                    font.family: c.font
-                    font.pixelSize: root.px(48)
-                    font.weight: Font.DemiBold
+                    color: c.accentFg
+                    font.family: c.serif
+                    font.pixelSize: root.px(40)
+                    font.weight: Font.Normal
                 }
             }
         }
@@ -608,7 +603,7 @@ Rectangle {
             text: root.displayName
             color: c.textHi
             font.family: c.font
-            font.pixelSize: root.px(28)
+            font.pixelSize: root.px(20)
             font.weight: Font.DemiBold
         }
 
@@ -617,8 +612,8 @@ Rectangle {
             id: userBox
             anchors.horizontalCenter: parent.horizontalCenter
             visible: root.askName
-            width: root.px(320); height: root.px(48); radius: height / 2
-            color: c.glass
+            width: root.px(360); height: root.px(52); radius: height / 2
+            color: c.glassHi
             border.width: userField.activeFocus ? 2 : 1
             border.color: userField.activeFocus ? c.accentFg : c.glassLine
             TextInput {
@@ -632,7 +627,7 @@ Rectangle {
                 selectedTextColor: c.onAccent
                 font.family: c.font
                 font.pixelSize: root.px(15)
-                text: userModel.lastUser
+                text: root.knownUser
                 enabled: !root.busy
                 KeyNavigation.tab: pwd
                 Accessible.role: Accessible.EditableText
@@ -654,9 +649,18 @@ Rectangle {
         Rectangle {
             id: pwdBox
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.px(320); height: root.px(48); radius: height / 2
-            color: c.glass
+            width: root.px(360); height: root.px(52); radius: height / 2
+            color: c.glassHi
             border.width: pwd.activeFocus || root.errorText.length > 0 ? 2 : 1
+            Rectangle {   // soft accent ring around the field, as in the design
+                anchors.fill: parent
+                anchors.margins: -root.px(4)
+                radius: height / 2
+                z: -1
+                color: "transparent"
+                border.width: root.px(4)
+                border.color: root.errorText.length > 0 ? "transparent" : c.accentSoft
+            }
             border.color: root.errorText.length > 0 ? c.danger
                         : pwd.activeFocus ? c.accentFg : c.glassLine
             Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -815,10 +819,10 @@ Rectangle {
             Pill {
                 label: "Sign in as"
                 value: root.askName ? "Back" : "Other user…"
-                visible: userModel.lastUser.length > 0
+                visible: root.knownUser.length > 0
                 onActivated: {
                     root.askName = !root.askName
-                    if (!root.askName) { userField.text = userModel.lastUser; pwd.forceActiveFocus() }
+                    if (!root.askName) { userField.text = root.knownUser; pwd.forceActiveFocus() }
                     else { userField.text = ""; userField.forceActiveFocus() }
                 }
             }
@@ -863,14 +867,13 @@ Rectangle {
         }
     }
 
+    // Sleep, restart and shut down: on both stages, bottom right.
     Row {
+        z: 4
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: root.px(28)
-        spacing: root.px(14)
-        opacity: root.signin ? 1 : 0
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 300 } }
+        anchors.margins: root.px(32)
+        spacing: root.px(12)
 
         IconButton {
             visible: sddm.canSuspend
