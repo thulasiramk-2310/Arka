@@ -220,7 +220,7 @@ TestCase {
         picker.open(["file:///tmp/notes.xyz"], false)
         compare(picker.emptyHint(), "This file can't be converted yet")
         picker.open(["file:///tmp/IMG_0001.heic"], true)
-        compare(picker.emptyHint(), "Edits work on pictures, PDFs, sound and video")
+        compare(picker.emptyHint(), "Edits work on pictures, PDFs, sound, video and text files")
     }
 
     // "Smaller" on the edit wheel asks how much first, then converts (it is not an edit window).

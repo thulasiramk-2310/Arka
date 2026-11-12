@@ -32,6 +32,11 @@
                                        10mb / 25mb: a copy under that size, or none at all
     arka-convert zip FILE...           put each file in its own ZIP (any kind of file)
     arka-convert zip-all ITEM ITEM...  put files and folders together in ONE ZIP
+    arka-convert extract ARCHIVE...    unpack each ZIP or TAR archive into a folder beside it
+    arka-convert pdf-combine PICTURE PICTURE...  put pictures into ONE PDF, a page each, in the order given
+    arka-convert searchable PDF        a copy of a scanned PDF whose words can be found and copied (OCR,
+                                       English; it can make mistakes)
+    arka-convert resize SIZE PICTURE...  a copy SIZE pixels wide (or SIZE% of its width); never larger
 
 The converted file is saved beside the original (in Downloads when that folder is
 read-only) and never replaces anything:
@@ -43,6 +48,7 @@ Used by the "Convert to" entry in the Dolphin right-click menu.
 """
 
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -58,6 +64,9 @@ AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
 VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
 # Word, Excel and PowerPoint files, and their open-format twins. LibreOffice turns them into PDFs.
 OFFICE = {"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"}
+# Plain text, and the text kinds Dolphin counts as plain text (it shows "Convert to" for them too).
+# LibreOffice opens each as plain text, so it can become Word, PDF or ODT with its words as they are.
+TEXT = {"txt", "text", "log", "md", "markdown", "rst", "csv", "tsv", "json", "xml", "yaml", "yml", "ini", "conf", "cfg"}
 # Pictures that "smaller" can shrink. Animated and old formats are left alone.
 SMALLER_IMAGE = {"png", "jpg", "jpeg", "webp"}
 
@@ -68,6 +77,8 @@ TARGETS = {
     "audio": ["mp3", "flac", "wav", "ogg", "opus", "m4a", "smaller-audio", "clean", "zip"],
     "video": ["mp4", "mkv", "webm", "mp3", "smaller-video", "clean", "zip"],
     "office": ["pdf", "zip"],
+    "text": ["docx", "pdf", "odt", "zip"],
+    "archive": ["extract", "zip"],
 }
 
 # "clean" (mat2) removes hidden details such as location, camera, author and
@@ -80,7 +91,7 @@ NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "avif": "AVIF", "tiff": "T
          "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM",
          "smaller-pdf": "a smaller PDF", "smaller-image": "a smaller picture",
          "smaller-audio": "a smaller MP3", "smaller-video": "a smaller MP4",
-         "docx": "Word (layout may differ)", "zip": "a ZIP file", "text": "text (read by OCR, may have mistakes)",
+         "docx": "Word (layout may differ)", "odt": "ODT (LibreOffice)", "zip": "a ZIP file", "text": "text (read by OCR, may have mistakes)",
          "clean": "a copy without hidden details"}
 
 # ffmpeg output options for each target. -vn drops any cover art or video.
@@ -148,6 +159,10 @@ def kind_of(path):
         return "video"
     if ext in OFFICE:
         return "office"
+    if ext in TEXT:
+        return "text"
+    if archive_stem(path):
+        return "archive"
     return None
 
 
@@ -413,6 +428,22 @@ def convert_one(src, fmt, on_progress=None, level="light"):
                           "--norestore", "--convert-to", "pdf", "--outdir", str(scratch), str(work)],
                 timeout=240, private_tmp=True)
             made = [scratch / "in.pdf"]
+        elif kind == "text":
+            # LibreOffice opens the text as a document and saves it, inside the same sandbox, on a copy
+            # with a plain name. Text that is not UTF-8 is read as Windows-1252, which never fails.
+            work = scratch / "in.txt"   # the .txt name makes LibreOffice read it as plain text
+            shutil.copyfile(src, work)
+            try:
+                work.read_bytes().decode("utf-8")
+                charset = "UTF8"
+            except UnicodeDecodeError:
+                charset = "MS_1252"
+            out_filter = {"docx": "docx:MS Word 2007 XML", "pdf": "pdf:writer_pdf_Export", "odt": "odt:writer8"}[fmt]
+            run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
+                          "--norestore", f"--infilter=Text (encoded):{charset},LF,,,", "--convert-to", out_filter,
+                          "--outdir", str(scratch), str(work)],
+                timeout=240, private_tmp=True)
+            made = [scratch / f"in.{fmt}"]
         elif fmt == "docx":
             # Word from a PDF carries the text over; the layout will differ, and a scanned PDF
             # has no text to carry (there is no text recognition yet), so that is said plainly.
@@ -576,6 +607,208 @@ def fit_to_size(path, level, on_progress=None):
         return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} ({label})", ext)])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+# --- Extract, pictures into one PDF, searchable PDF, resize (wheel additions, 2026-11-13) ----------
+
+# Archives "Extract here" opens: ZIP and the TAR family, which Python reads without extra programs.
+ARCHIVE_SUFFIXES = (".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz")
+# An archive that unpacks to more than this, or holds more entries, is refused before anything is
+# written: a small file that expands without end (a "zip bomb") must not fill the disk.
+EXTRACT_MAX_BYTES = 20 * 1024 ** 3
+EXTRACT_MAX_ENTRIES = 200_000
+
+
+def archive_stem(path):
+    name = Path(path).name
+    for suffix in sorted(ARCHIVE_SUFFIXES, key=len, reverse=True):
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)] or name
+    return None
+
+
+def extract_worker(src, dest):
+    """Inside the sandbox: unpack src into the empty folder dest. Names that would land outside dest,
+    links, devices and anything bigger than the limits are refused (zip) or skipped by Python's
+    'data' filter (tar), which also drops set-user-id bits."""
+    import tarfile
+    import zipfile
+    dest = Path(dest)
+    if src.lower().endswith(".zip"):
+        with zipfile.ZipFile(src) as z:
+            infos = z.infolist()
+            if len(infos) > EXTRACT_MAX_ENTRIES or sum(i.file_size for i in infos) > EXTRACT_MAX_BYTES:
+                raise RuntimeError("it unpacks to more than 20 GB or 200,000 files, so it was not unpacked")
+            for info in infos:
+                name = info.filename.replace("\\", "/")
+                parts = [p for p in name.split("/") if p not in ("", ".")]
+                if name.startswith("/") or ".." in parts or not parts:
+                    raise RuntimeError(f"it holds a name that points outside its folder ({info.filename})")
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode == 0o120000:   # a symbolic link: skipped, never followed
+                    continue
+                target = dest.joinpath(*parts)
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(info) as fin, open(target, "xb") as fout:
+                    shutil.copyfileobj(fin, fout)
+    else:
+        with tarfile.open(src) as tar:
+            members = tar.getmembers()
+            if len(members) > EXTRACT_MAX_ENTRIES or sum(m.size for m in members) > EXTRACT_MAX_BYTES:
+                raise RuntimeError("it unpacks to more than 20 GB or 200,000 files, so it was not unpacked")
+            tar.extractall(dest, filter="data")
+
+
+def extract_archive(path):
+    """Unpack one archive into a folder beside it, named after it. When everything inside sits in
+    one folder already, that folder is what appears (no folder inside a folder of the same name)."""
+    src = Path(path).resolve()
+    stem = archive_stem(src)
+    if not stem:
+        raise RuntimeError(f"{src.name} isn't a ZIP or TAR archive")
+    out_dir = save_dir(src.parent)
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        unpacked = scratch / "out"
+        unpacked.mkdir()
+        run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--extract-worker", str(src), str(unpacked)],
+            timeout=1800)
+        inside = list(unpacked.iterdir())
+        if not inside:
+            raise RuntimeError("the archive is empty")
+        top = inside[0] if len(inside) == 1 and inside[0].is_dir() else unpacked
+        name = top.name if top is not unpacked else stem
+        final, n = out_dir / name, 1
+        while final.exists():
+            final = out_dir / f"{name} ({n})"
+            n += 1
+        top.rename(final)
+        return [final]
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def combine_worker(out, title, srcs):
+    """Inside the sandbox: one PDF, a page per picture, in the order given, titled `title`."""
+    from PIL import Image, ImageOps
+    pages = []
+    for s in srcs:
+        im = ImageOps.exif_transpose(Image.open(s))
+        if im.mode in ("RGBA", "LA", "P"):
+            flat = Image.new("RGB", im.size, "white")
+            flat.paste(im.convert("RGBA"), mask=im.convert("RGBA").split()[-1])
+            im = flat
+        pages.append(im.convert("RGB"))
+    pages[0].save(out, "PDF", save_all=True, append_images=pages[1:], resolution=150.0, title=title)
+
+
+def pictures_to_pdf(paths):
+    """Several pictures into ONE PDF saved beside the first, one page each, in the order given."""
+    srcs = [Path(p).resolve() for p in paths]
+    if len(srcs) < 2:
+        raise RuntimeError("putting pictures into one PDF needs at least two")
+    for s in srcs:
+        if kind_of(s) != "image":
+            raise RuntimeError(f"{s.name} isn't a picture")
+    out_dir = save_dir(srcs[0].parent)
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        inputs = []
+        for i, s in enumerate(srcs):
+            if s.suffix.lower().lstrip(".") in FFMPEG_IMAGE:
+                flat = scratch / f"page{i}.png"   # AVIF: ffmpeg reads it, as for every AVIF
+                run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(s), "-frames:v", "1", str(flat)])
+                inputs.append(str(flat))
+            else:
+                inputs.append(str(s))
+        tmp = scratch / "out.pdf"
+        label = f"{srcs[0].stem} and {srcs[1].stem}" if len(srcs) == 2 else f"{srcs[0].stem} and {len(srcs) - 1} more"
+        run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--combine-worker", str(tmp), label, *inputs])
+        return edit_done(scratch, [tmp], [(out_dir, label, "pdf")])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def searchable_pdf(path):
+    """A copy of a scanned PDF with a text layer, so its words can be found and copied. Each page is
+    drawn at 300 dpi and read by tesseract, which writes the page back as a picture with the text
+    under it. A PDF that already has text is left alone."""
+    src = Path(path).resolve()
+    if src.suffix.lower() != ".pdf":
+        raise RuntimeError(f"{src.name} isn't a PDF")
+    if not shutil.which("tesseract"):
+        raise RuntimeError("text recognition (tesseract) is not installed")
+    out_dir = save_dir(src.parent)
+    scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+    try:
+        text = subprocess.run(sandbox_prefix(scratch) + ["pdftotext", "-l", "10", str(src), "-"],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout
+        if len(text.strip()) >= 20:
+            raise RuntimeError("this PDF already has text you can search and copy")
+        run(scratch, ["pdftoppm", "-r", "300", "-png", str(src), str(scratch / "page")], timeout=1800)
+        pages = sorted(scratch.glob("page*.png"))
+        if not pages:
+            raise RuntimeError("no pages could be read")
+        parts = []
+        for i, png in enumerate(pages):
+            base = scratch / f"part{i:05d}"
+            run(scratch, ["tesseract", str(png), str(base), "-l", "eng", "pdf"], timeout=600)
+            png.unlink()
+            parts.append(str(base) + ".pdf")
+        tmp = scratch / "out.pdf"
+        if len(parts) == 1:
+            Path(parts[0]).rename(tmp)
+        else:
+            run(scratch, ["pdfunite", *parts, str(tmp)])
+        return edit_done(scratch, [tmp], [(out_dir, f"{src.stem} (searchable)", "pdf")])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+RESIZE_KEEP_EXT = {"png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff", "gif"}
+
+
+def resize_worker(src, dst, size):
+    """Inside the sandbox: a copy `size` pixels wide ('1280') or `size` percent wide ('50%')."""
+    from PIL import Image, ImageOps
+    im = ImageOps.exif_transpose(Image.open(src))
+    w, h = im.size
+    new_w = round(w * int(size[:-1]) / 100) if size.endswith("%") else int(size)
+    if new_w >= w:
+        raise RuntimeError(f"it is already {w} pixels wide; resizing never makes a picture larger")
+    new_h = max(1, round(h * new_w / w))
+    out = im.resize((max(1, new_w), new_h), Image.LANCZOS)
+    ext = Path(dst).suffix.lower().lstrip(".")
+    if ext in ("jpg", "jpeg") and out.mode not in ("RGB", "L"):
+        out = out.convert("RGB")
+    out.save(dst, quality=92) if ext in ("jpg", "jpeg", "webp") else out.save(dst)
+
+
+def resize_images(size, paths):
+    """A resized copy of each picture beside it: 'photo (1280 wide).jpg' or 'photo (50%).jpg'."""
+    if not re.fullmatch(r"([1-9]\d{1,4}|[1-9]\d?%)", size):
+        raise RuntimeError(f"'{size}' isn't a size: give a width in pixels (16 to 99999) or a percentage")
+    if not size.endswith("%") and int(size) < 16:
+        raise RuntimeError("the width must be at least 16 pixels")
+    made = []
+    for p in paths:
+        src = Path(p).resolve()
+        ext = src.suffix.lower().lstrip(".")
+        if kind_of(src) != "image" or ext not in RESIZE_KEEP_EXT:
+            raise RuntimeError(f"{src.name} isn't a picture that can be resized")
+        out_dir = save_dir(src.parent)
+        scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
+        try:
+            tmp = scratch / f"out.{ext}"
+            run(scratch, [sys.executable, "-I", os.path.realpath(__file__), "--resize-worker", str(src), str(tmp), size])
+            label = f"{src.stem} ({size})" if size.endswith("%") else f"{src.stem} ({size} wide)"
+            made += edit_done(scratch, [tmp], [(out_dir, label, ext)])
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    return made
 
 
 def parse_time(text):
@@ -1664,18 +1897,21 @@ def run_edit(tool, args):
         signal.signal(sig, lambda signum, _frame: sys.exit(128 + signum))
     wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3), "rotate": (2, 2), "crop": (5, 5),
               "redact": (5, None), "background": (3, 3), "zip-all": (2, None), "annotate": (2, 2),
-              "split-media": (2, 2), "join-media": (2, None), "bleep": (3, None)}[tool]
+              "split-media": (2, 2), "join-media": (2, None), "bleep": (3, None),
+              "extract": (1, None), "pdf-combine": (2, None), "searchable": (1, 1), "resize": (2, None)}[tool]
     if len(args) < wanted[0] or (wanted[1] and len(args) > wanted[1]):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
     title = {"merge-pdf": "Merged", "split-pdf": "Split", "trim": "Trimmed", "rotate": "Rotated", "crop": "Cropped",
              "redact": "Hidden parts blacked out", "background": "Background added",
              "zip-all": "Zipped together", "annotate": "Annotated", "split-media": "Split in two",
-             "join-media": "Joined", "bleep": "Bleeped"}[tool]
-    media = tool in ("trim", "split-media", "join-media", "bleep") or (
+             "join-media": "Joined", "bleep": "Bleeped", "extract": "Unpacked", "pdf-combine": "Put into one PDF",
+             "searchable": "Made searchable", "resize": "Resized"}[tool]
+    media = tool in ("trim", "split-media", "join-media", "bleep", "extract", "searchable") or (
         tool in ("crop", "redact") and kind_of(args[0]) == "video")
     working = {"trim": "Trimming", "split-media": "Splitting", "join-media": "Joining", "bleep": "Bleeping",
-               "crop": "Cropping", "redact": "Blacking out"}
+               "crop": "Cropping", "redact": "Blacking out", "extract": "Unpacking",
+               "searchable": "Reading the text (this takes a while)"}
     nid = notify(working[tool], Path(args[0]).name if tool != "join-media" else f"{len([a for a in args if a != '--name-order'])} files",
                  urgency="low") if media else None
     last = [0.0]
@@ -1689,6 +1925,14 @@ def run_edit(tool, args):
     try:
         if tool == "merge-pdf":
             made = merge_pdfs(args)
+        elif tool == "extract":
+            made = [m for a in args for m in extract_archive(a)]
+        elif tool == "pdf-combine":
+            made = pictures_to_pdf(args)
+        elif tool == "searchable":
+            made = searchable_pdf(args[0])
+        elif tool == "resize":
+            made = resize_images(args[0], args[1:])
         elif tool == "zip-all":
             made = zip_all(args)
         elif tool == "split-pdf":
@@ -1707,7 +1951,8 @@ def run_edit(tool, args):
             made = edit_image(tool, args[0], args[1:])
     except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as e:
         # A ZIP of many items has no single file to name; its messages already say which one.
-        notify(f"Couldn't {tool.split('-')[0]}", str(e) if tool in ("zip-all", "join-media") else f"{Path(args[0]).name}: {e}",
+        verb = {"pdf-combine": "make the PDF", "searchable": "make it searchable"}.get(tool, tool.split('-')[0])
+        notify(f"Couldn't {verb}", str(e) if tool in ("zip-all", "join-media", "pdf-combine", "resize") else f"{Path(args[0]).name}: {e}",
                nid)
         return 1
     except (SystemExit, KeyboardInterrupt):
@@ -1726,6 +1971,23 @@ def main(argv):
         try:
             edit_image_worker(argv[2], argv[3], argv[4], argv[5:])
         except RuntimeError as e:   # one plain sentence for the notification, not a traceback
+            print(e, file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) == 4 and argv[1] == "--extract-worker":
+        try:
+            extract_worker(argv[2], argv[3])
+        except (RuntimeError, OSError, ValueError, EOFError) as e:
+            print(e, file=sys.stderr)
+            return 1
+        return 0
+    if len(argv) >= 6 and argv[1] == "--combine-worker":
+        combine_worker(argv[2], argv[3], argv[4:])
+        return 0
+    if len(argv) == 5 and argv[1] == "--resize-worker":
+        try:
+            resize_worker(argv[2], argv[3], argv[4])
+        except RuntimeError as e:
             print(e, file=sys.stderr)
             return 1
         return 0
@@ -1787,7 +2049,8 @@ def main(argv):
             return 1
         return 0
     if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim", "rotate", "crop", "redact", "background",
-                                      "zip-all", "annotate", "split-media", "join-media", "bleep"):
+                                      "zip-all", "annotate", "split-media", "join-media", "bleep",
+                                      "extract", "pdf-combine", "searchable", "resize"):
         return run_edit(argv[1], argv[2:])
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
@@ -1806,7 +2069,7 @@ def main(argv):
             return 2
     # "smaller" means the smaller-... action that fits each file, so one menu entry covers a mixed selection.
     per_file = {"image": "smaller-image", "pdf": "smaller-pdf", "audio": "smaller-audio", "video": "smaller-video"}
-    heavy = any(kind_of(f) in ("audio", "video", "office") for f in files) or fmt == "docx"
+    heavy = any(kind_of(f) in ("audio", "video", "office", "text") for f in files) or fmt == "docx"
     nid = notify("Making smaller" if fmt == "smaller" else f"Converting to {NAMES.get(fmt, fmt)}",
                  files[0] if len(files) == 1 else f"{len(files)} files", urgency="low") if heavy else None
     made, failed = [], []

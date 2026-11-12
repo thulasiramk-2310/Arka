@@ -64,11 +64,12 @@ class ArkaConvertTest(unittest.TestCase):
         pic = self.png()
         got = convert("--targets", str(pic)).stdout.split()
         self.assertEqual(got, ["jpg", "webp", "avif", "pdf", "text", "tiff", "bmp", "smaller-image", "clean", "zip"])
-        # any other file can still be zipped, and nothing else
-        self.assertEqual(convert("--targets", str(self.dir / "x.txt")).stdout.split(), ["zip"])
+        # plain text can become a document; any other file can still be zipped, and nothing else
+        self.assertEqual(convert("--targets", str(self.dir / "x.txt")).stdout.split(), ["docx", "pdf", "odt", "zip"])
+        self.assertEqual(convert("--targets", str(self.dir / "x.dat")).stdout.split(), ["zip"])
         # a GIF cannot be made smaller; a ZIP cannot be zipped again
         self.assertNotIn("smaller-image", convert("--targets", str(self.dir / "x.gif")).stdout.split())
-        self.assertEqual(convert("--targets", str(self.dir / "x.zip")).stdout.split(), [])
+        self.assertEqual(convert("--targets", str(self.dir / "x.zip")).stdout.split(), ["extract"])
 
     def test_image_to_each_format_keeps_original(self):
         pic = self.png()
@@ -542,6 +543,29 @@ class ArkaConvertTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         xml = zipfile.ZipFile(self.dir / "doc.docx").read("word/document.xml").decode()
         self.assertIn("real text that should survive", " ".join(re.sub(r"<[^>]+>", " ", xml).split()))
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in self.names()))
+
+    @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
+    def test_plain_text_becomes_word_pdf_and_odt_with_its_words_and_accents(self):
+        import re
+        import zipfile
+        line = "Café notes: naïve text that should survive"
+        (self.dir / "notes.txt").write_text(line + "\n\nSecond paragraph.\n", encoding="utf-8")
+        (self.dir / "old.txt").write_bytes("Résumé from an old Windows machine\n".encode("cp1252"))
+        for fmt in ("docx", "pdf", "odt"):
+            r = convert(fmt, str(self.dir / "notes.txt"))
+            self.assertEqual(r.returncode, 0, r.stderr)
+        words = lambda xml: " ".join(re.sub(r"<[^>]+>", " ", xml).split())
+        self.assertIn(line, words(zipfile.ZipFile(self.dir / "notes.docx").read("word/document.xml").decode()))
+        self.assertIn(line, words(zipfile.ZipFile(self.dir / "notes.odt").read("content.xml").decode()))
+        pdf_text = subprocess.run(["pdftotext", str(self.dir / "notes.pdf"), "-"], capture_output=True, text=True).stdout
+        self.assertIn(line, " ".join(pdf_text.split()))
+        # text that is not UTF-8 is read as Windows-1252, so its accents survive too
+        r = convert("docx", str(self.dir / "old.txt"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Résumé from an old Windows machine",
+                      words(zipfile.ZipFile(self.dir / "old.docx").read("word/document.xml").decode()))
+        self.assertTrue((self.dir / "notes.txt").exists())   # the original stays
         self.assertFalse(any(n.startswith(".arka-convert-") for n in self.names()))
 
     @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
@@ -1413,6 +1437,132 @@ class FinishedTitleTest(unittest.TestCase):
         for fmt in ("png", "jpg", "pdf", "mp3", "mp4", "docx"):
             with self.subTest(fmt=fmt):
                 self.assertEqual(self.mod.done_title(fmt), "Converted")
+
+
+class WheelAdditionsTest(unittest.TestCase):
+    """Extract here, pictures into one PDF, searchable PDF and resize (2026-11-13), in the real sandbox."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def names(self):
+        return sorted(p.name for p in self.dir.iterdir())
+
+    def picture(self, name, size=(400, 300), color=(30, 120, 200)):
+        from PIL import Image
+        Image.new("RGB", size, color).save(self.dir / name)
+        return self.dir / name
+
+    def test_extract_a_zip_into_a_folder_beside_it(self):
+        import zipfile
+        with zipfile.ZipFile(self.dir / "photos.zip", "w") as z:
+            z.writestr("a.txt", "alpha")
+            z.writestr("sub/b.txt", "beta")
+        r = convert("extract", str(self.dir / "photos.zip"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.dir / "photos" / "a.txt").read_text(), "alpha")
+        self.assertEqual((self.dir / "photos" / "sub" / "b.txt").read_text(), "beta")
+        # a second time gets its own folder, never mixing into the first
+        r = convert("extract", str(self.dir / "photos.zip"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((self.dir / "photos (1)" / "a.txt").exists())
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in self.names()))
+
+    def test_extract_keeps_one_top_folder_without_nesting_it(self):
+        import zipfile
+        with zipfile.ZipFile(self.dir / "project-1.2.zip", "w") as z:
+            z.writestr("project-1.2/README", "hi")
+        r = convert("extract", str(self.dir / "project-1.2.zip"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.dir / "project-1.2" / "README").read_text(), "hi")
+
+    def test_extract_a_tar_gz(self):
+        import io
+        import tarfile
+        with tarfile.open(self.dir / "notes.tar.gz", "w:gz") as tar:
+            data = b"gamma"
+            info = tarfile.TarInfo("c.txt")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        r = convert("extract", str(self.dir / "notes.tar.gz"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.dir / "notes" / "c.txt").read_text(), "gamma")
+
+    def test_extract_refuses_names_that_leave_the_folder_and_leaves_nothing(self):
+        import io
+        import tarfile
+        import zipfile
+        with zipfile.ZipFile(self.dir / "evil.zip", "w") as z:
+            z.writestr("ok.txt", "fine")
+            z.writestr("../escaped.txt", "bad")
+        r = convert("extract", str(self.dir / "evil.zip"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse((self.dir.parent / "escaped.txt").exists())
+        self.assertEqual(self.names(), ["evil.zip"])
+        with tarfile.open(self.dir / "link.tar", "w") as tar:
+            info = tarfile.TarInfo("passwd")
+            info.type = tarfile.SYMTYPE
+            info.linkname = "/etc/passwd"
+            tar.addfile(info)
+        r = convert("extract", str(self.dir / "link.tar"))
+        self.assertNotEqual(r.returncode, 0, "a link to outside the folder is refused")
+        self.assertEqual(self.names(), ["evil.zip", "link.tar"])
+
+    def test_pictures_into_one_pdf_in_the_order_given(self):
+        a = self.picture("one.png", color=(200, 30, 30))
+        b = self.picture("two.jpg", size=(300, 400))
+        r = convert("pdf-combine", str(a), str(b))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        pdf = self.dir / "one and two.pdf"
+        info = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True).stdout
+        import re
+        self.assertRegex(info, r"Pages:\s+2\n")
+        self.assertRegex(info, r"Title:\s+one and two\n", "the PDF is titled after the pictures, not a scratch name")
+        self.assertTrue(a.exists() and b.exists(), "the pictures stay")
+        r = convert("pdf-combine", str(a))
+        self.assertNotEqual(r.returncode, 0, "one picture is not enough")
+
+    @unittest.skipUnless(shutil.which("tesseract") and "eng" in subprocess.run(
+        ["tesseract", "--list-langs"], capture_output=True, text=True).stdout.split(), "needs English OCR (ArkaOS has it)")
+    def test_a_scanned_pdf_becomes_searchable_and_a_text_pdf_is_left_alone(self):
+        from PIL import Image, ImageDraw, ImageFont
+        page = Image.new("RGB", (1700, 900), "white")
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 90)
+        except OSError:
+            font = ImageFont.load_default(size=90)
+        # Two lines: the "already has text" check needs more than a few words to count a PDF as text.
+        ImageDraw.Draw(page).text((80, 220), "HELLO ARKA 2026", fill="black", font=font)
+        ImageDraw.Draw(page).text((80, 480), "SEARCH THIS PAGE", fill="black", font=font)
+        page.save(self.dir / "scan.pdf", "PDF", resolution=150.0)
+        r = convert("searchable", str(self.dir / "scan.pdf"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = self.dir / "scan (searchable).pdf"
+        text = subprocess.run(["pdftotext", str(out), "-"], capture_output=True, text=True).stdout
+        self.assertIn("HELLO ARKA", text.upper())
+        # it now has text, so a second run says so instead of reading it again
+        r = convert("searchable", str(out))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(any(n.startswith(".arka-convert-") for n in self.names()))
+
+    def test_resize_to_a_width_or_a_percentage_and_never_larger(self):
+        from PIL import Image
+        pic = self.picture("photo.jpg", size=(400, 300))
+        r = convert("resize", "200", str(pic))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(Image.open(self.dir / "photo (200 wide).jpg").size, (200, 150))
+        r = convert("resize", "25%", str(pic))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(Image.open(self.dir / "photo (25%).jpg").size, (100, 75))
+        r = convert("resize", "800", str(pic))
+        self.assertNotEqual(r.returncode, 0, "never larger")
+        r = convert("resize", "abc", str(pic))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(Image.open(pic).size, (400, 300), "the original stays")
 
 
 if __name__ == "__main__":

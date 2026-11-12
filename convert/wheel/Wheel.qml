@@ -61,11 +61,17 @@ Window {
                                     crop: "Crop", redact: "Black out", background: "Background", "rotate-left": "Rotate left",
                                     "rotate-right": "Rotate right", split: "Split pages", merge: "Merge PDFs", trim: "Trim",
                                     annotate: "Annotate", bleep: "Bleep", "split-media": "Split", join: "Join in name order",
-                                    smaller: "Smaller", clean: "Remove details", "hide-private": "Find private text" })
+                                    smaller: "Smaller", clean: "Remove details", "hide-private": "Find private text",
+                                    odt: "ODT", "open-editor": "Text editor", extract: "Extract here", "pdf-combine": "One PDF",
+                                    searchable: "Searchable", resize: "Resize", "copy-path": "Copy path",
+                                    "resize:50%": "Half size", "resize:1920": "1920 wide", "resize:1280": "1280 wide",
+                                    "resize:800": "800 wide" })
     // A theme icon for each edit, so a slot is recognised before it is read. Formats stay as words.
     readonly property var icons: ({ more: "overflow-menu", crop: "transform-crop", annotate: "draw-freehand", redact: "view-hidden",
                                     background: "color-fill", smaller: "view-restore", clean: "document-cleanup", "hide-private": "document-scan",
-                                    "rotate-left": "object-rotate-left", "rotate-right": "object-rotate-right",
+                                    "rotate-left": "object-rotate-left", "rotate-right": "object-rotate-right", "open-editor": "document-edit",
+                                    extract: "archive-extract", "pdf-combine": "x-office-document", searchable: "document-scan",
+                                    resize: "transform-scale", "copy-path": "edit-copy",
                                     trim: "edit-cut", "split-media": "view-split-left-right", split: "view-split-left-right",
                                     bleep: "audio-volume-muted", join: "media-playlist-append", merge: "media-playlist-append",
                                     "zip-all": "archive-insert", zip: "archive-insert" })
@@ -73,6 +79,7 @@ Window {
     function label(f) {
         if (!edit && isPdf() && f === "png") return "PNG pages"
         if (!edit && isVideo() && f === "mp3") return "MP3 audio"
+        if (!edit && isText() && f === "docx") return "Word"   // from plain text nothing is lost
         if (!edit && f === "zip" && files.length > 1) return "ZIP each"
         return names[f] || f.toUpperCase()   // an unknown format name is written as formats are
     }
@@ -82,7 +89,7 @@ Window {
                     avif: "image-x-generic", pdf: "x-office-document", "smaller-pdf": "x-office-document", mp3: "audio-mpeg",
                     wav: "audio-x-wav", flac: "audio-flac", ogg: "audio-ogg", opus: "audio-x-generic", m4a: "audio-mp4",
                     mp4: "video-mp4", mkv: "video-x-matroska", webm: "video-webm", zip: "application-zip",
-                    "zip-all": "application-zip", docx: "x-office-document", text: "text-x-generic" }
+                    "zip-all": "application-zip", docx: "x-office-document", odt: "x-office-document", text: "text-x-generic" }
         if (m[f]) return m[f]
         if (String(f).indexOf("smaller") === 0) return "view-restore"
         return ""
@@ -95,19 +102,25 @@ Window {
                     clean: "Save a copy without hidden details such as location", trim: "Open the trim window",
                     "split-media": "Open the split window", bleep: "Open the bleep window", join: "Join them in name order",
                     merge: "Merge the PDFs in name order", more: "Show more choices", split: "Save each page as its own PDF",
-                    "rotate-left": "Save a copy turned left", "rotate-right": "Save a copy turned right" }
+                    "rotate-left": "Save a copy turned left", "rotate-right": "Save a copy turned right",
+                    "open-editor": "Open it in the text editor", extract: "Unpack it into a folder beside it",
+                    "pdf-combine": "Put the pictures into one PDF, in the order you picked them",
+                    searchable: "Save a copy whose words can be found and copied", resize: "Choose a width",
+                    "copy-path": "Copy where the file is to the clipboard" }
         if (d[f]) return d[f]
         if (String(f).indexOf("smaller") === 0) return "Save a smaller copy"
         return "Save a copy as " + label(f)
     }
     function ext() { return files.length ? String(files[0]).split(".").pop().toLowerCase() : "" }
     function isPdf() { return ext() === "pdf" }
+    function isText() { return ["txt", "text", "log", "md", "markdown", "rst", "csv", "tsv", "json", "xml", "yaml", "yml",
+                                "ini", "conf", "cfg"].indexOf(ext()) >= 0 }
     // iPhone photos: the HEVC decoder is not in Fedora (patented), so there is no honest way to offer them yet.
     function isHeic() { return ["heic", "heif"].indexOf(ext()) >= 0 }
     // What the hint says when the ring is empty.
     function emptyHint() {
         if (!files.length) return "Move the file you are dragging over the wheel, or press Esc"
-        if (edit) return "Edits work on pictures, PDFs, sound and video"
+        if (edit) return "Edits work on pictures, PDFs, sound, video and text files"
         if (isHeic()) return "iPhone HEIC photos can't be converted yet: Fedora has no decoder for them"
         return "This file can't be converted yet"
     }
@@ -121,7 +134,9 @@ Window {
     readonly property var effects: ({ crop: "Choose what to keep", annotate: "Draw and write on it", redact: "Cover parts in black",
                                       "hide-private": "Suggest boxes over private text", background: "Set it on a colour",
                                       smaller: "Choose how much smaller", clean: "A copy without hidden details",
-                                      "rotate-left": "A copy turned left", "rotate-right": "A copy turned right",
+                                      "rotate-left": "A copy turned left", "rotate-right": "A copy turned right", "open-editor": "Change the words", extract: "Unpack into a folder",
+                                      "pdf-combine": "A page per picture", searchable: "Words you can find",
+                                      resize: "Choose a width", "copy-path": "Paste it anywhere",
                                       trim: "Keep one part", "split-media": "Cut it in two", bleep: "A tone over words",
                                       join: "One file, in name order", merge: "One PDF, in name order",
                                       split: "One PDF per page", more: "More choices", zip: "Put it in a ZIP",
@@ -172,6 +187,10 @@ Window {
             const big = urls.every(u => wheel.totalBytes([u]) > 10000000), huge = urls.every(u => wheel.totalBytes([u]) > 25000000)
             formats = ["smaller:light", "smaller:medium", "smaller:strong"]
                       .concat(big ? ["smaller:10mb"] : []).concat(huge ? ["smaller:25mb"] : []); rest = []
+        } else if (edit && formats[i] === "resize") {
+            // Resize asks for a width first, like Smaller asks how much.
+            files = urls; clickMode = true; hover = -1; levelMode = true
+            formats = ["resize:50%", "resize:1920", "resize:1280", "resize:800"]; rest = []
         } else {
             // The level ring's choices convert, also when it was opened from the edit wheel.
             if (edit && String(formats[i]).indexOf("smaller:") !== 0) wheel.runTool(formats[i], urls)
@@ -482,7 +501,11 @@ Window {
                     // Actions get an icon; a format is its name, set large (the theme's file icons looked alike).
                     readonly property bool isFormat: win.targets.indexOf(slotItem.modelData) >= 0
                     readonly property string iconName: win.edit ? (win.icons[slotItem.modelData] || "") : ""
-                    width: Math.max(118, 128 * win.k)   // wide enough for "Find private text" on one line
+                    // The edit wheel's is wide enough for "Find private text" on one line in a top or bottom
+                    // slot. Slots to the sides are narrower, and the format wheel's words are larger, so there a
+                    // long label ("Zip together", "Remove details") wraps instead of touching the slot's edges.
+                    width: (win.edit ? Math.max(118, 128 * win.k) : Math.max(92, 100 * win.k))
+                           * (Math.abs(Math.sin(slotItem.mid)) > 0.9 ? 1 : 0.75)
                     x: win.outerR + slotItem.r * Math.cos(slotItem.mid) - width / 2
                     y: slotItem.ym - height / 2
                     spacing: 5

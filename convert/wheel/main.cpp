@@ -29,6 +29,8 @@
 #include <QQmlContext>
 #include <QQuickImageProvider>
 #include <QQuickWindow>
+#include <QClipboard>
+#include <QMimeDatabase>
 #include <QMouseEvent>
 #include <QRegion>
 #include <QStandardPaths>
@@ -42,6 +44,17 @@
 static const QString Service = QStringLiteral("org.arkaos.Wheel");
 static const QString Path = QStringLiteral("/Wheel");
 
+// ZIP and TAR archives, which "Extract here" unpacks (ARCHIVE_SUFFIXES in arka-convert).
+static bool isArchive(const QString &path)
+{
+    static const QStringList suffixes{".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz"};
+    const QString name = QFileInfo(path).fileName().toLower();
+    for (const QString &s : suffixes)
+        if (name.endsWith(s) && name.size() > s.size())
+            return true;
+    return false;
+}
+
 // The formats each kind of file can become, in wheel order. Every entry must
 // also be a target in arka-convert, which checks the request again anyway.
 static QStringList formatsForFile(const QString &path)
@@ -50,8 +63,13 @@ static QStringList formatsForFile(const QString &path)
     static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
     static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
     static const QStringList office{"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"};
+    // The same list as TEXT in arka-convert.
+    static const QStringList text{"txt", "text", "log", "md", "markdown", "rst", "csv", "tsv", "json", "xml", "yaml",
+                                  "yml", "ini", "conf", "cfg"};
     QString ext = QFileInfo(path).suffix().toLower();
     QStringList out;
+    if (isArchive(path))
+        return {"extract"};   // the same list as ARCHIVE_SUFFIXES in arka-convert
     if (image.contains(ext))
         out = {"png", "jpg", "webp", "avif", "pdf", "smaller-image", "text", "tiff", "bmp", "zip"};
     else if (audio.contains(ext))
@@ -62,6 +80,8 @@ static QStringList formatsForFile(const QString &path)
         out = {"png", "smaller-pdf", "docx", "text", "zip"};
     else if (office.contains(ext))
         out = {"pdf", "zip"};
+    else if (text.contains(ext))
+        out = {"docx", "pdf", "odt", "zip"};
     else if (QFileInfo(path).isFile())
         out = {"zip"}; // any other file can still be put in a ZIP
     out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext == "tif" ? QStringLiteral("tiff") : ext); // not the format it already is
@@ -86,21 +106,27 @@ static QStringList toolsForFile(const QString &path)
     const QString ext = QFileInfo(path).suffix().toLower();
     QStringList out;
     if (image.contains(ext)) {
-        out = {"crop", "annotate", "redact", "hide-private", "smaller", "background", "clean", "rotate-left",
+        out = {"crop", "annotate", "redact", "hide-private", "smaller", "resize", "background", "clean", "rotate-left",
                "rotate-right"};
+        if (ext == QLatin1String("avif"))
+            out.removeAll(QStringLiteral("resize"));   // resize keeps the format, and Pillow writes no AVIF
         if (ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp")
             out.removeAll(QStringLiteral("smaller"));   // animated and old formats are left alone
     } else if (ext == "pdf") {
-        out = {"split", "smaller", "clean"};
+        out = {"split", "smaller", "searchable", "clean"};
     } else if (audio.contains(ext)) {
         out = {"trim", "split-media", "bleep", "smaller", "clean"};
     } else if (video.contains(ext)) {
         out = {"trim", "crop", "redact", "bleep", "smaller", "split-media", "clean"};
+    } else if (QMimeDatabase().mimeTypeForFile(path).inherits(QStringLiteral("text/plain"))) {
+        out = {"open-editor"};   // any text file (notes, Markdown, code) is edited in the text editor
     }
     if (!trimmable.contains(ext))
         out.removeAll(QStringLiteral("trim"));
     if (!cleanable.contains(ext))
         out.removeAll(QStringLiteral("clean"));
+    if (QFileInfo(path).isFile())
+        out << QStringLiteral("copy-path");   // last: behind "More" when the ring is full
     return out;
 }
 
@@ -188,9 +214,14 @@ public:
         // does not depend on what the others share. It comes first, so it keeps the same place
         // on the ring each time.
         if (urls.size() >= 2) {
-            bool all = true;
-            for (const QUrl &u : urls)
+            bool all = true, pictures = true;
+            for (const QUrl &u : urls) {
                 all = all && QFileInfo::exists(u.toLocalFile());
+                pictures = pictures && kindOf(u.toLocalFile()) == QLatin1String("image");
+            }
+            // Several pictures can become one PDF, a page each, in the order they were picked.
+            if (pictures)
+                common.prepend(QStringLiteral("pdf-combine"));
             if (all)
                 common.prepend(QStringLiteral("zip-all"));
         }
@@ -219,6 +250,11 @@ public:
                 allClean = allClean && one.contains(QStringLiteral("clean"));
             }
             QStringList multi;
+            bool allResize = true;
+            for (const QUrl &u : urls)
+                allResize = allResize && toolsForFile(u.toLocalFile()).contains(QStringLiteral("resize"));
+            if (kind == QLatin1String("image") && allResize)
+                multi << QStringLiteral("resize");
             if (kind == QLatin1String("pdf"))
                 multi << QStringLiteral("merge");
             else if (kind == QLatin1String("audio") || kind == QLatin1String("video"))
@@ -284,6 +320,16 @@ public:
             QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"join-media"} + files);
         } else if (tool == QLatin1String("clean"))
             QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"clean"} + files);
+        else if (tool.startsWith(QLatin1String("resize:")))
+            QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"resize", tool.mid(7)} + files);
+        else if (tool == QLatin1String("searchable"))
+            QProcess::startDetached(QStringLiteral("arka-convert"), {"searchable", files.first()});
+        else if (tool == QLatin1String("copy-path"))
+            // The wheel keeps running, so the clipboard keeps the text after the ring closes.
+            QGuiApplication::clipboard()->setText(files.join(QLatin1Char('\n')));
+        else if (tool == QLatin1String("open-editor"))
+            // KWrite, not the default app: ArkaOS opens text files in LibreOffice Writer by default.
+            QProcess::startDetached(QStringLiteral("kwrite"), {files.first()});
         else if (tool == QLatin1String("rotate-left"))
             QProcess::startDetached(QStringLiteral("arka-convert"), {"rotate", files.first(), "left"});
         else if (tool == QLatin1String("rotate-right"))

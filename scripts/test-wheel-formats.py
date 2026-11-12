@@ -27,7 +27,8 @@ def wheel_slots():
     slots = {}
     for kind, cond in (("image", "image.contains(ext)"), ("audio", "audio.contains(ext)"),
                        ("video", "video.contains(ext)"), ("pdf", 'ext == "pdf"'),
-                       ("office", "office.contains(ext)"), ("other", "QFileInfo(path).isFile()")):
+                       ("office", "office.contains(ext)"), ("text", "text.contains(ext)"),
+                       ("other", "QFileInfo(path).isFile()")):
         m = re.search(re.escape(cond) + r"\)\s*out = \{([^}]*)\};", SOURCE)
         slots[kind] = re.findall(r'"([^"]+)"', m.group(1))
     return slots
@@ -46,9 +47,16 @@ def targets(filename):
 
 
 class WheelFormatsTest(unittest.TestCase):
+    def test_archives_offer_extract_and_arka_convert_accepts_it(self):
+        suffixes = re.findall(r'"([^"]+)"', re.search(r"static const QStringList suffixes\{([^}]*)\}", SOURCE).group(1))
+        for s in suffixes:
+            with self.subTest(suffix=s):
+                self.assertIn("extract", targets(f"archive{s}"))
+        self.assertIn('return {"extract"};', SOURCE)
+
     def test_every_wheel_slot_is_accepted_by_arka_convert(self):
         exts = {"image": cpp_list("image"), "audio": cpp_list("audio"), "video": cpp_list("video"), "pdf": ["pdf"],
-                "office": cpp_list("office"), "other": ["txt"]}
+                "office": cpp_list("office"), "text": cpp_list("text"), "other": ["dat"]}
         for kind, slots in wheel_slots().items():
             for ext in exts[kind]:
                 accepted = targets(f"file.{ext}")
@@ -110,7 +118,7 @@ class EditToolsTest(unittest.TestCase):
         for tool in self.tools():
             with self.subTest(tool=tool):
                 # "smaller" opens the level ring in the QML, which then converts.
-                self.assertTrue(tool in handled or (tool == "smaller" and 'formats[i] === "smaller"' in qml), tool)
+                self.assertTrue(tool in handled or (tool in ("smaller", "resize") and f'formats[i] === "{tool}"' in qml), tool)
 
     def test_edit_window_knows_every_windowed_tool(self):
         run = re.search(r"Q_INVOKABLE void runTool\(.*?\n    }\n", SOURCE, re.S).group(0)
