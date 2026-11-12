@@ -77,6 +77,7 @@ function addBar(screen, launcher) {
     bar.addWidget('org.kde.plasma.panelspacer');
     bar.addWidget('org.arkaos.search');
     bar.addWidget('org.arkaos.statuspill');
+    bar.addWidget('org.arkaos.quicksettings');
     addSpaces(bar);
     var tray = bar.addWidget('org.kde.plasma.systemtray');
     // Leave out tray entries a new account doesn't need: KDE Connect (off by
@@ -231,10 +232,39 @@ for (var n3 = 0; n3 < screenCount; n3++) {
     }
 }
 
+// --- Bars made before quick settings ------------------------------------------------
+// Once per screen: an existing bar gets the quick-settings button right after the status pill. A user who
+// removes it later keeps it removed (the screen's desktop remembers this was done).
+for (var q4 = 0; keepPanels && q4 < all.length; q4++) {
+    var bar4 = all[q4];
+    var desk4 = desktopOnScreen(bar4.screen);
+    if (bar4.location != 'top' || !desk4) {
+        continue;
+    }
+    desk4.currentConfigGroup = ['General'];
+    if (desk4.readConfig('arkaBarV4', '') == 'done') {
+        continue;
+    }
+    var pillAt = indexOfType(bar4, 'org.arkaos.statuspill');
+    if (pillAt >= 0 && indexOfType(bar4, 'org.arkaos.quicksettings') < 0) {
+        var qs = bar4.addWidget('org.arkaos.quicksettings');
+        try { qs.index = pillAt + 1; } catch (e) {}
+    }
+    desk4.currentConfigGroup = ['General'];
+    desk4.writeConfig('arkaBarV4', 'done');
+}
+for (var n4 = 0; n4 < screenCount; n4++) {
+    var madeDesk4 = desktopOnScreen(n4);
+    if (madeDesk4) {
+        madeDesk4.currentConfigGroup = ['General'];
+        madeDesk4.writeConfig('arkaBarV4', 'done');
+    }
+}
+
 // --- One of each --------------------------------------------------------------------
 // Whatever ran before, a bar never keeps two wordmarks, search buttons or status pills: the first of
 // each stays. This heals bars that an earlier version of this script added them to twice.
-var onceOnly = ['org.arkaos.brand', 'org.arkaos.search', 'org.arkaos.statuspill'];
+var onceOnly = ['org.arkaos.brand', 'org.arkaos.search', 'org.arkaos.statuspill', 'org.arkaos.quicksettings'];
 for (var dq = 0; keepPanels && dq < all.length; dq++) {
     if (all[dq].location != 'top') { continue; }
     for (var oi = 0; oi < onceOnly.length; oi++) {

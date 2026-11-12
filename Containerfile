@@ -496,6 +496,7 @@ COPY plasma-launcher /usr/share/plasma/plasmoids/org.arkaos.launcher
 COPY plasma-brand /usr/share/plasma/plasmoids/org.arkaos.brand
 COPY plasma-search /usr/share/plasma/plasmoids/org.arkaos.search
 COPY plasma-statuspill /usr/share/plasma/plasmoids/org.arkaos.statuspill
+COPY plasma-quicksettings /usr/share/plasma/plasmoids/org.arkaos.quicksettings
 COPY plasma-spaces /usr/share/plasma/plasmoids/org.arkaos.spaces
 # Apps pinned in the launcher for a new account. Fedora's kde-settings pins
 # Kontact and KWrite through its own kicker-extra-favoritesrc; /etc/xdg comes
