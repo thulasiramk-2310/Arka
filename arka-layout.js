@@ -40,6 +40,10 @@ function trayItems(tray) {
 // (about two grid units): asking for 28 gives the minimum, not 28, and a test session with
 // large fallback fonts showed 48. So this is a request, and the bar's real height follows the
 // font. Setting a height above the minimum (64) does work.
+// Tray entries that quick settings (org.arkaos.quicksettings) also offers.
+var QS_COVERS = ['org.kde.plasma.volume', 'org.kde.plasma.networkmanagement',
+    'org.kde.plasma.brightness', 'org.kde.plasma.bluetooth'];
+
 var BAR_HEIGHT = 36;   // room for the round search button and the status pill
 var OLD_BAR_HEIGHT = 34;
 
@@ -94,6 +98,9 @@ function addBar(screen, launcher) {
             'org.kde.plasma.notifications', 'org.kde.plasma.printmanager', 'org.kde.plasma.volume'];
         trayBox.currentConfigGroup = ['General'];
         trayBox.writeConfig('extraItems', shown);
+        // Quick settings covers these, so their icons wait under the tray's arrow instead of showing twice.
+        // They stay loaded: the volume and brightness keys and their pop-ups keep working.
+        trayBox.writeConfig('hiddenItems', QS_COVERS);
         trayBox.writeConfig('knownItems',
             shown.concat(['org.kde.kdeconnect', 'org.kde.plasma.vault', 'org.kde.plasma.weather']));
     }
@@ -258,6 +265,41 @@ for (var n4 = 0; n4 < screenCount; n4++) {
     if (madeDesk4) {
         madeDesk4.currentConfigGroup = ['General'];
         madeDesk4.writeConfig('arkaBarV4', 'done');
+    }
+}
+
+// --- Trays made before quick settings hid its duplicates ---------------------------
+// Once per screen: the four entries quick settings covers move under the tray's arrow. A user who shows
+// one again keeps it shown (the screen's desktop remembers this was done).
+for (var q5 = 0; keepPanels && q5 < all.length; q5++) {
+    var bar5 = all[q5];
+    var desk5 = desktopOnScreen(bar5.screen);
+    if (bar5.location != 'top' || !desk5) {
+        continue;
+    }
+    desk5.currentConfigGroup = ['General'];
+    if (desk5.readConfig('arkaBarV5', '') == 'done') {
+        continue;
+    }
+    if (indexOfType(bar5, 'org.arkaos.quicksettings') >= 0) {
+        bar5.widgets().filter(function (w) { return w.type == 'org.kde.plasma.systemtray'; }).forEach(function (tray5) {
+            var box5 = trayItems(tray5);
+            if (!box5) { return; }
+            box5.currentConfigGroup = ['General'];
+            var hidden5 = box5.readConfig('hiddenItems', []);
+            if (typeof hidden5 == 'string') { hidden5 = hidden5 ? hidden5.split(',') : []; }
+            QS_COVERS.forEach(function (id) { if (hidden5.indexOf(id) < 0) { hidden5.push(id); } });
+            box5.writeConfig('hiddenItems', hidden5);
+        });
+    }
+    desk5.currentConfigGroup = ['General'];
+    desk5.writeConfig('arkaBarV5', 'done');
+}
+for (var n5 = 0; n5 < screenCount; n5++) {
+    var madeDesk5 = desktopOnScreen(n5);
+    if (madeDesk5) {
+        madeDesk5.currentConfigGroup = ['General'];
+        madeDesk5.writeConfig('arkaBarV5', 'done');
     }
 }
 

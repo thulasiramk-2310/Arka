@@ -255,6 +255,28 @@ PlasmoidItem {
             PlasmaComponents.Label { visible: !(root.bright >= 0 && root.brightMax > 0); text: i18n("Not adjustable here"); font: Kirigami.Theme.smallFont; opacity: 0.8 }
         }
 
+        RowLayout {   // the full lists live in ArkaOS's own Wi-Fi and Bluetooth windows
+            Layout.fillWidth: true
+            PlasmaComponents.ToolButton {
+                Layout.fillWidth: true
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+                enabled: root.wifi === "on" || root.wifi === "off"
+                text: i18n("Wi-Fi networks…")
+                icon.name: "network-wireless-symbolic"
+                onClicked: root.launch("arka-wifi")
+            }
+            PlasmaComponents.ToolButton {
+                Layout.fillWidth: true
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+                enabled: root.bt === "on" || root.bt === "off"
+                text: i18n("Bluetooth devices…")
+                icon.name: "network-bluetooth-symbolic"
+                onClicked: root.launch("arka-bluetooth")
+            }
+        }
+
         Kirigami.Separator { Layout.fillWidth: true }
         RowLayout {
             Layout.fillWidth: true
