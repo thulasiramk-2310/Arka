@@ -66,6 +66,12 @@ RUN git clone --quiet --depth 1 --branch "$VARA_TAG" https://github.com/thulasir
 # about a minute and a half (the layer diff walks the whole image), so the
 # final stage takes each tree in ONE step instead of ~35. COPY into an empty
 # stage is near-instant.
+# The boot menu theme (fonts need grub2-mkfont, images need ImageMagick; neither ships).
+FROM docker.io/library/fedora:${FEDORA_VERSION} AS grub-theme-builder
+RUN dnf install -y -q --setopt=retries=25 grub2-tools-extra rsms-inter-fonts ImageMagick fontconfig
+COPY grub-theme-arkaos/ /src/
+RUN sh /src/make-theme.sh "" /out && ls /out/theme.txt /out/sans-18.pf2 /out/select_c.png
+
 FROM scratch AS files
 COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
@@ -435,11 +441,15 @@ RUN plymouth-set-default-theme arkaos && \
     mkdir -p /usr/lib/bootc/kargs.d && \
     printf 'kargs = ["rhgb", "quiet", "plymouth.ignore-serial-consoles"]\n' > /usr/lib/bootc/kargs.d/10-arkaos-splash.toml
 
-# Keep the boot screen clean from power-on to setup: hide the GRUB menu (it
-# still waits 1s; hold Esc to show it; bootupd's menu_show_once still forces
-# it when set) and keep kernel/udev chatter off the screen.
-RUN printf 'set timeout_style=hidden\nset timeout=1\n' \
-      > /usr/lib/bootupd/grub2-static/configs.d/12_arka_menu_hidden.cfg && \
+# The boot menu: shown for 5 s, centred, in the ArkaOS theme (grub-theme-arkaos). New installs
+# get the drop-in in grub.cfg; arka-grub-theme.service copies the theme to /boot and updates the
+# block on machines installed earlier (bootupd never rewrites grub.cfg on updates).
+COPY grub-theme-arkaos/12_arka_menu.cfg /usr/lib/bootupd/grub2-static/configs.d/12_arka_menu.cfg
+COPY --from=grub-theme-builder /out/ /usr/lib/arkaos/grub-theme/
+COPY grub-theme-arkaos/arka-grub-theme /usr/libexec/arka-grub-theme
+COPY grub-theme-arkaos/arka-grub-theme.service /usr/lib/systemd/system/arka-grub-theme.service
+# Keep kernel and udev chatter off the boot screen.
+RUN systemctl enable arka-grub-theme.service && \
     printf 'kargs = ["loglevel=3", "rd.udev.log_level=3"]\n' > /usr/lib/bootc/kargs.d/11-arkaos-quiet.toml
 
 # Build the UKI only after the final initramfs and OS identity are ready.

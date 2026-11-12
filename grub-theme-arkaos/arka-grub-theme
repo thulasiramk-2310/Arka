@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+"""Keep the ArkaOS boot menu theme in /boot, where GRUB can read it, and turn the menu on.
+
+bootupd writes /boot/grub2/grub.cfg only when the system is installed, from the drop-ins in
+/usr/lib/bootupd/grub2-static/configs.d. Updates never touch /boot, so this runs at every boot:
+  1. copies the theme from /usr/lib/arkaos/grub-theme to /boot/grub2/themes/arkaos if it differs;
+  2. replaces the ArkaOS block in grub.cfg (the old hidden-menu block, or an older copy of this one)
+     with the image's current 12_arka_menu.cfg, only if it differs.
+grub.cfg is changed only between our own BEGIN/END markers, checked with grub2-script-check
+first, written to a temporary file and renamed into place, so a failure leaves the old file.
+If the theme files are missing GRUB keeps its text menu (12_arka_menu.cfg checks for them).
+"""
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+SRC_THEME = "/usr/lib/arkaos/grub-theme"
+DROPIN = "/usr/lib/bootupd/grub2-static/configs.d/12_arka_menu.cfg"
+OLD_NAMES = ("12_arka_menu_hidden.cfg", "12_arka_menu.cfg")
+
+
+def log(msg):
+    print(f"arka-grub-theme: {msg}", flush=True)
+
+
+def write_atomic(path, data, mode):
+    tmp = path + ".arka-tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def sync_theme(grubdir):
+    dest = os.path.join(grubdir, "themes", "arkaos")
+    os.makedirs(dest, exist_ok=True)
+    changed = 0
+    for name in sorted(os.listdir(SRC_THEME)):
+        src = os.path.join(SRC_THEME, name)
+        dst = os.path.join(dest, name)
+        new = open(src, "rb").read()
+        if os.path.exists(dst) and open(dst, "rb").read() == new:
+            continue
+        write_atomic(dst, new, 0o644)
+        changed += 1
+    for name in os.listdir(dest):   # files a newer theme no longer has
+        if not os.path.exists(os.path.join(SRC_THEME, name)):
+            os.remove(os.path.join(dest, name))
+            changed += 1
+    return changed
+
+
+def new_block():
+    body = open(DROPIN, encoding="utf-8").read()
+    if not body.endswith("\n"):
+        body += "\n"
+    return f"### BEGIN 12_arka_menu.cfg ###\n{body}### END 12_arka_menu.cfg ###\n"
+
+
+def updated_config(text, block):
+    """grub.cfg with the ArkaOS block replaced, or None when there is no ArkaOS block to replace."""
+    for name in OLD_NAMES:
+        pat = re.compile(r"### BEGIN %s ###\n.*?### END %s ###\n" % (re.escape(name), re.escape(name)), re.S)
+        found = pat.findall(text)
+        if len(found) == 1:
+            return text.replace(found[0], block)
+    return None
+
+
+def update_config(grubdir):
+    cfg = os.path.join(grubdir, "grub.cfg")
+    if not os.path.isfile(cfg):
+        log("no grub.cfg; nothing to do")
+        return False
+    text = open(cfg, encoding="utf-8").read()
+    new = updated_config(text, new_block())
+    if new is None:
+        log("grub.cfg has no ArkaOS block; left as it is")
+        return False
+    if new == text:
+        return False
+    check = shutil.which("grub2-script-check")
+    if check:
+        r = subprocess.run([check], input=new.encode(), capture_output=True)
+        if r.returncode != 0:
+            log("new grub.cfg failed grub2-script-check; left as it is: " + r.stderr.decode(errors="replace").strip())
+            return False
+    write_atomic(cfg, new.encode(), os.stat(cfg).st_mode & 0o777)
+    return True
+
+
+def main(grubdir="/boot/grub2"):
+    if not os.path.isdir(grubdir) or not os.path.isdir(SRC_THEME) or not os.path.isfile(DROPIN):
+        log("missing /boot/grub2, the theme or the drop-in; nothing to do")
+        return 0
+    n = sync_theme(grubdir)
+    c = update_config(grubdir)
+    os.sync()
+    log(f"theme files updated: {n}; boot menu config {'updated' if c else 'unchanged'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(*sys.argv[1:]))

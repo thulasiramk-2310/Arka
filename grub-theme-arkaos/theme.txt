@@ -1,0 +1,55 @@
+# ArkaOS boot menu. Rendered by make-theme.sh; installed to /boot/grub2/themes/arkaos by
+# arka-grub-theme.service. The colours match the boot splash and the dark login screen.
+title-text: ""
+desktop-color: "#07080e"
+terminal-font: "ArkaSans Regular 14"
+terminal-left: "10%"
+terminal-top: "10%"
+terminal-width: "80%"
+terminal-height: "80%"
+
++ image {
+    left = 50%-56
+    top = 20%
+    file = "logo.png"
+}
+
++ boot_menu {
+    left = 50%-300
+    top = 20%+150
+    width = 600
+    height = 45%
+    item_font = "ArkaSans Regular 18"
+    selected_item_font = "ArkaSansBold Regular 18"
+    item_color = "#a8afba"
+    selected_item_color = "#eef0f3"
+    item_height = 36
+    item_padding = 16
+    item_spacing = 18
+    icon_width = 0
+    icon_height = 0
+    item_icon_space = 0
+    selected_item_pixmap_style = "select_*.png"
+    scrollbar = false
+}
+
++ label {
+    id = "__timeout__"
+    left = 0
+    top = 100%-96
+    width = 100%
+    align = "center"
+    color = "#a8afba"
+    font = "ArkaSans Regular 14"
+    text = "Starting the selected system in %d s"
+}
+
++ label {
+    left = 0
+    top = 100%-64
+    width = 100%
+    align = "center"
+    color = "#6b7380"
+    font = "ArkaSans Regular 14"
+    text = "Arrow keys to choose, Enter to start, E to edit the start options"
+}

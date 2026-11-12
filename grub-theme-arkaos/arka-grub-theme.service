@@ -1,0 +1,16 @@
+[Unit]
+Description=Keep the ArkaOS boot menu theme in /boot
+ConditionPathIsDirectory=/boot/grub2
+RequiresMountsFor=/boot
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# /boot may be mounted read-only. Make it writable only in this service's own mount namespace,
+# as ostree does, so the rest of the system never sees /boot writable. The remount and the copy
+# run in one process: each Exec line gets its own namespace, so a remount in ExecStartPre is lost.
+PrivateMounts=yes
+ExecStart=/bin/sh -c 'touch /boot/grub2/.arka-w 2>/dev/null && rm -f /boot/grub2/.arka-w || mount -o remount,rw /boot; exec /usr/libexec/arka-grub-theme'
+
+[Install]
+WantedBy=multi-user.target
