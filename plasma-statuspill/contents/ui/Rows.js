@@ -2,12 +2,12 @@
 
 // The six checks arkad reports. `kind` says how its value turns into a state.
 var ROWS = [
-    { id: "firewall",  title: "Firewall",            prop: "Firewall",       kind: "bool" },
-    { id: "dns",       title: "Encrypted DNS (DoT)", prop: "DnsStatus",      kind: "dns" },
-    { id: "mac",       title: "MAC randomization",   prop: "MacRandomization", kind: "bool" },
-    { id: "ipv6",      title: "IPv6 privacy",        prop: "Ipv6Privacy",    kind: "bool" },
-    { id: "hostname",  title: "Hostname privacy",    prop: "HostnamePrivacy", kind: "bool" },
-    { id: "sandbox",   title: "Browser sandbox",     prop: "BrowserSandbox", kind: "sandbox" }
+    { id: "dns",       title: "Encrypted DNS (DoT)", name: "Encrypted DNS",            prop: "DnsStatus",      kind: "dns" },
+    { id: "mac",       title: "MAC randomization",   name: "Private network address",  prop: "MacRandomization", kind: "bool" },
+    { id: "hostname",  title: "Hostname privacy",    name: "Computer name",            prop: "HostnamePrivacy", kind: "bool" },
+    { id: "ipv6",      title: "IPv6 privacy",        name: "Temporary IPv6 addresses", prop: "Ipv6Privacy",    kind: "bool" },
+    { id: "sandbox",   title: "Browser sandbox",     name: "Sandboxed browser",        prop: "BrowserSandbox", kind: "sandbox" },
+    { id: "firewall",  title: "Firewall",            name: "Firewall",                 prop: "Firewall",       kind: "bool" }
 ]
 var STALE_SECS = 90   // arkad checks about every 60 s; the tray expires a check after three 30 s polls
 
