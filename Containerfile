@@ -626,6 +626,9 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf install --setopt=keepcache=True -y -q git-core
 COPY --from=files / /
+# Session lock screen (Meta+L): the ArkaOS clock placement. The script stops the build if Plasma's file changed.
+COPY lockscreen/arka-lockscreen-patch.py /tmp/arka-lockscreen-patch.py
+RUN python3 /tmp/arka-lockscreen-patch.py && rm /tmp/arka-lockscreen-patch.py
 RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf && \
     grep -q '^DefaultZone=arkaos' /etc/firewalld/firewalld.conf && \
     chmod 755 /usr/libexec/arka-apply-look /usr/libexec/arka-arm-boot-counter /usr/libexec/arka-stale-trigger-check /usr/libexec/arka-rtc-mode /usr/libexec/arka-hide-system-image /usr/libexec/arka-dns-after-clock /usr/bin/firefox-sandbox /usr/bin/arka-convert /usr/bin/arka && \
