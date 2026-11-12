@@ -1,7 +1,12 @@
 /*
-    The launcher popup: search on top, categories on the left, pinned apps or
-    a category's apps on the right, and the account, privacy status and
-    session buttons along the bottom.
+    The launcher popup: search on top, then the pinned apps, then all apps as an
+    A-Z list or a grid, and the account, privacy status and session buttons along
+    the bottom. There are no categories: people search or scroll the A-Z list, and
+    a category list sorted apps into groups nobody looked in (launcher research,
+    2026-11-12).
+
+    Typing searches apps and settings on this computer only. Ctrl+1 to Ctrl+9
+    open the first nine results; "=" works out a sum, here, without the network.
 
     SPDX-License-Identifier: GPL-3.0-or-later
 */
@@ -20,28 +25,43 @@ import org.kde.plasma.private.sessions as Sessions
 import org.kde.kirigami as Kirigami
 import org.kde.coreaddons as KCoreAddons
 
+import "Calc.js" as Calc
+
 Item {
     id: full
 
-    readonly property int unit: Kirigami.Units.gridUnit
-    Layout.preferredWidth: unit * 40
-    Layout.preferredHeight: unit * 33
-    Layout.minimumWidth: unit * 30
-    Layout.minimumHeight: unit * 24
+    // Typing while a grid, list or button has focus still searches: the key goes to the search field.
+    Keys.onPressed: event => {
+        if (!searchField.activeFocus && event.text.length > 0 && event.text.trim().length > 0
+                && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+            searchField.forceActiveFocus();
+            searchField.insert(searchField.cursorPosition, event.text);
+            event.accepted = true;
+        }
+    }
 
-    // Row of root.rootModel shown on the right. Row 0 is the pinned apps.
-    property int category: 0
+    readonly property int unit: Kirigami.Units.gridUnit
+    Layout.preferredWidth: unit * 36
+    Layout.preferredHeight: unit * 38
+    Layout.minimumWidth: unit * 28
+    Layout.minimumHeight: unit * 26
+
     readonly property bool searching: searchField.text.length > 0
+    // "=12*8", or a bare "12*8" (digits and operators only, so never an app name): a sum, worked out
+    // here. Null when the text is not one.
+    readonly property bool sumAsked: searchField.text.startsWith("=")
+    readonly property var sum: sumAsked ? Calc.evaluate(searchField.text.slice(1))
+        : /[0-9]/.test(searchField.text) && /[0-9.)]\s*[-+*\/%^×÷]/.test(searchField.text) ? Calc.evaluate(searchField.text) : null
+    readonly property bool asGrid: Plasmoid.configuration.allAppsAsGrid
 
     // modelForRow() creates no binding dependency, so `refreshes` is bumped
-    // whenever the root model rebuilds itself.
+    // whenever the root model rebuilds itself. Row 1 is "All Applications".
     property int refreshes: 0
-    readonly property Kicker.AppsModel appsModel: {
+    readonly property Kicker.AppsModel allAppsModel: {
         refreshes;
-        return category > 0 ? root.rootModel.modelForRow(category) : null;
+        return root.rootModel.count > 1 ? root.rootModel.modelForRow(1) : null;
     }
     readonly property var searchModel: root.runnerModel.count ? root.runnerModel.modelForRow(0) : null
-    readonly property Item contentView: searching ? searchView : (category === 0 ? pinnedView : appsView)
 
     // Highlights, tiles and fields share the popups' cut corners (CutRect).
     readonly property real cut: Math.round(Kirigami.Units.smallSpacing * 1.5)
@@ -60,7 +80,7 @@ Item {
         function onExpandedChanged() {
             if (root.expanded) {
                 searchField.text = "";
-                full.category = 0;
+                scroller.contentItem.contentY = 0;
                 searchField.forceActiveFocus();
                 privacy.refresh();
             }
@@ -87,9 +107,8 @@ Item {
         pinMenu.open(x, y);
     }
 
-    function focusContent() {
-        const view = full.contentView;
-        if (view.count > 0) {
+    function focusFirst(view) {
+        if (view && view.count > 0) {
             view.currentIndex = 0;
             view.forceActiveFocus(Qt.TabFocusReason);
         }
@@ -216,328 +235,366 @@ Item {
                 rightPadding: effectiveHorizontalAlignment === TextInput.AlignRight
                     ? _iconWidth + Kirigami.Units.largeSpacing : Kirigami.Units.largeSpacing
 
-                onTextChanged: root.runnerModel.query = text
+                // A sum is not sent to the search: only "=" text is worked out, here.
+                onTextChanged: root.runnerModel.query = text.startsWith("=") ? "" : text
 
-                function openFirstResult() {
-                    if (full.searching && searchView.count > 0) {
-                        full.launch(full.searchModel, 0);
+                function openResult(n) {
+                    if (full.searching && n < searchView.count) {
+                        full.launch(full.searchModel, n);
                     }
                 }
 
-                Keys.onDownPressed: full.focusContent()
-                Keys.onReturnPressed: openFirstResult()
-                Keys.onEnterPressed: openFirstResult()
+                Keys.onDownPressed: full.searching ? full.focusFirst(searchView) : full.focusFirst(pinnedView)
+                Keys.onReturnPressed: openResult(0)
+                Keys.onEnterPressed: openResult(0)
+                // Ctrl+1 .. Ctrl+9 open that result (plain digits are part of what you type).
+                Keys.onPressed: event => {
+                    if ((event.modifiers & Qt.ControlModifier) && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+                        openResult(event.key - Qt.Key_1);
+                        event.accepted = true;
+                    }
+                }
             }
         }
 
-        RowLayout {
+        // --- While typing: the sum, or the results ---------------------------
+        ColumnLayout {
+            visible: full.searching
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
 
-            ListView {
-                id: categories
-
-                Layout.preferredWidth: full.unit * 10
-                Layout.fillHeight: true
+            // "=12*8" -> 96, worked out here. Enter copies it.
+            QQC2.AbstractButton {
+                id: sumRow
+                visible: full.sumAsked || full.sum !== null
+                Layout.fillWidth: true
+                implicitWidth: full.unit * 20
                 Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.smallSpacing
-                Layout.bottomMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                implicitHeight: Math.round(full.unit * 3.2)
+                text: full.sum !== null ? Calc.format(full.sum) : i18nc("@info", "Type a sum, for example =12*8")
+                Accessible.name: full.sum !== null ? i18nc("@info %1 is a number", "Answer %1. Press to copy it", text) : text
+                onClicked: if (full.sum !== null) { clip.text = text; clip.selectAll(); clip.copy(); root.expanded = false; }
+                background: CutRect {
+                    cut: full.cut
+                    color: full.hoverBackground
+                }
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.largeSpacing
+                    PC3.Label {
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        text: "="
+                        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.6
+                        font.weight: Font.DemiBold
+                        opacity: 0.75
+                    }
+                    PC3.Label {
+                        Layout.fillWidth: true
+                        text: sumRow.text
+                        font.pointSize: full.sum !== null ? Kirigami.Theme.defaultFont.pointSize * 1.6 : Kirigami.Theme.defaultFont.pointSize
+                        opacity: full.sum !== null ? 1 : 0.75
+                        elide: Text.ElideRight
+                    }
+                    PC3.Label {
+                        visible: full.sum !== null
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        text: i18nc("@info pressing Enter copies the answer", "Enter copies")
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.75
+                    }
+                }
+                TextEdit { id: clip; visible: false }
+                Connections {
+                    target: searchField
+                    function onAccepted() {
+                        if (sumRow.visible) {
+                            sumRow.clicked();
+                        }
+                    }
+                }
+            }
+
+            ListView {
+                id: searchView
+
+                visible: !searchField.text.startsWith("=")
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 clip: true
                 spacing: 2
+                leftMargin: Kirigami.Units.largeSpacing
+                rightMargin: Kirigami.Units.largeSpacing
                 boundsBehavior: Flickable.StopAtBounds
                 activeFocusOnTab: true
-                keyNavigationWraps: false
-                currentIndex: full.category
-                highlightFollowsCurrentItem: false
-                model: root.rootModel
-                Accessible.name: i18nc("@label", "Categories")
+                model: full.searchModel
+                Accessible.name: i18nc("@label", "Results")
                 Accessible.role: Accessible.List
+                PC3.ScrollBar.vertical: PC3.ScrollBar {}
 
-                Keys.onRightPressed: full.focusContent()
+                Keys.onReturnPressed: full.launch(model, currentIndex)
+                Keys.onEnterPressed: full.launch(model, currentIndex)
                 Keys.onUpPressed: event => {
                     if (currentIndex <= 0) {
                         searchField.forceActiveFocus();
                     } else {
-                        full.category = currentIndex - 1;
-                    }
-                }
-                Keys.onDownPressed: {
-                    if (currentIndex < count - 1) {
-                        full.category = currentIndex + 1;
+                        event.accepted = false;
                     }
                 }
 
-                delegate: QQC2.AbstractButton {
-                    id: categoryButton
+                delegate: AppRow {
+                    view: searchView
+                    // Enter in the search field opens the first result, so it is marked while typing.
+                    marked: index === 0 && searchField.activeFocus
+                    keyHint: index === 0 ? i18nc("@info keyboard key", "Enter")
+                        : index < 9 ? i18nc("@info keyboard shortcut, %1 is a digit", "Ctrl+%1", index + 1) : ""
+                }
 
-                    required property int index
-                    required property var model
-
-                    readonly property bool current: !full.searching && full.category === index
-                    readonly property int appCount: {
-                        full.refreshes;
-                        const model = index > 0 ? root.rootModel.modelForRow(index) : null;
-                        return model ? model.count : 0;
-                    }
-
-                    width: ListView.view.width
-                    height: Math.round(full.unit * 2)
-                    hoverEnabled: true
-                    focusPolicy: Qt.NoFocus
-                    text: index === 0 ? i18nc("@item:inlistbox pinned apps", "Pinned") : model.display
-                    Accessible.role: Accessible.ListItem
-                    // Read as one item ("Office, 13 apps"), not a name then a bare number.
-                    Accessible.name: index > 0
-                        ? i18ncp("@item:inlistbox %2 is a category", "%2, %1 app", "%2, %1 apps", appCount, text)
-                        : text
-                    Accessible.selected: current
-
-                    onClicked: {
-                        searchField.text = "";
-                        full.category = index;
-                    }
-
-                    background: CutRect {
-                        cut: full.cut
-                        color: categoryButton.current ? full.selectedBackground
-                             : (categoryButton.hovered ? full.hoverBackground : "transparent")
-                        borderWidth: categories.activeFocus && categoryButton.current ? 1 : 0
-                        borderColor: Kirigami.Theme.highlightColor
-                    }
-
-                    contentItem: RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PC3.Label {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.largeSpacing
-                            text: categoryButton.text
-                            elide: Text.ElideRight
-                            font.weight: categoryButton.current ? Font.DemiBold : Font.Normal
-                            Accessible.ignored: true
-                        }
-                    }
+                PlasmaExtras.PlaceholderMessage {
+                    anchors.centerIn: parent
+                    width: parent.width - full.unit * 4
+                    visible: full.searching && !root.runnerModel.querying && searchView.count === 0 && !sumRow.visible
+                    text: i18nc("@info:status", "No apps or settings match")
                 }
             }
 
-            Kirigami.Separator {
-                Layout.fillHeight: true
-                Layout.bottomMargin: Kirigami.Units.largeSpacing
+            // Said where it is true: the launcher's search runs only the apps and settings runners.
+            PC3.Label {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+                text: i18nc("@info", "Searches apps and settings on this computer. Nothing you type is sent online.")
+                font: Kirigami.Theme.smallFont
+                opacity: 0.75
+                wrapMode: Text.Wrap
             }
+        }
+
+        // --- Not typing: pinned apps, then all apps ---------------------------
+        PC3.ScrollView {
+            id: scroller
+
+            visible: !full.searching
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            PC3.ScrollBar.horizontal.policy: PC3.ScrollBar.AlwaysOff
 
             ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                width: scroller.availableWidth
                 spacing: 0
 
-                PC3.Label {
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    text: full.searching ? i18nc("@title", "Results")
-                        : (full.category === 0 ? i18nc("@title pinned apps", "Pinned")
-                        : root.rootModel.labelForRow(full.category))
-                    font.weight: Font.DemiBold
-                    opacity: 0.75
-                    Accessible.role: Accessible.Heading
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    PC3.Label {
+                        Layout.fillWidth: true
+                        text: i18nc("@title pinned apps", "Pinned")
+                        font.weight: Font.DemiBold
+                        Accessible.role: Accessible.Heading
+                    }
+                    PC3.ToolButton {
+                        text: Plasmoid.configuration.showRecent ? i18nc("@action:button", "Hide recent") : i18nc("@action:button", "Show recent")
+                        PC3.ToolTip.text: i18nc("@info:tooltip", "Recent apps are kept only on this computer")
+                        PC3.ToolTip.visible: hovered
+                        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: Plasmoid.configuration.showRecent = !Plasmoid.configuration.showRecent
+                    }
                 }
 
-                StackLayout {
+                GridView {
+                    id: pinnedView
+
+                    readonly property int columns: 6
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    currentIndex: full.searching ? 2 : (full.category === 0 ? 0 : 1)
+                    Layout.preferredHeight: Math.max(1, Math.ceil(count / columns)) * cellHeight
+                    interactive: false
+                    leftMargin: Kirigami.Units.largeSpacing
+                    rightMargin: Kirigami.Units.largeSpacing
+                    cellWidth: Math.floor((width - leftMargin - rightMargin) / columns)
+                    cellHeight: Math.round(full.unit * 5.2)
+                    keyNavigationWraps: false
+                    activeFocusOnTab: true
+                    model: root.rootModel.favoritesModel
+                    Accessible.name: i18nc("@label", "Pinned apps")
+                    Accessible.role: Accessible.List
 
-                    ColumnLayout {
-                        spacing: 0
+                    Keys.onReturnPressed: full.launch(model, currentIndex)
+                    Keys.onEnterPressed: full.launch(model, currentIndex)
+                    Keys.onUpPressed: event => {
+                        if (currentIndex < columns) {
+                            searchField.forceActiveFocus();
+                        } else {
+                            event.accepted = false;
+                        }
+                    }
+                    Keys.onDownPressed: event => {
+                        if (currentIndex + columns >= count) {
+                            full.focusFirst(Plasmoid.configuration.showRecent && recentView.count > 0 ? recentView
+                                : (full.asGrid ? allGrid : allList));
+                        } else {
+                            event.accepted = false;
+                        }
+                    }
 
-                    GridView {
-                        id: pinnedView
+                    delegate: AppTile {
+                        view: pinnedView
+                    }
+
+                    PlasmaExtras.PlaceholderMessage {
+                        anchors.centerIn: parent
+                        width: parent.width - full.unit * 4
+                        visible: pinnedView.count === 0
+                        text: i18nc("@info", "No pinned apps")
+                        explanation: i18nc("@info", "Right-click an app and choose Pin.")
+                    }
+                }
+
+                // Recent apps: off until the user turns them on, and only kept on this computer.
+                RowLayout {
+                    visible: Plasmoid.configuration.showRecent
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    PC3.Label {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        text: i18nc("@title recently opened apps", "Recent")
+                        font.weight: Font.DemiBold
+                        Accessible.role: Accessible.Heading
+                    }
+                    PC3.ToolButton {
+                        visible: recentView.count > 0
+                        text: i18nc("@action:button forget the recent apps", "Clear")
+                        PC3.ToolTip.text: i18nc("@info:tooltip", "Forget which apps you opened recently")
+                        PC3.ToolTip.visible: hovered
+                        PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: root.recentModel.trigger(0, "_kicker_forgetAll", null)
+                    }
+                }
+                GridView {
+                    id: recentView
 
-                        readonly property int columns: 4
-                        clip: true
-                        leftMargin: Kirigami.Units.largeSpacing
-                        rightMargin: Kirigami.Units.largeSpacing
-                        cellWidth: Math.floor((width - leftMargin - rightMargin) / columns)
-                        cellHeight: Math.round(full.unit * 5.8)
-                        boundsBehavior: Flickable.StopAtBounds
-                        keyNavigationWraps: false
-                        activeFocusOnTab: true
-                        model: root.rootModel.favoritesModel
-                        Accessible.name: i18nc("@label", "Pinned apps")
-                        Accessible.role: Accessible.List
+                    visible: Plasmoid.configuration.showRecent && count > 0
+                    interactive: false
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? cellHeight : 0
+                    leftMargin: Kirigami.Units.largeSpacing
+                    rightMargin: Kirigami.Units.largeSpacing
+                    cellWidth: Math.floor((width - leftMargin - rightMargin) / 6)
+                    cellHeight: Math.round(full.unit * 5.2)
+                    activeFocusOnTab: true
+                    keyNavigationWraps: false
+                    model: root.recentModel
+                    Accessible.name: i18nc("@label", "Recent apps")
+                    Accessible.role: Accessible.List
+                    // One row of six is shown.
+                    onCurrentIndexChanged: if (currentIndex > 5) currentIndex = 5
+                    Keys.onReturnPressed: full.launch(model, currentIndex)
+                    Keys.onEnterPressed: full.launch(model, currentIndex)
+                    delegate: AppTile {
+                        view: recentView
+                    }
+                }
 
-                        Keys.onReturnPressed: full.launch(model, currentIndex)
-                        Keys.onEnterPressed: full.launch(model, currentIndex)
-                        Keys.onUpPressed: event => {
-                            if (currentIndex < columns) {
-                                searchField.forceActiveFocus();
-                            } else {
-                                event.accepted = false;
-                            }
-                        }
-                        Keys.onLeftPressed: event => {
-                            if (currentIndex % columns === 0) {
-                                categories.forceActiveFocus();
-                            } else {
-                                event.accepted = false;
-                            }
-                        }
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                    Layout.rightMargin: Kirigami.Units.largeSpacing * 2
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                }
 
-                        delegate: AppTile {
-                            view: pinnedView
-                        }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    PC3.Label {
+                        Layout.fillWidth: true
+                        text: i18nc("@title", "All apps")
+                        font.weight: Font.DemiBold
+                        Accessible.role: Accessible.Heading
+                    }
+                    // Grid or A-Z: a choice, remembered (people asked for both; launcher research).
+                    PC3.ToolButton {
+                        text: i18nc("@action:button show all apps as a grid", "Grid")
+                        checkable: true
+                        checked: full.asGrid
+                        onClicked: Plasmoid.configuration.allAppsAsGrid = true
+                        Keys.onReturnPressed: clicked()
+                        Keys.onEnterPressed: clicked()
+                    }
+                    PC3.ToolButton {
+                        text: i18nc("@action:button show all apps as an alphabetical list", "A–Z")
+                        checkable: true
+                        checked: !full.asGrid
+                        onClicked: Plasmoid.configuration.allAppsAsGrid = false
+                        Keys.onReturnPressed: clicked()
+                        Keys.onEnterPressed: clicked()
+                    }
+                }
 
-                        PlasmaExtras.PlaceholderMessage {
-                            anchors.centerIn: parent
-                            width: parent.width - full.unit * 4
-                            visible: pinnedView.count === 0
-                            text: i18nc("@info", "No pinned apps")
-                            explanation: i18nc("@info", "Right-click an app and choose Pin.")
-                        }
+                ListView {
+                    id: allList
+
+                    visible: !full.asGrid
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: contentHeight
+                    interactive: false
+                    spacing: 2
+                    leftMargin: Kirigami.Units.largeSpacing
+                    rightMargin: Kirigami.Units.largeSpacing
+                    activeFocusOnTab: true
+                    model: full.allAppsModel
+                    Accessible.name: i18nc("@label", "All apps")
+                    Accessible.role: Accessible.List
+
+                    section.property: "display"
+                    section.criteria: ViewSection.FirstCharacter
+                    section.delegate: PC3.Label {
+                        required property string section
+                        width: ListView.view.width
+                        leftPadding: Kirigami.Units.largeSpacing * 2
+                        topPadding: Kirigami.Units.smallSpacing
+                        text: section.toUpperCase()
+                        font.weight: Font.Bold
+                        // Text colour, not the accent: the light look's green is about 2.3:1 on the popup.
+                        Accessible.role: Accessible.Heading
                     }
 
-                        // Recent apps: off until the user turns them on, and only kept on this computer.
-                        ColumnLayout {
-                            id: recentStrip
+                    Keys.onReturnPressed: full.launch(model, currentIndex)
+                    Keys.onEnterPressed: full.launch(model, currentIndex)
+                    // The list sits in a scroll view, so keep the current row in sight.
+                    onCurrentItemChanged: if (currentItem && activeFocus) scroller.contentItem.contentY =
+                        Math.max(0, Math.min(currentItem.mapToItem(scroller.contentItem.contentItem, 0, 0).y - full.unit * 4,
+                                             scroller.contentItem.contentHeight - scroller.height))
 
-                            readonly property bool shown: Plasmoid.configuration.showRecent
-
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                                Layout.rightMargin: Kirigami.Units.largeSpacing
-
-                                PC3.Label {
-                                    visible: recentStrip.shown
-                                    text: i18nc("@title recently opened apps", "Recent")
-                                    font.weight: Font.DemiBold
-                                    opacity: 0.75
-                                    Accessible.role: Accessible.Heading
-                                }
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-                                PC3.ToolButton {
-                                    visible: recentStrip.shown && recentView.count > 0
-                                    text: i18nc("@action:button forget the recent apps", "Clear")
-                                    PC3.ToolTip.text: i18nc("@info:tooltip", "Forget which apps you opened recently")
-                                    PC3.ToolTip.visible: hovered
-                                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    onClicked: root.recentModel.trigger(0, "_kicker_forgetAll", null)
-                                }
-                                PC3.ToolButton {
-                                    text: recentStrip.shown ? i18nc("@action:button", "Hide") : i18nc("@action:button", "Show recent apps")
-                                    PC3.ToolTip.text: i18nc("@info:tooltip", "Recent apps are kept only on this computer")
-                                    PC3.ToolTip.visible: hovered
-                                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    onClicked: Plasmoid.configuration.showRecent = !recentStrip.shown
-                                }
-                            }
-
-                            GridView {
-                                id: recentView
-
-                                visible: recentStrip.shown && count > 0
-                                interactive: false
-                                clip: true
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: visible ? cellHeight : 0
-                                leftMargin: Kirigami.Units.largeSpacing
-                                rightMargin: Kirigami.Units.largeSpacing
-                                cellWidth: Math.floor((width - leftMargin - rightMargin) / 4)
-                                cellHeight: Math.round(full.unit * 5.8)
-                                activeFocusOnTab: true
-                                keyNavigationWraps: false
-                                model: root.recentModel
-                                Accessible.name: i18nc("@label", "Recent apps")
-                                Accessible.role: Accessible.List
-
-                                // One row of four is shown.
-                                onCurrentIndexChanged: if (currentIndex > 3) currentIndex = 3
-
-                                Keys.onReturnPressed: full.launch(model, currentIndex)
-                                Keys.onEnterPressed: full.launch(model, currentIndex)
-
-                                delegate: AppTile {
-                                    view: recentView
-                                }
-                            }
-                        }
+                    delegate: AppRow {
+                        view: allList
                     }
+                }
 
-                    ListView {
-                        id: appsView
+                GridView {
+                    id: allGrid
 
-                        clip: true
-                        spacing: 2
-                        leftMargin: Kirigami.Units.largeSpacing
-                        rightMargin: Kirigami.Units.largeSpacing
-                        bottomMargin: Kirigami.Units.largeSpacing
-                        boundsBehavior: Flickable.StopAtBounds
-                        activeFocusOnTab: true
-                        model: full.appsModel
-                        Accessible.role: Accessible.List
-                        PC3.ScrollBar.vertical: PC3.ScrollBar {}
-
-                        Keys.onReturnPressed: full.launch(model, currentIndex)
-                        Keys.onEnterPressed: full.launch(model, currentIndex)
-                        Keys.onLeftPressed: categories.forceActiveFocus()
-                        Keys.onUpPressed: event => {
-                            if (currentIndex <= 0) {
-                                searchField.forceActiveFocus();
-                            } else {
-                                event.accepted = false;
-                            }
-                        }
-
-                        delegate: AppRow {
-                            view: appsView
-                        }
-                    }
-
-                    ListView {
-                        id: searchView
-
-                        clip: true
-                        spacing: 2
-                        leftMargin: Kirigami.Units.largeSpacing
-                        rightMargin: Kirigami.Units.largeSpacing
-                        bottomMargin: Kirigami.Units.largeSpacing
-                        boundsBehavior: Flickable.StopAtBounds
-                        activeFocusOnTab: true
-                        model: full.searchModel
-                        Accessible.role: Accessible.List
-                        PC3.ScrollBar.vertical: PC3.ScrollBar {}
-
-                        Keys.onReturnPressed: full.launch(model, currentIndex)
-                        Keys.onEnterPressed: full.launch(model, currentIndex)
-                        Keys.onUpPressed: event => {
-                            if (currentIndex <= 0) {
-                                searchField.forceActiveFocus();
-                            } else {
-                                event.accepted = false;
-                            }
-                        }
-
-                        delegate: AppRow {
-                            view: searchView
-                            // Enter in the search field opens the first result,
-                            // so it is marked while typing.
-                            marked: index === 0 && searchField.activeFocus
-                        }
-
-                        PlasmaExtras.PlaceholderMessage {
-                            anchors.centerIn: parent
-                            width: parent.width - full.unit * 4
-                            visible: full.searching && !root.runnerModel.querying && searchView.count === 0
-                            text: i18nc("@info:status", "No apps or settings match")
-                        }
+                    visible: full.asGrid
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.max(1, Math.ceil(count / 6)) * cellHeight
+                    interactive: false
+                    leftMargin: Kirigami.Units.largeSpacing
+                    rightMargin: Kirigami.Units.largeSpacing
+                    cellWidth: Math.floor((width - leftMargin - rightMargin) / 6)
+                    cellHeight: Math.round(full.unit * 5.2)
+                    activeFocusOnTab: true
+                    keyNavigationWraps: false
+                    model: full.allAppsModel
+                    Accessible.name: i18nc("@label", "All apps")
+                    Accessible.role: Accessible.List
+                    Keys.onReturnPressed: full.launch(model, currentIndex)
+                    Keys.onEnterPressed: full.launch(model, currentIndex)
+                    onCurrentItemChanged: if (currentItem && activeFocus) scroller.contentItem.contentY =
+                        Math.max(0, Math.min(currentItem.mapToItem(scroller.contentItem.contentItem, 0, 0).y - full.unit * 4,
+                                             scroller.contentItem.contentHeight - scroller.height))
+                    delegate: AppTile {
+                        view: allGrid
                     }
                 }
             }
@@ -739,6 +796,7 @@ Item {
                 elide: Text.ElideRight
                 maximumLineCount: 2
                 wrapMode: Text.Wrap
+                font: Kirigami.Theme.smallFont
             }
             Item {
                 Layout.fillHeight: true
@@ -746,7 +804,7 @@ Item {
         }
     }
 
-    // An app or setting in a list: icon, name, and what it is.
+    // An app or setting in a list: icon, name, what it is, and its key when it has one.
     component AppRow: QQC2.AbstractButton {
         id: row
 
@@ -754,11 +812,12 @@ Item {
         required property var model
         property ListView view
         property bool marked: false
+        property string keyHint: ""
 
         readonly property string details: model.description ?? ""
 
         width: view.width - view.leftMargin - view.rightMargin
-        height: Math.round(full.unit * 2.9)
+        height: Math.round(full.unit * 2.7)
         hoverEnabled: true
         focusPolicy: Qt.NoFocus
         text: model.display
@@ -805,6 +864,20 @@ Item {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
                     opacity: 0.75
+                }
+            }
+            // The key that opens it: "Enter" for the first result, Ctrl+2 .. Ctrl+9 for the next.
+            PC3.Label {
+                visible: row.keyHint !== ""
+                Layout.rightMargin: Kirigami.Units.smallSpacing
+                text: row.keyHint
+                font: Kirigami.Theme.smallFont
+                opacity: 0.75
+                leftPadding: Kirigami.Units.smallSpacing
+                rightPadding: Kirigami.Units.smallSpacing
+                background: Rectangle {
+                    radius: 3
+                    color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
                 }
             }
         }

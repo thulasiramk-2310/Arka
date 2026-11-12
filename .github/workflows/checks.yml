@@ -138,8 +138,10 @@ jobs:
         run: python3 scripts/test-arka-convert.py
       - name: Test the wheel's slots against arka-convert
         run: python3 scripts/test-wheel-formats.py
-      - name: Test the wheel's QML
-        run: QT_QPA_PLATFORM=offscreen /usr/lib64/qt6/bin/qmltestrunner -input scripts/qml/tst_format_wheel.qml
+      - name: Test the wheel's QML and the launcher's calculator
+        run: |
+          QT_QPA_PLATFORM=offscreen /usr/lib64/qt6/bin/qmltestrunner -input scripts/qml/tst_format_wheel.qml
+          QT_QPA_PLATFORM=offscreen /usr/lib64/qt6/bin/qmltestrunner -input scripts/qml/tst_launcher_calc.qml
       - name: Build the edit window and the wheel
         run: cmake -S convert -B /tmp/convert-build -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/convert-build -j"$(nproc)"
       - name: Drive the edit window and check what it saves
