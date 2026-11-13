@@ -1,5 +1,5 @@
 // ArkaOS boot splash. Starting: a blade of green light crosses the screen and leaves the logo
-// behind it, the ARKA wordmark and the tagline decode letter by letter, and the glow keeps
+// behind it, the ARKA wordmark decodes letter by letter, and the glow keeps
 // breathing. Shutting down or restarting: the logo is
 // there at once and glows once; nothing dims. Design tokens: bg #07080e,
 // accent #4DB491. No sound: the user chose a silent start.
@@ -58,20 +58,14 @@ mark.sprite = Sprite();
 tri1.sprite.SetOpacity(0);
 tri2.sprite.SetOpacity(0);
 // The opening, drawn ahead of time by make-assets.sh: the light streak that draws the logo,
-// then the wordmark and the tagline decoding. The last frame of each equals the still image.
+// then the wordmark decoding. The last frame of each equals the still image.
 global.streaks = 18;
 global.words = 22;
-global.tags = 26;
 for (i = 0; i < global.streaks; i++) streak[i].src = Image("streak" + i + ".png");
 for (i = 0; i < global.words; i++) word[i].src = Image("word" + i + ".png");
-for (i = 0; i < global.tags; i++) tag[i].src = Image("tag" + i + ".png");
-tagline.src = Image("tagline.png");
 streak.sprite = Sprite();
 streak.sprite.SetZ(5);
 streak.sprite.SetOpacity(0);
-tagline.sprite = Sprite();
-tagline.sprite.SetOpacity(0);
-global.tagshown = 1;   // 0 while a prompt or a status line uses the space under the wordmark
 global.leaving = (mode == "shutdown" || mode == "reboot");
 tri3.sprite.SetOpacity(0);
 mark.sprite.SetOpacity(0);
@@ -123,9 +117,6 @@ fun layout() {
     tri1.sprite.SetImage(tri1.image);
     for (i = 0; i < global.streaks; i++) global.streak[i].image = scaled(streak[i].src);
     for (i = 0; i < global.words; i++) global.word[i].image = scaled(word[i].src);
-    for (i = 0; i < global.tags; i++) global.tag[i].image = scaled(tag[i].src);
-    global.tagline.image = scaled(tagline.src);
-    tagline.sprite.SetImage(tagline.image);
     tri2.sprite.SetImage(tri2.image);
     tri3.sprite.SetImage(tri3.image);
     mark.sprite.SetImage(mark.image);
@@ -134,7 +125,6 @@ fun layout() {
     place(tri3.sprite, tri3.image, global.cy);
     place(mark.sprite, mark.image, global.cy + 150 * global.f);
     place(streak.sprite, streak[0].image, global.cy);
-    place(tagline.sprite, tagline.image, global.cy + 202 * global.f);
     if (status.text != "") {
         global.status.image = label(status.text, 20, 0.85, 0.88, 0.92);
         status.sprite.SetImage(status.image);
@@ -214,21 +204,6 @@ fun refresh_callback() {
             mark.sprite.SetOpacity(1);
             global.marked = 1;
         }
-        // 1.3-2.2s: the tagline decodes the same way.
-        if (global.tagshown && status.text == "") {
-            if (t >= 1.3 && t < 2.2) {
-                n = Math.Int((t - 1.3) / 0.9 * global.tags);
-                if (n > global.tags - 1) n = global.tags - 1;
-                tagline.sprite.SetImage(tag[n].image);
-                tagline.sprite.SetOpacity(clamp01((t - 1.3) / 0.12));
-            } else if (t >= 2.2 && global.tagged != 1) {
-                tagline.sprite.SetImage(tagline.image);
-                tagline.sprite.SetOpacity(1);
-                global.tagged = 1;
-            }
-        } else {
-            tagline.sprite.SetOpacity(0);
-        }
         a = clamp01((t - 1.3) / 0.6);
         status.sprite.SetOpacity(a);
     }
@@ -279,8 +254,6 @@ fun show_prompt(text) {
     place(box.sprite, global.box.image, global.promptY);
     box.sprite.SetOpacity(1);
     status.sprite.SetOpacity(0);
-    global.tagshown = 0;
-    tagline.sprite.SetOpacity(0);
 }
 
 // Draw n dots centred in the box. Past what fits, the row stops growing; it
@@ -331,8 +304,6 @@ fun display_normal_callback() {
     dots.sprite.SetOpacity(0);
     draw_dots(0);
     if (status.text != "") status.sprite.SetOpacity(1);
-    global.tagshown = 1;
-    global.tagged = 0;
 }
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 

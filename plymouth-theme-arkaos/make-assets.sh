@@ -30,10 +30,6 @@ magick tri1.png -channel A -blur 0x14 +channel -fill "$G" -colorize 100 \
   -channel A -evaluate multiply 0.85 +channel tri3.png
 magick -size 800x140 xc:none -font "$FONT" -fill "$G" -pointsize 88 \
   -kerning 28 -gravity center -draw "text 0,0 'ARKA'" wordmark.png
-# The tagline from assets/branding/arka-wordmark.svg, under the wordmark.
-TAG="YOUR COMPUTER IS YOURS"
-magick -size 800x60 xc:none -font "$FONT" -fill "#a3adba" -pointsize 24 \
-  -kerning 6 -gravity center -draw "text 0,0 '$TAG'" tagline.png
 
 # The opening, drawn ahead of time and played by arkaos.script (Plymouth can't mask while it runs):
 # 1. streak0..17: a blade of light crosses the logo diagonally and leaves the logo behind it.
@@ -57,8 +53,8 @@ while [ $i -lt $N ]; do
 done
 rm -f reveal.png revealed.png glow.png core.png vmask.png blade.png
 
-# 2. word0..21 and tag0..25: the wordmark and the tagline decode from scrambled characters, left to
-#    right. The last frame of each is the finished image above.
+# 2. word0..21: the wordmark decodes from scrambled characters, left to right. The last frame is
+#    the finished wordmark above.
 decode() { # text width height pointsize kerning colour prefix frames
   T=$1; P=$7; NF=$8; k=0
   while [ $k -lt "$NF" ]; do
@@ -75,7 +71,6 @@ decode() { # text width height pointsize kerning colour prefix frames
   done
 }
 decode "ARKA" 800 140 88 28 "$G" word 22
-decode "$TAG" 800 60 24 6 "#a3adba" tag 26
 
 # Activity / progress pieces (stretched by the script).
 magick -size 16x6 xc:"$G" bar.png

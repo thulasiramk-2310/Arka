@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/arka-wordmark.svg" width="300" alt="ARKA: your computer is yours"/>
+  <img src="assets/branding/arka-wordmark.svg" width="300" alt="ARKA"/>
 </p>
 
 <p align="center">A desktop Linux where privacy settings are on by default, and the system tells you plainly what it checked and what it didn't.</p>
