@@ -28,19 +28,54 @@ magick logo-src.png -background none -filter Lanczos -resize x372 -gravity cente
 magick -size 520x460 xc:none tri2.png
 magick tri1.png -channel A -blur 0x14 +channel -fill "$G" -colorize 100 \
   -channel A -evaluate multiply 0.85 +channel tri3.png
-# A light sweep across the logo, drawn ahead of time (Plymouth can't mask while it runs): 12 frames
-# of a soft diagonal band, cut to the logo's own shape. The script plays them once, after the logo appears.
-i=0
-while [ $i -lt 12 ]; do
-  x=$(( -100 + i * 60 ))
-  magick -size 520x460 xc:none -fill "rgba(255,255,255,0.85)" \
-    -draw "polygon $x,0 $((x + 110)),0 $((x - 10)),460 $((x - 120)),460" -blur 0x9 band.png
-  magick band.png tri1.png -compose DstIn -composite "shine$i.png"
-  i=$((i + 1))
-done
-rm -f band.png
 magick -size 800x140 xc:none -font "$FONT" -fill "$G" -pointsize 88 \
   -kerning 28 -gravity center -draw "text 0,0 'ARKA'" wordmark.png
+# The tagline from assets/branding/arka-wordmark.svg, under the wordmark.
+TAG="YOUR COMPUTER IS YOURS"
+magick -size 800x60 xc:none -font "$FONT" -fill "#a3adba" -pointsize 24 \
+  -kerning 6 -gravity center -draw "text 0,0 '$TAG'" tagline.png
+
+# The opening, drawn ahead of time and played by arkaos.script (Plymouth can't mask while it runs):
+# 1. streak0..17: a blade of light crosses the logo diagonally and leaves the logo behind it.
+#    The last frame is the logo alone, so the script hands over to tri1.png without a jump.
+# The blade fades out towards every edge of the frame, so it never shows a cut-off end.
+magick -size 520x460 xc:white -alpha set -channel A -fx 'pow(sin(pi*j/h),1.6)*pow(sin(pi*i/w),0.7)' +channel vmask.png
+i=0; N=18
+while [ $i -lt $N ]; do
+  x=$(awk -v i=$i -v n=$N 'BEGIN { t = i / (n - 1); e = 1 - (1 - t) ^ 3; printf "%d", -180 + e * 900 }')
+  if [ $i -lt $((N - 1)) ]; then
+    magick -size 520x460 xc:none -fill white -draw "polygon -400,0 $((x + 90)),0 $((x - 90)),460 -400,460" -blur 0x6 reveal.png
+    magick tri1.png reveal.png -compose DstIn -composite revealed.png
+    magick -size 520x460 xc:none -fill "rgba(77,180,145,0.75)" -draw "polygon $((x + 60)),0 $((x + 120)),0 $((x - 60)),460 $((x - 120)),460" -blur 0x22 glow.png
+    magick -size 520x460 xc:none -fill "rgba(232,255,244,1)" -draw "polygon $((x + 86)),0 $((x + 94)),0 $((x - 86)),460 $((x - 94)),460" -blur 0x3 core.png
+    magick glow.png core.png -compose Plus -composite vmask.png -compose DstIn -composite blade.png
+    magick revealed.png blade.png -compose Plus -composite "streak$i.png"
+  else
+    cp tri1.png "streak$i.png"
+  fi
+  i=$((i + 1))
+done
+rm -f reveal.png revealed.png glow.png core.png vmask.png blade.png
+
+# 2. word0..21 and tag0..25: the wordmark and the tagline decode from scrambled characters, left to
+#    right. The last frame of each is the finished image above.
+decode() { # text width height pointsize kerning colour prefix frames
+  T=$1; P=$7; NF=$8; k=0
+  while [ $k -lt "$NF" ]; do
+    if [ $k -eq $((NF - 1)) ]; then S=$T; else
+      S=$(awk -v t="$T" -v k=$k -v nf="$NF" 'BEGIN {
+        srand(k * 7919 + 13); cs = "ABCDEFGHKMNPRSTUVXYZ0123456789#/<>"; L = length(t)
+        done = int((k / (nf - 1)) * (L + 3)) - 2; out = ""
+        for (j = 1; j <= L; j++) { c = substr(t, j, 1)
+          if (c == " " || j <= done) out = out c; else out = out substr(cs, int(rand() * length(cs)) + 1, 1) }
+        print out }'); fi
+    magick -size "$2x$3" xc:none -font "$FONT" -fill "$6" -pointsize "$4" -kerning "$5" -gravity center \
+      -draw "text 0,0 '$S'" "$P$k.png"
+    k=$((k + 1))
+  done
+}
+decode "ARKA" 800 140 88 28 "$G" word 22
+decode "$TAG" 800 60 24 6 "#a3adba" tag 26
 
 # Activity / progress pieces (stretched by the script).
 magick -size 16x6 xc:"$G" bar.png

@@ -1,5 +1,6 @@
-// ArkaOS boot splash. Starting: the logo grows in, a light sweeps across it once, the ARKA
-// wordmark slides up, and the glow keeps breathing. Shutting down or restarting: the logo is
+// ArkaOS boot splash. Starting: a blade of green light crosses the screen and leaves the logo
+// behind it, the ARKA wordmark and the tagline decode letter by letter, and the glow keeps
+// breathing. Shutting down or restarting: the logo is
 // there at once and glows once; nothing dims. Design tokens: bg #07080e,
 // accent #4DB491. No sound: the user chose a silent start.
 //
@@ -56,12 +57,21 @@ tri3.sprite = Sprite();
 mark.sprite = Sprite();
 tri1.sprite.SetOpacity(0);
 tri2.sprite.SetOpacity(0);
-// The light sweep: frames drawn by make-assets.sh, laid over the logo.
-global.shines = 12;
-for (i = 0; i < global.shines; i++) shine[i].src = Image("shine" + i + ".png");
-shine.sprite = Sprite();
-shine.sprite.SetZ(5);
-shine.sprite.SetOpacity(0);
+// The opening, drawn ahead of time by make-assets.sh: the light streak that draws the logo,
+// then the wordmark and the tagline decoding. The last frame of each equals the still image.
+global.streaks = 18;
+global.words = 22;
+global.tags = 26;
+for (i = 0; i < global.streaks; i++) streak[i].src = Image("streak" + i + ".png");
+for (i = 0; i < global.words; i++) word[i].src = Image("word" + i + ".png");
+for (i = 0; i < global.tags; i++) tag[i].src = Image("tag" + i + ".png");
+tagline.src = Image("tagline.png");
+streak.sprite = Sprite();
+streak.sprite.SetZ(5);
+streak.sprite.SetOpacity(0);
+tagline.sprite = Sprite();
+tagline.sprite.SetOpacity(0);
+global.tagshown = 1;   // 0 while a prompt or a status line uses the space under the wordmark
 global.leaving = (mode == "shutdown" || mode == "reboot");
 tri3.sprite.SetOpacity(0);
 mark.sprite.SetOpacity(0);
@@ -111,7 +121,11 @@ fun layout() {
     global.tri3.image = scaled(tri3.src);
     global.mark.image = scaled(mark.src);
     tri1.sprite.SetImage(tri1.image);
-    for (i = 0; i < global.shines; i++) global.shine[i].image = scaled(shine[i].src);
+    for (i = 0; i < global.streaks; i++) global.streak[i].image = scaled(streak[i].src);
+    for (i = 0; i < global.words; i++) global.word[i].image = scaled(word[i].src);
+    for (i = 0; i < global.tags; i++) global.tag[i].image = scaled(tag[i].src);
+    global.tagline.image = scaled(tagline.src);
+    tagline.sprite.SetImage(tagline.image);
     tri2.sprite.SetImage(tri2.image);
     tri3.sprite.SetImage(tri3.image);
     mark.sprite.SetImage(mark.image);
@@ -119,7 +133,8 @@ fun layout() {
     place(tri2.sprite, tri2.image, global.cy);
     place(tri3.sprite, tri3.image, global.cy);
     place(mark.sprite, mark.image, global.cy + 150 * global.f);
-    place(shine.sprite, shine[0].image, global.cy);
+    place(streak.sprite, streak[0].image, global.cy);
+    place(tagline.sprite, tagline.image, global.cy + 202 * global.f);
     if (status.text != "") {
         global.status.image = label(status.text, 20, 0.85, 0.88, 0.92);
         status.sprite.SetImage(status.image);
@@ -170,37 +185,51 @@ fun refresh_callback() {
         status.sprite.SetOpacity(1);
         a = 1;
     } else {
-        // Starting: the logo grows in from 88% with an ease-out, while it fades in.
-        g = clamp01(t / 0.7);
-        e = 1 - (1 - g) * (1 - g) * (1 - g);
-        if (t <= 0.75) {
-            sc = 0.88 + 0.12 * e;
-            img = tri1.image.Scale(Math.Int(tri1.image.GetWidth() * sc), Math.Int(tri1.image.GetHeight() * sc));
-            tri1.sprite.SetImage(img);
-            place(tri1.sprite, img, global.cy);
-        } else if (global.grown != 1) {
-            tri1.sprite.SetImage(tri1.image);
-            place(tri1.sprite, tri1.image, global.cy);
-            global.grown = 1;
+        // Starting. 0.2-0.8s: the streak frames draw the logo (about 30 frames a second).
+        if (t < 0.2) {
+            streak.sprite.SetOpacity(0);
+        } else if (t < 0.8) {
+            n = Math.Int((t - 0.2) / 0.6 * global.streaks);
+            if (n > global.streaks - 1) n = global.streaks - 1;
+            streak.sprite.SetImage(streak[n].image);
+            streak.sprite.SetOpacity(1);
+        } else if (global.drawn != 1) {
+            // Hand over to the still logo; the last streak frame is the same image.
+            tri1.sprite.SetOpacity(1);
+            streak.sprite.SetOpacity(0);
+            global.drawn = 1;
         }
-        tri1.sprite.SetOpacity(e);
-        tri2.sprite.SetOpacity(clamp01((t - 0.4) / 0.5) * 0.65);
-        if (t <= 1.8) tri3.sprite.SetOpacity(clamp01((t - 0.8) / 0.5) * 0.35);
+        // The glow flashes as the streak leaves, then settles into a slow breath.
+        if (t < 0.8) tri3.sprite.SetOpacity(0);
+        else if (t < 1.8) tri3.sprite.SetOpacity(0.25 + 0.3 * clamp01(1 - (t - 0.8) / 1.0));
         else tri3.sprite.SetOpacity(0.25 + 0.15 * Math.Sin((t - 1.8) * 2.2));
-        // One light sweep across the logo, 0.9s to 1.6s.
+        // 0.9-1.6s: ARKA decodes from scrambled characters, left to right.
         if (t >= 0.9 && t < 1.6) {
-            n = Math.Int((t - 0.9) / 0.7 * global.shines);
-            if (n > global.shines - 1) n = global.shines - 1;
-            shine.sprite.SetImage(shine[n].image);
-            shine.sprite.SetOpacity(1);
-        } else {
-            shine.sprite.SetOpacity(0);
+            n = Math.Int((t - 0.9) / 0.7 * global.words);
+            if (n > global.words - 1) n = global.words - 1;
+            mark.sprite.SetImage(word[n].image);
+            mark.sprite.SetOpacity(clamp01((t - 0.9) / 0.12));
+        } else if (t >= 1.6 && global.marked != 1) {
+            mark.sprite.SetImage(mark.image);
+            mark.sprite.SetOpacity(1);
+            global.marked = 1;
         }
-        // The wordmark slides up 18 px into place as it appears.
+        // 1.3-2.2s: the tagline decodes the same way.
+        if (global.tagshown && status.text == "") {
+            if (t >= 1.3 && t < 2.2) {
+                n = Math.Int((t - 1.3) / 0.9 * global.tags);
+                if (n > global.tags - 1) n = global.tags - 1;
+                tagline.sprite.SetImage(tag[n].image);
+                tagline.sprite.SetOpacity(clamp01((t - 1.3) / 0.12));
+            } else if (t >= 2.2 && global.tagged != 1) {
+                tagline.sprite.SetImage(tagline.image);
+                tagline.sprite.SetOpacity(1);
+                global.tagged = 1;
+            }
+        } else {
+            tagline.sprite.SetOpacity(0);
+        }
         a = clamp01((t - 1.3) / 0.6);
-        ea = 1 - (1 - a) * (1 - a) * (1 - a);
-        mark.sprite.SetOpacity(ea);
-        mark.sprite.SetY(Math.Int(global.wy + global.cy + 150 * global.f - mark.image.GetHeight() / 2 + 18 * global.f * (1 - ea)));
         status.sprite.SetOpacity(a);
     }
 
@@ -250,6 +279,8 @@ fun show_prompt(text) {
     place(box.sprite, global.box.image, global.promptY);
     box.sprite.SetOpacity(1);
     status.sprite.SetOpacity(0);
+    global.tagshown = 0;
+    tagline.sprite.SetOpacity(0);
 }
 
 // Draw n dots centred in the box. Past what fits, the row stops growing; it
@@ -300,14 +331,15 @@ fun display_normal_callback() {
     dots.sprite.SetOpacity(0);
     draw_dots(0);
     if (status.text != "") status.sprite.SetOpacity(1);
+    global.tagshown = 1;
+    global.tagged = 0;
 }
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
 fun quit_callback() {
-    shine.sprite.SetOpacity(0);
-    tri1.sprite.SetImage(tri1.image);
-    place(tri1.sprite, tri1.image, global.cy);
+    streak.sprite.SetOpacity(0);
     tri1.sprite.SetOpacity(1);
+    mark.sprite.SetImage(mark.image);
     mark.sprite.SetOpacity(1);
 }
 Plymouth.SetQuitFunction(quit_callback);
