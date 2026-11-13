@@ -683,6 +683,14 @@ RUN sed -i 's/^DefaultZone=.*/DefaultZone=arkaos/' /etc/firewalld/firewalld.conf
     cp -a /var/home/arkasetup/.bash_profile /var/home/arkasetup/.hushlogin /usr/share/arkaos/arkasetup/ && \
     systemctl enable arkad.service arka-pulsed.service arka-rtc-mode.service arka-hide-system-image.service arka-dns-after-clock.service
 
+# Keep tools for developers and theme authors out of the launcher, search and
+# "Open with". They stay installed and run from a terminal.
+RUN for f in gcdmaster org.kde.contactprintthemeeditor org.kde.contactthemeeditor \
+      org.kde.drkonqi.coredump.gui org.kde.headerthemeeditor org.kde.kdebugsettings; do \
+      d=/usr/share/applications/$f.desktop; [ -f "$d" ] || continue; \
+      grep -q '^NoDisplay=true' "$d" || sed -i '0,/^\[Desktop Entry\]/s//[Desktop Entry]\nNoDisplay=true/' "$d"; \
+    done
+
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
 # (and enabled) above; nothing in between executes them. arka-bar / arka-dock /
