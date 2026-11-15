@@ -1,0 +1,5 @@
+[workspace]
+members = ["arka-bar", "arka-dock", "arka-launcher"]
+resolver = "2"
+[profile.dev]
+debug = false
