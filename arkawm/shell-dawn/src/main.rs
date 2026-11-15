@@ -352,7 +352,13 @@ fn os_version() -> String {
     let field = |name: &str| {
         release.lines().find_map(|l| l.strip_prefix(name)).map(|v| v.trim_matches('"').to_string()).filter(|v| !v.is_empty())
     };
-    field("IMAGE_VERSION=").or_else(|| field("VERSION_ID=")).or_else(|| field("BUILD_ID=")).unwrap_or_else(|| "unknown".into())
+    // ArkaOS writes its own version to arkaos-release; os-release's VERSION_ID is the base's
+    let own = std::fs::read_to_string("/usr/lib/arkaos-release").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    own.or_else(|| field("IMAGE_VERSION="))
+        .or_else(|| field("VERSION="))
+        .or_else(|| field("VERSION_ID="))
+        .or_else(|| field("BUILD_ID=").map(|id| if id == "rolling" { "Rolling release".into() } else { id }))
+        .unwrap_or_else(|| "Unknown".into())
 }
 
 /// Whether the image-signature policy on this machine asks for signatures. `None`: unreadable.
