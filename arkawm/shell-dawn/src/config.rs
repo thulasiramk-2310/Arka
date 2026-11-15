@@ -95,6 +95,10 @@ impl Config {
         if let Some(path) = picked.map(|p| p.trim().to_string()).filter(|p| !p.is_empty() && Path::new(p).is_file()) {
             values.insert("wallpaper.file".into(), path);
         }
+        // The glowing-paths switch in quick settings wins over desk.conf too.
+        if let Some(on) = user.as_ref().and_then(|dir| std::fs::read_to_string(dir.join("breathe")).ok()) {
+            values.insert("wallpaper.breathe".into(), on.trim().to_string());
+        }
         Self { values, theme, dirs }
     }
 

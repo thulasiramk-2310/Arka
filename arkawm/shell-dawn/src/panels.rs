@@ -339,6 +339,19 @@ impl Shell {
         });
         walls.append(&own);
         quick_page.append(&walls);
+        // The glowing paths in the rocks breathe slowly. Off by default: it costs a little power.
+        let breathe = gtk::Switch::new();
+        breathe.set_active(ctx.cfg.on("wallpaper.breathe"));
+        breathe.set_tooltip_text(Some("The light paths in the rocks glow softly brighter and back. Uses a little more power."));
+        breathe.connect_state_set(|_, on| {
+            if let Some(dir) = settings_dir() {
+                if std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join("breathe"), if on { "on\n" } else { "off\n" })).is_ok() {
+                    start_again();
+                }
+            }
+            glib::Propagation::Proceed
+        });
+        quick_page.append(&setting("sparkle-bold", "Glowing paths", breathe.upcast_ref()));
 
         // Clipboard history.
         let clips_page = page("clipboard");

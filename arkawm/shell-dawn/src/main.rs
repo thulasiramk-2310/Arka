@@ -627,6 +627,26 @@ fn build(app: &gtk::Application) {
         overlay.set_child(Some(&picture(&own("wallpaper.file", "wallpaper.jpg"))));
     }
 
+    // Breathing light: the glowing paths in the rocks grow softly brighter and back. Only over
+    // the theme's own picture (the glow is drawn for it), and off unless asked for: it repaints
+    // the screen a few times a second, which costs a little power the whole time.
+    let glow_file = cfg.file("glow.png");
+    if cfg.on("wallpaper.breathe") && motion && cfg.get("wallpaper.file").is_empty() && glow_file.is_file() {
+        let glow = gtk::Picture::for_filename(&glow_file);
+        glow.set_can_shrink(true);
+        glow.set_content_fit(gtk::ContentFit::Cover);
+        glow.set_can_target(false);
+        glow.set_opacity(0.0);
+        overlay.add_overlay(&glow);
+        let period = cfg.number("wallpaper.breathe_every", 7.0).clamp(2.0, 120.0);
+        let peak = cfg.number("wallpaper.breathe_strength", 0.8).clamp(0.0, 1.0);
+        let started = std::time::Instant::now();
+        glib::timeout_add_local(std::time::Duration::from_millis(66), move || {
+            let phase = started.elapsed().as_secs_f64() / period * std::f64::consts::TAU;
+            glow.set_opacity(peak * (0.5 - 0.5 * phase.cos()));
+            glib::ControlFlow::Continue
+        });
+    }
     overlay.add_overlay(&frost);
     // entrance and menu animations move the glass; paint it again once they have settled
     let refrost = {
