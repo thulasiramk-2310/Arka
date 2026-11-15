@@ -506,6 +506,18 @@ fn build(app: &gtk::Application) {
     desk.set_exclusive_zone(-1);
     // the keyboard reaches the desktop once it is clicked, so Tab, Enter and Escape work on it
     desk.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::OnDemand);
+    // Any key on the desktop shows where the keyboard is (GTK does not always switch the ring on
+    // for a layer surface that got the keyboard without a click).
+    let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    keys.connect_key_pressed({
+        let desk = desk.clone();
+        move |_, _, _, _| {
+            desk.set_focus_visible(true);
+            glib::Propagation::Proceed
+        }
+    });
+    desk.add_controller(keys);
     desk.set_default_size(width, height);
     let overlay = gtk::Overlay::new();
     // The glass: one layer above the wallpaper paints its softened copy where each glass
