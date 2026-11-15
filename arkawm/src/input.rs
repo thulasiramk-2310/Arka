@@ -269,6 +269,8 @@ pub enum Action {
     /// The Windows key with Down: restore a maximised or snapped window, minimise a normal one.
     Down,
     ShowDesktop,
+    /// The ArkaOS wheel: formats (false) or edits (true).
+    Wheel(bool),
     Files,
     Settings,
     Screenshot,
@@ -290,6 +292,14 @@ fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
     // Print Screen: the whole screen; with Shift, a part of it.
     if sym == Keysym::Print && !modifiers.ctrl && !modifiers.alt && !modifiers.logo {
         return Some(if modifiers.shift { Action::Region } else { Action::Screenshot });
+    }
+    // Windows key + Alt: the ArkaOS format and edit wheels (the same keys as on Plasma).
+    if modifiers.logo && modifiers.alt && !modifiers.ctrl && !modifiers.shift {
+        match sym {
+            Keysym::c | Keysym::C => return Some(Action::Wheel(false)),
+            Keysym::e | Keysym::E => return Some(Action::Wheel(true)),
+            _ => {}
+        }
     }
     // The Windows key, as on Windows.
     if modifiers.logo && !modifiers.ctrl && !modifiers.alt {
@@ -361,6 +371,12 @@ impl ArkaWm {
             },
             Action::ShowDesktop => self.toggle_show_desktop(),
             Action::Files => crate::state::spawn("${ARKAWM_FILES:-dolphin}"),
+            // Plasma reaches the wheel through its shortcut service; here the wheel is asked over
+            // the session bus. Nothing happens when the wheel is not running.
+            Action::Wheel(edit) => crate::state::spawn(&format!(
+                "gdbus call --session --dest org.arkaos.Wheel --object-path /Wheel --method org.arkaos.Wheel.{} >/dev/null 2>&1",
+                if edit { "ShowEditForDrag" } else { "ShowForDrag" }
+            )),
             Action::Settings => crate::state::spawn("${ARKAWM_SETTINGS:-systemsettings}"),
             Action::Screenshot => self.capture = Some(crate::capture::Capture { crop: None }),
             Action::Region => {

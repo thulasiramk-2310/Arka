@@ -13,6 +13,8 @@ if [ -z "$ARKAWM_BACKEND" ]; then
     export ARKAWM_BACKEND=udev
     unset WAYLAND_DISPLAY DISPLAY
 fi
+# programs installed for this user only (arka-wheel, arka-convert) live here
+export PATH="$HOME/.local/bin:$PATH"
 export XDG_CURRENT_DESKTOP=ArkaWM XDG_SESSION_DESKTOP=arkawm XDG_SESSION_TYPE=wayland
 
 bin=$here/target/release/arkawm

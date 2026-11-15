@@ -18,6 +18,9 @@ fi
 here=$(dirname "$(readlink -f "$0")")/..
 autostart=${XDG_CONFIG_HOME:-$HOME/.config}/arkawm/autostart
 desk=$(command -v arka-desk || echo "$here/shell-legacy/target/debug/arka-desk")
+# The ArkaOS wheel (Super+Alt+C, Super+Alt+E) runs hidden for the whole session, when installed.
+wheel=$(command -v arka-wheel || true)
+[ -n "$wheel" ] && "$wheel" &
 if [ -x "$autostart" ]; then
     "$autostart" &
 elif [ -x "$desk" ]; then
