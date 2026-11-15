@@ -81,9 +81,17 @@ fn run(commands: &[String]) {
 struct Ctx {
     k: f64,
     cfg: Config,
+    /// Glass surfaces on the desktop and their corner radius in design pixels (negative: round).
+    /// A softened copy of the wallpaper is painted behind each, so they read as frosted glass.
+    frost: RefCell<Vec<(gtk::Widget, f64)>>,
+    /// The softened wallpaper, small; it is stretched when painted.
+    soft: RefCell<Option<gtk::cairo::ImageSurface>>,
 }
 
 impl Ctx {
+    fn frosted(&self, widget: &impl IsA<gtk::Widget>, radius: f64) {
+        self.frost.borrow_mut().push((widget.clone().upcast(), radius));
+    }
     fn px(&self, v: f64) -> i32 {
         (v * self.k).round() as i32
     }
@@ -144,6 +152,7 @@ impl Ctx {
             disc.add_css_class("green");
         }
         disc.set_halign(Align::Center);
+        self.frosted(&disc, -1.0);
         let image = self.icon(icon, 40.0);
         image.add_css_class("icon");
         image.set_hexpand(true);
@@ -173,6 +182,7 @@ impl Ctx {
             button.add_css_class("green");
         }
         button.set_size_request(self.px(width), self.px(44.0));
+        self.frosted(&button, 22.0);
         button
     }
 }
@@ -297,7 +307,7 @@ fn signature_policy() -> Option<bool> {
 
 /// Load a wallpaper at screen width and grade the picture itself: soften, then saturation,
 /// contrast and brightness. Nothing is laid over the desktop.
-fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk::Texture> {
+fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk_pixbuf::Pixbuf> {
     use gtk::gdk_pixbuf::{Colorspace, InterpType, Pixbuf};
     let mut pixbuf = Pixbuf::from_file_at_scale(path, width, -1, true).ok()?;
     let (w, h) = (pixbuf.width(), pixbuf.height());
@@ -308,10 +318,13 @@ fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk::Tex
         let small = pixbuf.scale_simple(((w as f64 / factor) as i32).max(1), ((h as f64 / factor) as i32).max(1), InterpType::Bilinear)?;
         pixbuf = small.scale_simple(w, h, InterpType::Bilinear)?;
     }
+    let tint = config::rgb(cfg.get("wallpaper.haze_color")).unwrap_or((0.8, 0.8, 0.9));
     let grade = Grade {
         brightness: cfg.number("wallpaper.brightness", 1.0).clamp(0.0, 3.0) as f32,
         contrast: cfg.number("wallpaper.contrast", 1.0).clamp(0.0, 3.0) as f32,
         saturation: cfg.number("wallpaper.saturation", 1.0).clamp(0.0, 3.0) as f32,
+        haze: cfg.number("wallpaper.haze", 0.0).clamp(0.0, 1.0) as f32,
+        tint: ((tint.0 * 255.0) as f32, (tint.1 * 255.0) as f32, (tint.2 * 255.0) as f32),
     };
     if grade != Grade::NONE {
         let (stride, channels) = (pixbuf.rowstride() as usize, pixbuf.n_channels() as usize);
@@ -325,7 +338,21 @@ fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk::Tex
         }
         pixbuf = Pixbuf::from_bytes(&glib::Bytes::from_owned(bytes), Colorspace::Rgb, pixbuf.has_alpha(), 8, w, h, stride as i32);
     }
-    Some(gtk::gdk::Texture::for_pixbuf(&pixbuf))
+    Some(pixbuf)
+}
+
+/// A small, soft copy of a wallpaper for painting behind glass. `blur` is in screen pixels.
+fn softened(pixbuf: &gtk::gdk_pixbuf::Pixbuf, blur: f64) -> Option<gtk::cairo::ImageSurface> {
+    use gtk::gdk::prelude::GdkCairoContextExt;
+    let factor = (blur * 0.5).max(1.0);
+    let (w, h) = (((pixbuf.width() as f64 / factor) as i32).max(8), ((pixbuf.height() as f64 / factor) as i32).max(8));
+    let small = pixbuf.scale_simple(w, h, gtk::gdk_pixbuf::InterpType::Bilinear)?;
+    let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::Rgb24, w, h).ok()?;
+    let cr = gtk::cairo::Context::new(&surface).ok()?;
+    cr.set_source_pixbuf(&small, 0.0, 0.0);
+    cr.paint().ok()?;
+    drop(cr);
+    Some(surface)
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -333,16 +360,22 @@ struct Grade {
     brightness: f32,
     contrast: f32,
     saturation: f32,
+    /// How far every colour is pulled towards `tint`: morning haze. 0 is none.
+    haze: f32,
+    tint: (f32, f32, f32),
 }
 
 impl Grade {
-    const NONE: Self = Self { brightness: 1.0, contrast: 1.0, saturation: 1.0 };
+    const NONE: Self = Self { brightness: 1.0, contrast: 1.0, saturation: 1.0, haze: 0.0, tint: (0.0, 0.0, 0.0) };
     /// Saturation around the pixel's own lightness, contrast around mid grey, then brightness.
     fn apply(&self, r: u8, g: u8, b: u8) -> (u8, u8, u8) {
         let (r, g, b) = (r as f32, g as f32, b as f32);
         let light = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        let one = |c: f32| ((((light + (c - light) * self.saturation) - 127.5) * self.contrast + 127.5) * self.brightness).clamp(0.0, 255.0) as u8;
-        (one(r), one(g), one(b))
+        let one = |c: f32, tint: f32| {
+            let graded = (((light + (c - light) * self.saturation) - 127.5) * self.contrast + 127.5) * self.brightness;
+            (graded + (tint - graded) * self.haze).clamp(0.0, 255.0) as u8
+        };
+        (one(r, self.tint.0), one(g, self.tint.1), one(b, self.tint.2))
     }
 }
 
@@ -387,7 +420,7 @@ fn build(app: &gtk::Application) {
         .map(|m| m.geometry().width())
         .unwrap_or(1536);
     let height = (width as f64 * 0.625).round() as i32;
-    let ctx = Rc::new(Ctx { k: width as f64 / DESIGN_WIDTH, cfg });
+    let ctx = Rc::new(Ctx { k: width as f64 / DESIGN_WIDTH, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(None) });
     let (k, cfg) = (ctx.k, &ctx.cfg);
 
     let provider = gtk::CssProvider::new();
@@ -411,14 +444,61 @@ fn build(app: &gtk::Application) {
     desk.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::OnDemand);
     desk.set_default_size(width, height);
     let overlay = gtk::Overlay::new();
-    let picture = |path: &Path| {
-        let picture = match graded(path, width, cfg, k) {
-            Some(texture) => gtk::Picture::for_paintable(&texture),
-            None => gtk::Picture::for_filename(path),
-        };
-        picture.set_can_shrink(true);
-        picture.set_content_fit(gtk::ContentFit::Cover);
-        picture
+    // The glass: one layer above the wallpaper paints its softened copy where each glass
+    // surface sits. (Only on the desktop; sheets and the strip sit over windows, and blurring
+    // those needs the compositor.)
+    let frost = gtk::DrawingArea::new();
+    frost.set_can_target(false);
+    frost.add_css_class("frost");
+    frost.set_draw_func({
+        let ctx = ctx.clone();
+        move |area, cr, w, h| {
+            let soft = ctx.soft.borrow();
+            let Some(surface) = soft.as_ref() else { return };
+            let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
+            let (ox, oy) = ((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
+            for (widget, radius) in ctx.frost.borrow().iter() {
+                if !widget.is_mapped() || widget.has_css_class("shut") {
+                    continue;
+                }
+                let Some(b) = widget.compute_bounds(area) else { continue };
+                let (x, y, bw, bh) = (b.x() as f64, b.y() as f64, b.width() as f64, b.height() as f64);
+                let r = if *radius < 0.0 { bw.min(bh) / 2.0 } else { (radius * ctx.k).min(bw.min(bh) / 2.0) };
+                use std::f64::consts::{FRAC_PI_2, PI};
+                cr.new_sub_path();
+                cr.arc(x + bw - r, y + r, r, -FRAC_PI_2, 0.0);
+                cr.arc(x + bw - r, y + bh - r, r, 0.0, FRAC_PI_2);
+                cr.arc(x + r, y + bh - r, r, FRAC_PI_2, PI);
+                cr.arc(x + r, y + r, r, PI, PI + FRAC_PI_2);
+                cr.close_path();
+                let _ = cr.save();
+                cr.clip();
+                cr.translate(ox, oy);
+                cr.scale(scale, scale);
+                let _ = cr.set_source_surface(surface, 0.0, 0.0);
+                let _ = cr.paint();
+                let _ = cr.restore();
+            }
+        }
+    });
+    let glass_blur = cfg.number("look.blur", 14.0).clamp(0.0, 80.0) * k;
+    let picture = {
+        let (ctx, frost) = (ctx.clone(), frost.clone());
+        Rc::new(move |path: &Path| {
+            let picture = match graded(path, width, &ctx.cfg, ctx.k) {
+                Some(pixbuf) => {
+                    if glass_blur > 0.0 {
+                        *ctx.soft.borrow_mut() = softened(&pixbuf, glass_blur);
+                        frost.queue_draw();
+                    }
+                    gtk::Picture::for_paintable(&gtk::gdk::Texture::for_pixbuf(&pixbuf))
+                }
+                None => gtk::Picture::for_filename(path),
+            };
+            picture.set_can_shrink(true);
+            picture.set_content_fit(gtk::ContentFit::Cover);
+            picture
+        })
     };
     // A folder of pictures makes a living wallpaper: they fade slowly from the first to the last
     // and back. Otherwise the one still picture. Each picture is graded when it is first shown.
@@ -441,25 +521,36 @@ fn build(app: &gtk::Application) {
         pictures[0] = Some(first);
         overlay.set_child(Some(&stack));
         let (mut at, mut forward) = (0usize, true);
-        let (stack, ctx) = (stack.clone(), ctx.clone());
+        let (stack, picture) = (stack.clone(), picture.clone());
         glib::timeout_add_seconds_local(cfg.number("wallpaper.every", 30.0).clamp(5.0, 86400.0) as u32, move || {
             (at, forward) = next_frame(at, forward, frames.len());
-            let shown = pictures[at].get_or_insert_with(|| {
-                let picture = match graded(&frames[at], width, &ctx.cfg, ctx.k) {
-                    Some(texture) => gtk::Picture::for_paintable(&texture),
-                    None => gtk::Picture::for_filename(&frames[at]),
-                };
-                picture.set_can_shrink(true);
-                picture.set_content_fit(gtk::ContentFit::Cover);
-                stack.add_child(&picture);
-                picture
-            });
-            stack.set_visible_child(shown);
+            // loading the picture again also refreshes the glass behind the cards
+            if let Some(old) = pictures[at].take() {
+                stack.remove(&old);
+            }
+            let shown = picture(&frames[at]);
+            stack.add_child(&shown);
+            stack.set_visible_child(&shown);
+            pictures[at] = Some(shown);
             glib::ControlFlow::Continue
         });
     } else {
         overlay.set_child(Some(&picture(&own("wallpaper.file", "wallpaper.jpg"))));
     }
+
+    overlay.add_overlay(&frost);
+    // entrance and menu animations move the glass; paint it again once they have settled
+    let refrost = {
+        let frost = frost.clone();
+        Rc::new(move || {
+            frost.queue_draw();
+            for ms in [120, 360, 800] {
+                let frost = frost.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(ms), move || frost.queue_draw());
+            }
+        })
+    };
+    refrost();
 
     // Texts can be changed or emptied in the settings; an empty one is left out.
     let captions = cfg.on("show.captions");
@@ -477,6 +568,7 @@ fn build(app: &gtk::Application) {
         let quote = gtk::Label::new(Some(text));
         quote.add_css_class("glass");
         quote.add_css_class("quote");
+        ctx.frosted(&quote, 8.0);
         quote.set_xalign(0.0);
         ctx.put(&overlay, &quote, 36.0, 289.0);
     }
@@ -556,18 +648,64 @@ fn build(app: &gtk::Application) {
 
     // The menu on the left. Only the round button shows; a click on it opens the menu.
     let mut menu_parts: Vec<gtk::Widget> = Vec::new();
-    for (class, x, y, w, h) in [("main", 152.0, 422.0, 268.0, 282.0), ("side", 56.0, 491.0, 150.0, 120.0)] {
-        let panel = gtk::Box::new(Orientation::Horizontal, 0);
-        panel.add_css_class("panel");
-        panel.add_css_class(class);
-        panel.set_size_request(ctx.px(w), ctx.px(h));
-        panel.set_can_target(false);
-        ctx.put(&overlay, &panel, x, y);
-        // shut, only the round button is left: a clean circle
-        menu_parts.push(panel.upcast());
-    }
+    // The menu's body and the lobe around the round button are one shape with one outline:
+    // the button grows into the menu. Drawn here because a style sheet cannot join two shapes.
+    let body = gtk::DrawingArea::new();
+    body.set_can_target(false);
+    body.set_draw_func({
+        let ctx = ctx.clone();
+        let (raised, panel, border) = (ctx.cfg.color("panel_raised"), ctx.cfg.color("panel"), ctx.cfg.color("border"));
+        let strength = ctx.cfg.number("look.panel_opacity", 1.0);
+        move |_, cr, w, h| {
+            use std::f64::consts::{FRAC_PI_2, PI};
+            let k = ctx.k;
+            // design pixels: the lobe (centre, radius), the body's box and corners, the fillet
+            let (cx, cy, r) = (116.0 * k, 551.0 * k, 62.0 * k);
+            let (x0, y0, x1, y1) = (152.0 * k, 422.0 * k, 420.0 * k, 704.0 * k);
+            let (tl, tr, br, bl) = (40.0 * k, 60.0 * k, 66.0 * k, 60.0 * k);
+            let f = 26.0 * k;
+            let fx = x0 - f;
+            let reach = ((r + f).powi(2) - (fx - cx).powi(2)).max(0.0).sqrt();
+            let (up, low) = (cy - reach, cy + reach);
+            cr.new_path();
+            cr.arc(x0 + tl, y0 + tl, tl, PI, PI + FRAC_PI_2);
+            cr.arc(x1 - tr, y0 + tr, tr, -FRAC_PI_2, 0.0);
+            cr.arc(x1 - br, y1 - br, br, 0.0, FRAC_PI_2);
+            cr.arc(x0 + bl, y1 - bl, bl, FRAC_PI_2, PI);
+            // up the left edge, round the lobe, and back onto the edge, with a soft neck each side
+            let toward = |fy: f64| (cy - fy).atan2(cx - fx);
+            cr.arc_negative(fx, low, f, 0.0, toward(low));
+            cr.arc(cx, cy, r, toward(low) + PI, toward(up) + PI);
+            cr.arc_negative(fx, up, f, toward(up), 0.0);
+            cr.close_path();
+            let _ = cr.save();
+            cr.clip_preserve();
+            if let Some(surface) = ctx.soft.borrow().as_ref() {
+                let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
+                let _ = cr.save();
+                cr.translate((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
+                cr.scale(scale, scale);
+                let _ = cr.set_source_surface(surface, 0.0, 0.0);
+                let _ = cr.paint();
+                let _ = cr.restore();
+            }
+            let tint = gtk::cairo::LinearGradient::new(x0, y0, x1, y1);
+            tint.add_color_stop_rgba(0.0, raised.0, raised.1, raised.2, (0.80 * strength).min(1.0));
+            tint.add_color_stop_rgba(1.0, panel.0, panel.1, panel.2, (0.90 * strength).min(1.0));
+            let _ = cr.set_source(&tint);
+            let _ = cr.paint();
+            let _ = cr.restore();
+            cr.set_source_rgba(border.0, border.1, border.2, 0.5);
+            cr.set_line_width(1.2 * k);
+            let _ = cr.stroke();
+        }
+    });
+    overlay.add_overlay(&body);
+    // shut, only the round button is left: a clean circle
+    menu_parts.push(body.upcast());
     let orb = gtk::Button::new();
     orb.add_css_class("orb");
+    ctx.frosted(&orb, -1.0);
     orb.set_child(Some(&ctx.logo(44.0)));
     orb.set_tooltip_text(Some("Menu"));
     orb.update_property(&[gtk::accessible::Property::Label("Menu")]);
@@ -621,7 +759,7 @@ fn build(app: &gtk::Application) {
     let always_open = cfg.get("menu.open") == "always";
     let menu_open = Rc::new(Cell::new(false));
     let set_menu = {
-        let (parts, open) = (menu_parts, menu_open.clone());
+        let (parts, open, refrost) = (menu_parts, menu_open.clone(), refrost.clone());
         Rc::new(move |on: bool| {
             let on = on || always_open;
             open.set(on);
@@ -637,6 +775,7 @@ fn build(app: &gtk::Application) {
                     part.set_can_focus(on);
                 }
             }
+            refrost();
         })
     };
     set_menu(false);
@@ -648,10 +787,11 @@ fn build(app: &gtk::Application) {
         });
     }
     let swap = {
-        let (main, power) = (main_pills.clone(), power_pills.clone());
+        let (main, power, refrost) = (main_pills.clone(), power_pills.clone(), refrost.clone());
         move |show_power: bool| {
             main.iter().for_each(|p| p.set_visible(!show_power));
             power.iter().for_each(|p| p.set_visible(show_power));
+            refrost();
         }
     };
     main_pills[4].connect_clicked({
@@ -721,6 +861,7 @@ fn build(app: &gtk::Application) {
         let column = gtk::Box::new(Orientation::Vertical, ctx.px(gap));
         column.add_css_class("glass");
         column.add_css_class("card");
+        ctx.frosted(&column, 8.0);
         let head = gtk::Box::new(Orientation::Horizontal, 0);
         let label = gtk::Label::new(Some(title));
         label.add_css_class("title");
@@ -830,6 +971,7 @@ fn build(app: &gtk::Application) {
         let quote = gtk::Label::new(Some(text));
         quote.add_css_class("glass");
         quote.add_css_class("quote");
+        ctx.frosted(&quote, 8.0);
         quote.set_xalign(0.0);
         quote.set_size_request(ctx.px(240.0), -1);
         ctx.put(&overlay, &quote, 1246.0, 663.0);

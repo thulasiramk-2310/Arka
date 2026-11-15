@@ -37,9 +37,6 @@ button { all: unset; }
 .wordmark { font-size: 31px; font-weight: 600; letter-spacing: 1.9px; color: mix(@text,@accent,0.45); text-shadow: 0 0 14px glow(0.28), 0 2px 8px alpha(@background,0.85); }
 
 /* The left menu. */
-.panel { background: linear-gradient(165deg, alpha(@panel_raised,opaque(0.80)), alpha(@panel,opaque(0.90))); border: 1px solid alpha(@border,0.38); box-shadow: 0 18px 40px alpha(@background,0.55); }
-.panel.main { border-radius: 74px 60px 66px 90px; }
-.panel.side { border-radius: 60px; }
 .orb { min-width: 84px; min-height: 84px; border-radius: 42px; background: radial-gradient(circle at 40% 30%, alpha(mix(@panel_raised,@accent,0.35),0.85), alpha(@background,0.96) 72%); border: 1.5px solid alpha(mix(@border,@accent,0.6),0.85); box-shadow: 0 0 0 6px glow(0.06), 0 0 20px glow(0.26), inset 0 1px 2px alpha(@text,0.3); }
 .orb:hover { border-color: @accent; box-shadow: 0 0 0 7px glow(0.14), 0 0 30px glow(0.6), inset 0 1px 2px alpha(@text,0.35); }
 .open { font-size: 13px; font-weight: 500; text-shadow: 0 1px 6px alpha(@background,0.9); }
@@ -113,3 +110,6 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 .mark:active { transform: scale(0.97); }
 .mark:active .crystal { -gtk-icon-shadow: 0 0 14px glow(0.6), 0 4px 10px alpha(@background,0.6); }
 .mark:focus-visible { outline: 2px solid @text; outline-offset: 6px; }
+
+/* The softened wallpaper behind the glass arrives with the cards. */
+.frost { animation: arrive 500ms cubic-bezier(0.16,1,0.3,1) 250ms backwards; }
