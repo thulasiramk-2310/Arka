@@ -55,6 +55,10 @@ fn builtin_dir() -> PathBuf {
     .unwrap_or_default()
 }
 
+pub fn is_picture(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg" | "png" | "webp"))
+}
+
 fn read_into(path: PathBuf, into: &mut HashMap<String, String>) {
     if let Ok(text) = std::fs::read_to_string(path) {
         parse(&text, into);
@@ -86,6 +90,11 @@ impl Config {
             read_into(dir.join("theme.conf"), &mut values);
         }
         values.extend(mine);
+        // A picture picked in quick settings wins over the theme's own and over desk.conf.
+        let picked = user.as_ref().and_then(|dir| std::fs::read_to_string(dir.join("wallpaper")).ok());
+        if let Some(path) = picked.map(|p| p.trim().to_string()).filter(|p| !p.is_empty() && Path::new(p).is_file()) {
+            values.insert("wallpaper.file".into(), path);
+        }
         Self { values, theme, dirs }
     }
 
@@ -114,6 +123,20 @@ impl Config {
     /// A picture or icon of the theme: the user's copy if there is one, else the built-in one.
     pub fn file(&self, name: &str) -> PathBuf {
         self.dirs.iter().map(|dir| dir.join(name)).find(|path| path.exists()).unwrap_or_else(|| self.dirs[0].join(name))
+    }
+
+    /// The pictures offered in quick settings: the theme's own wallpaper first, then the others
+    /// that come with it (its `wallpapers` folder, the user's copy of the theme first).
+    pub fn wallpapers(&self) -> Vec<PathBuf> {
+        let mut out = vec![self.file("wallpaper.jpg")];
+        if let Some(dir) = self.dirs.iter().map(|dir| dir.join("wallpapers")).find(|dir| dir.is_dir()) {
+            let mut more: Vec<PathBuf> = std::fs::read_dir(dir)
+                .map(|entries| entries.flatten().map(|entry| entry.path()).filter(|p| is_picture(p)).collect())
+                .unwrap_or_default();
+            more.sort();
+            out.extend(more);
+        }
+        out
     }
 
     /// The colour names for the style sheet.

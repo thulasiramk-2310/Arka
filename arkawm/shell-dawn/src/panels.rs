@@ -263,6 +263,83 @@ impl Shell {
         }
         quick_page.append(&setting("palette-bold", "Theme", themes.upcast_ref()));
 
+        // Wallpaper: the pictures that come with the theme, and any picture of the user's own.
+        let wall_head = gtk::Box::new(Orientation::Horizontal, ctx.px(12.0));
+        wall_head.add_css_class("row");
+        wall_head.append(&ctx.icon("image-bold", 20.0));
+        let wall_label = gtk::Label::new(Some("Wallpaper"));
+        wall_label.set_xalign(0.0);
+        wall_head.append(&wall_label);
+        quick_page.append(&wall_head);
+        let walls = gtk::Box::new(Orientation::Horizontal, ctx.px(8.0));
+        walls.set_margin_start(ctx.px(32.0));
+        let current = Some(ctx.cfg.get("wallpaper.file")).filter(|f| !f.is_empty()).map(std::path::PathBuf::from);
+        let pictures = ctx.cfg.wallpapers();
+        let (thumb_w, thumb_h) = (ctx.px(56.0), ctx.px(32.0));
+        for (i, path) in pictures.iter().enumerate() {
+            let button = gtk::Button::new();
+            button.add_css_class("thumb");
+            button.set_overflow(gtk::Overflow::Hidden);
+            button.set_size_request(thumb_w, thumb_h);
+            button.set_hexpand(false);
+            let shown = match &current {
+                Some(file) => file == path,
+                None => i == 0,
+            };
+            if let Ok(pixbuf) = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(path, thumb_w, thumb_h, false) {
+                let picture = gtk::Picture::for_paintable(&gtk::gdk::Texture::for_pixbuf(&pixbuf));
+                picture.set_content_fit(gtk::ContentFit::Cover);
+                picture.set_can_shrink(true);
+                picture.set_size_request(thumb_w, thumb_h);
+                button.set_child(Some(&picture));
+            }
+            let name = if i == 0 { "The theme's picture".to_string() } else { picture_name(path) };
+            button.set_tooltip_text(Some(&name));
+            button.update_property(&[gtk::accessible::Property::Label(&format!("Wallpaper: {name}"))]);
+            if shown {
+                button.add_css_class("on");
+            } else {
+                // the theme's own picture is "no choice": it follows the theme
+                let pick = if i == 0 { None } else { Some(path.clone()) };
+                button.connect_clicked(move |_| set_wallpaper(pick.as_deref()));
+            }
+            walls.append(&button);
+        }
+        let own = gtk::Button::new();
+        own.add_css_class("thumb");
+        own.add_css_class("own");
+        own.set_child(Some(&ctx.icon("folder-flat", 18.0)));
+        own.set_size_request(thumb_h, thumb_h);
+        own.set_tooltip_text(Some("A picture of your own"));
+        own.update_property(&[gtk::accessible::Property::Label("Choose a picture of your own")]);
+        if current.as_ref().is_some_and(|file| !pictures.contains(file)) {
+            own.add_css_class("on");
+        }
+        own.connect_clicked({
+            let panel = panel.clone();
+            move |_| {
+                let filter = gtk::FileFilter::new();
+                filter.set_name(Some("Pictures"));
+                for kind in ["image/jpeg", "image/png", "image/webp"] {
+                    filter.add_mime_type(kind);
+                }
+                let filters = gio::ListStore::new::<gtk::FileFilter>();
+                filters.append(&filter);
+                let dialog = gtk::FileDialog::builder().title("Choose a wallpaper").modal(true).filters(&filters).build();
+                let pictures_dir = glib::user_special_dir(glib::UserDirectory::Pictures);
+                if let Some(dir) = pictures_dir {
+                    dialog.set_initial_folder(Some(&gio::File::for_path(dir)));
+                }
+                dialog.open(Some(&panel), gio::Cancellable::NONE, |result| {
+                    if let Some(path) = result.ok().and_then(|file| file.path()) {
+                        set_wallpaper(Some(&path));
+                    }
+                });
+            }
+        });
+        walls.append(&own);
+        quick_page.append(&walls);
+
         // Clipboard history.
         let clips_page = page("clipboard");
         let clips_head = head("Clipboard");
@@ -668,13 +745,43 @@ fn stop_watcher() {
     }
 }
 
-/// Remember the theme and start again with it.
+fn settings_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".config/arkawm"))
+}
+
+/// "lake-sunrise.jpg" -> "Lake sunrise"
+fn picture_name(path: &std::path::Path) -> String {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().replace(['-', '_'], " ");
+    let mut chars = stem.chars();
+    chars.next().map(|first| first.to_uppercase().collect::<String>() + chars.as_str()).unwrap_or_default()
+}
+
+/// Remember the wallpaper (None: the theme's own) and start again with it.
+fn set_wallpaper(path: Option<&std::path::Path>) {
+    let Some(dir) = settings_dir() else { return };
+    let file = dir.join("wallpaper");
+    let saved = match path {
+        Some(path) => std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, format!("{}\n", path.display()))),
+        None => std::fs::remove_file(&file).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }),
+    };
+    if saved.is_ok() {
+        start_again();
+    }
+}
+
+/// Remember the theme and start again with it. A theme brings its own picture, so a picture
+/// picked before is let go.
 fn set_theme(name: &str) {
-    let Some(home) = std::env::var_os("HOME") else { return };
-    let dir = std::path::Path::new(&home).join(".config/arkawm");
+    let Some(dir) = settings_dir() else { return };
     if std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join("theme"), format!("{name}\n"))).is_err() {
         return;
     }
+    let _ = std::fs::remove_file(dir.join("wallpaper"));
+    start_again();
+}
+
+/// Start a fresh copy of the desktop with the settings just saved, and leave.
+fn start_again() {
     stop_watcher();
     if let Ok(me) = std::env::current_exe() {
         // the choice in the file wins over a theme forced for testing
