@@ -12,5 +12,23 @@ WatchdogSec=120s
 StandardOutput=journal
 StandardError=journal
 
+# The daemon may write only the three settings folders it manages and its own log.
+# It still needs the network, /proc/sys and namespaces (for the browser sandbox check).
+ProtectSystem=strict
+ConfigurationDirectory=NetworkManager/conf.d systemd/resolved.conf.d sysctl.d
+LogsDirectory=arkaos
+ReadWritePaths=/etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/sysctl.d
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
 [Install]
 WantedBy=multi-user.target
