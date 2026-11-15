@@ -1,0 +1,10 @@
+#!/bin/sh
+# First run of ArkaWM directly on the hardware. Run from a text console (Ctrl+Alt+F3), not from KDE.
+# It opens a terminal, saves a screenshot after 8 seconds, and quits by itself after 30 seconds
+# (or the number of seconds given: `hw-test 120`).
+# Ctrl+Alt+F1 (or F2) goes back to KDE at any time; Alt+Shift+E quits ArkaWM.
+cd "$(dirname "$0")" || exit 1
+unset WAYLAND_DISPLAY DISPLAY
+ARKAWM_EXIT_AFTER=${1:-30} ARKAWM_TEST_KEYS="8000 shot:$HOME/arkawm-hw.ppm" \
+  ./target/debug/arkawm -c kitty > "$HOME/arkawm-hw.log" 2>&1
+echo "ArkaWM exited with status $?. Log: ~/arkawm-hw.log  Screenshot: ~/arkawm-hw.ppm"

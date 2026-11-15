@@ -1,0 +1,23 @@
+[package]
+name = "arkawm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "ArkaWM: research prototype of an ArkaOS Wayland compositor on Smithay"
+
+[dependencies]
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+tracing = "0.1"
+bitflags = "2.2.1"
+fontdue = "0.9"
+xcursor = "0.3"
+png = "0.17"
+
+[dependencies.smithay]
+version = "0.7.0"
+default-features = false
+features = ["backend_winit", "backend_drm", "backend_gbm", "backend_egl", "backend_udev", "backend_libinput", "backend_session_libseat", "renderer_gl", "wayland_frontend", "desktop"]
+
+[dev-dependencies]
+smithay-client-toolkit = { version = "0.19.2", default-features = false, features = ["calloop"] }
+wayland-client = "0.31"
