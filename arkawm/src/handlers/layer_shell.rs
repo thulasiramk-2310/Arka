@@ -90,5 +90,30 @@ impl ArkaWm {
         }
         // A panel may have reserved or released space.
         self.arrange();
+        // The desktop has just appeared (or changed) with no window on screen: give it the
+        // keyboard, so the apps on it can be reached with Tab and Enter without a click first.
+        let keyboard = self.seat.get_keyboard().unwrap();
+        if keyboard.current_focus().is_none() && self.windows.iter().all(|m| m.minimized) {
+            if let Some(desktop) = self.desktop_surface() {
+                let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                self.focus_surface(Some(desktop), serial);
+            }
+        }
+    }
+
+    /// The desktop the shell draws under the windows: a background-layer surface that takes
+    /// the keyboard. `None` when no shell runs or its desktop does not want keys.
+    pub fn desktop_surface(&self) -> Option<WlSurface> {
+        use smithay::wayland::shell::wlr_layer::{KeyboardInteractivity, LayerSurfaceCachedState};
+        self.space.outputs().find_map(|output| {
+            layer_map_for_output(output).layers_on(Layer::Background).find_map(|layer| {
+                let surface = layer.wl_surface().clone();
+                let wants_keys = with_states(&surface, |states| {
+                    states.cached_state.get::<LayerSurfaceCachedState>().current().keyboard_interactivity
+                        != KeyboardInteractivity::None
+                });
+                wants_keys.then_some(surface)
+            })
+        })
     }
 }

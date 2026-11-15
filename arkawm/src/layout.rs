@@ -139,8 +139,10 @@ impl ArkaWm {
         match top {
             Some(index) => self.focus_index(index),
             None => {
+                // nothing on screen: the keyboard goes to the desktop (its apps), or nowhere
                 let serial = SERIAL_COUNTER.next_serial();
-                self.focus_surface(None, serial);
+                let desktop = self.desktop_surface();
+                self.focus_surface(desktop, serial);
                 self.redraw_wanted = true;
             }
         }
