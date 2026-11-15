@@ -606,11 +606,17 @@ fn build(app: &gtk::Application) {
         let (mut at, mut forward) = (0usize, true);
         let (stack, picture) = (stack.clone(), picture.clone());
         glib::timeout_add_seconds_local(cfg.number("wallpaper.every", 30.0).clamp(5.0, 86400.0) as u32, move || {
+            let before = at;
             (at, forward) = next_frame(at, forward, frames.len());
-            // loading the picture again also refreshes the glass behind the cards
-            if let Some(old) = pictures[at].take() {
-                stack.remove(&old);
+            // keep only the picture fading out; the others would hold a full screen each
+            for (i, slot) in pictures.iter_mut().enumerate() {
+                if i != before {
+                    if let Some(old) = slot.take() {
+                        stack.remove(&old);
+                    }
+                }
             }
+            // loading the picture again also refreshes the glass behind the cards
             let shown = picture(&frames[at]);
             stack.add_child(&shown);
             stack.set_visible_child(&shown);
