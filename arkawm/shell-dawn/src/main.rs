@@ -66,11 +66,39 @@ fn installed(program: &str) -> bool {
     path.split(':').any(|dir| Path::new(dir).join(program).is_file())
 }
 
+/// The launcher style written from the theme, so the app search looks like the rest of the desktop.
+static FUZZEL_STYLE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Write a fuzzel style from the theme's colours and font; fuzzel is started with it unless the
+/// command names a style of its own.
+fn write_fuzzel_style(cfg: &config::Config) {
+    let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") else { return };
+    let hex = |key: &str, alpha: &str| format!("{}{alpha}", cfg.get(&format!("colors.{key}")).trim_start_matches('#'));
+    let font = cfg.get("look.font").split(',').next().unwrap_or("sans-serif").trim().trim_matches('"').to_string();
+    let style = format!(
+        "[main]\nfont={font}:size=12\nprompt=\"\"\nplaceholder=Search apps\nwidth=36\nlines=10\nhorizontal-pad=22\n\
+         vertical-pad=18\ninner-pad=12\nline-height=26\n\n[colors]\nbackground={}\ntext={}\nprompt={}\nplaceholder={}\n\
+         input={}\nmatch={}\nselection={}\nselection-text={}\nselection-match={}\ncounter={}\nborder={}\n\n\
+         [border]\nwidth=1\nradius=16\nselection-radius=10\n",
+        hex("panel", "f0"), hex("text", "ff"), hex("text_dim", "ff"), hex("text_dim", "ff"), hex("text", "ff"),
+        hex("accent", "ff"), hex("accent_muted", "d0"), hex("text", "ff"), hex("accent", "ff"), hex("text_dim", "ff"),
+        hex("border", "88"),
+    );
+    let path = format!("{dir}/arka-desk-fuzzel.ini");
+    if std::fs::write(&path, style).is_ok() {
+        let _ = FUZZEL_STYLE.set(path);
+    }
+}
+
 /// Start the first of these commands whose program is installed.
 fn run(commands: &[String]) {
     for command in commands {
         let program = command.split(' ').next().unwrap_or_default();
         if installed(program) {
+            let command = match FUZZEL_STYLE.get() {
+                Some(style) if program == "fuzzel" && !command.contains("--config") => format!("{command} --config '{style}'"),
+                _ => command.clone(),
+            };
             let _ = Command::new("sh").arg("-c").arg(command).spawn();
             return;
         }
@@ -680,6 +708,7 @@ fn build(app: &gtk::Application) {
             ctx.put_center(&overlay, &ctx.caps(text, &[], true, 40.0), 724.0);
         }
     }
+    write_fuzzel_style(cfg);
     let all_apps = Rc::new(cfg.commands("all_apps"));
     let privacy_app = Rc::new(cfg.commands("privacy"));
 
@@ -1229,6 +1258,11 @@ fn build(app: &gtk::Application) {
             let value = value.or_else(|| if i == 2 { history.back().copied() } else { None });
             if let Some(text) = text {
                 label.set_text(&text);
+            }
+            // amber from 90 % (85 °C for the temperature): worth a look, not an alarm
+            if let Some(value) = value {
+                let high = if i == 3 { value >= (85.0 - 20.0) / 80.0 } else { value >= 0.9 };
+                if high { label.add_css_class("warn") } else { label.remove_css_class("warn") }
             }
             if let Some(value) = value {
                 history.push_back(value);

@@ -122,6 +122,8 @@ pub struct Shell {
     panel: gtk::ApplicationWindow,
     stack: gtk::Stack,
     notes: gtk::Box,
+    /// "Clear" over the notifications; shown only when there is something to clear.
+    clear_notes: gtk::Button,
     clips: gtk::Box,
     history: RefCell<Vec<String>>,
     toast: gtk::ApplicationWindow,
@@ -228,6 +230,7 @@ impl Shell {
         let notes_page = page("notifications");
         let notes_head = head("Notifications");
         let clear_notes = link("Clear");
+        clear_notes.set_visible(false);
         notes_head.append(&clear_notes);
         notes_page.append(&notes_head);
         let dnd = gtk::Switch::new();
@@ -301,6 +304,7 @@ impl Shell {
             panel,
             stack,
             notes,
+            clear_notes: clear_notes.clone(),
             clips,
             history: RefCell::new(Vec::new()),
             toast,
@@ -326,6 +330,7 @@ impl Shell {
         clear_notes.connect_clicked(move |_| {
             clear(&me.notes);
             me.notes.append(&empty_note("No notifications."));
+            me.clear_notes.set_visible(false);
         });
         let me = shell.clone();
         clear_clips.connect_clicked(move |_| {
@@ -559,6 +564,7 @@ impl Shell {
             item.append(&label);
         }
         self.notes.prepend(&item);
+        self.clear_notes.set_visible(true);
         let mut count = 0;
         let mut child = self.notes.first_child();
         while let Some(widget) = child {
