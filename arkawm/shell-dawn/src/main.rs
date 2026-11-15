@@ -220,18 +220,35 @@ fn sparkline(ctx: &Ctx, rgb: (f64, f64, f64)) -> (gtk::DrawingArea, Rc<RefCell<V
         let step = w / 23.0;
         let start = w - step * (data.len() - 1) as f64;
         let y = |v: f64| h - 2.0 - v.clamp(0.0, 1.0) * (h - 4.0);
-        cr.move_to(start, y(data[0]));
-        for (i, v) in data.iter().enumerate().skip(1) {
-            cr.line_to(start + step * i as f64, y(*v));
-        }
-        cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 1.0);
-        cr.set_line_width(1.4);
-        let _ = cr.stroke_preserve();
+        let points: Vec<(f64, f64)> = data.iter().enumerate().map(|(i, v)| (start + step * i as f64, y(*v))).collect();
+        // A smooth curve through the readings (Catmull-Rom as Bézier segments). It passes
+        // through every reading; only the joins between them are rounded.
+        let curve = |cr: &gtk::cairo::Context| {
+            cr.move_to(points[0].0, points[0].1);
+            for i in 0..points.len() - 1 {
+                let p0 = points[i.saturating_sub(1)];
+                let (p1, p2) = (points[i], points[i + 1]);
+                let p3 = points[(i + 2).min(points.len() - 1)];
+                let c1 = (p1.0 + (p2.0 - p0.0) / 6.0, (p1.1 + (p2.1 - p0.1) / 6.0).clamp(1.0, h - 1.0));
+                let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, (p2.1 - (p3.1 - p1.1) / 6.0).clamp(1.0, h - 1.0));
+                cr.curve_to(c1.0, c1.1, c2.0, c2.1, p2.0, p2.1);
+            }
+        };
+        curve(cr);
         cr.line_to(w, h);
         cr.line_to(start, h);
         cr.close_path();
-        cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 0.32);
+        let fill = gtk::cairo::LinearGradient::new(0.0, 0.0, 0.0, h);
+        fill.add_color_stop_rgba(0.0, rgb.0, rgb.1, rgb.2, 0.42);
+        fill.add_color_stop_rgba(1.0, rgb.0, rgb.1, rgb.2, 0.0);
+        let _ = cr.set_source(&fill);
         let _ = cr.fill();
+        curve(cr);
+        cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 1.0);
+        cr.set_line_width(1.6);
+        cr.set_line_cap(gtk::cairo::LineCap::Round);
+        cr.set_line_join(gtk::cairo::LineJoin::Round);
+        let _ = cr.stroke();
     });
     (area, history)
 }
@@ -463,6 +480,9 @@ fn build(app: &gtk::Application) {
     let frost = gtk::DrawingArea::new();
     frost.set_can_target(false);
     frost.add_css_class("frost");
+    // Frosted glass is a little lighter than what is behind it: a pale veil over the softened
+    // picture, only inside the glass (look.frost; 0 leaves the softened picture as it is).
+    let veil = cfg.number("look.frost", 0.10).clamp(0.0, 0.6);
     frost.set_draw_func({
         let ctx = ctx.clone();
         move |area, cr, w, h| {
@@ -489,6 +509,9 @@ fn build(app: &gtk::Application) {
                 cr.translate(ox, oy);
                 cr.scale(scale, scale);
                 let _ = cr.set_source_surface(surface, 0.0, 0.0);
+                let _ = cr.paint();
+                cr.identity_matrix();
+                cr.set_source_rgba(0.86, 0.90, 0.97, veil);
                 let _ = cr.paint();
                 let _ = cr.restore();
             }
@@ -963,6 +986,17 @@ fn build(app: &gtk::Application) {
     let version = gtk::Label::new(Some(&os_version()));
     version.add_css_class("row");
     version_row.append(&version);
+    let updates_app = cfg.commands("updates");
+    if !updates_app.is_empty() {
+        let open = gtk::Button::new();
+        open.set_child(Some(&ctx.icon("caret-right-bold", 14.0)));
+        open.add_css_class("flat");
+        open.add_css_class("chevron");
+        open.set_tooltip_text(Some("Open updates"));
+        open.update_property(&[gtk::accessible::Property::Label("Open updates")]);
+        open.connect_clicked(move |_| run(&updates_app));
+        version_row.append(&open);
+    }
     updates_card.append(&version_row);
     let signature_row = gtk::Box::new(Orientation::Horizontal, 0);
     let signature_name = gtk::Label::new(Some("Signature policy"));

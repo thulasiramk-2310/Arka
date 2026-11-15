@@ -8,10 +8,10 @@ window.desk, window.strip { background: transparent; }
 button { all: unset; }
 .caps { font-size: 11px; letter-spacing: 3.7px; color: alpha(@text,0.88); text-shadow: 0 1px 6px alpha(@background,0.9); }
 .caps.big { font-size: 15px; letter-spacing: 6.3px; }
-.caps.small { font-size: 10px; letter-spacing: 3.4px; color: alpha(@text,0.78); }
+.caps.small { font-size: 10px; letter-spacing: 3.4px; color: alpha(@text,0.86); text-shadow: 0 1px 3px alpha(@background,0.95), 0 0 12px alpha(@background,0.9); }
 .caps.italic { font-style: italic; }
 .rule { background: alpha(@text,0.6); min-height: 1px; }
-.glass { background: linear-gradient(160deg, alpha(mix(@panel_raised,@text,0.08),opaque(0.62)), alpha(@panel,opaque(0.76))); border: 1px solid alpha(@border,0.42); box-shadow: 0 12px 30px alpha(@background,0.45), inset 0 1px 0 alpha(@text,0.08); }
+.glass { background: linear-gradient(160deg, alpha(mix(@panel_raised,@text,0.16),opaque(0.40)), alpha(mix(@panel,@text,0.06),opaque(0.52))); border: 1px solid alpha(@border,0.42); box-shadow: 0 12px 30px alpha(@background,0.45), inset 0 1px 0 alpha(@text,0.08); }
 .card { border-radius: 8px; padding: 14px 18px 12px 18px; }
 .card .title { font-size: 15px; font-weight: 500; }
 .card .row { font-size: 13px; }
@@ -113,3 +113,5 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 
 /* The softened wallpaper behind the glass arrives with the cards. */
 .frost { animation: arrive 500ms cubic-bezier(0.16,1,0.3,1) 250ms backwards; }
+.chevron { min-width: 22px; min-height: 22px; padding: 0; margin-left: 6px; border-radius: 11px; background: none; border: none; box-shadow: none; opacity: 0.8; }
+.chevron:hover { background: alpha(@text, 0.12); opacity: 1; }
