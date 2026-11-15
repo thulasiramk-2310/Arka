@@ -378,6 +378,10 @@ public:
 public Q_SLOTS:
     Q_SCRIPTABLE void ShowFiles(const QStringList &paths) { showPaths(paths, false); }
     Q_SCRIPTABLE void ShowTools(const QStringList &paths) { showPaths(paths, true); }
+    // The shortcuts' own actions, for desktops without KDE's shortcut service (ArkaWM binds
+    // its keys to these).
+    Q_SCRIPTABLE void ShowForDrag() { showForDrag(); }
+    Q_SCRIPTABLE void ShowEditForDrag() { showEditForDrag(); }
     void showPaths(const QStringList &paths, bool edit)
     {
         QList<QUrl> urls;
