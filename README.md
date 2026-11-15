@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/arka-wordmark.svg" width="300" alt="▲ ARKA — your computer is yours"/>
+  <img src="assets/branding/arka-wordmark.svg" width="300" alt="ArkaOS wordmark"/>
 </p>
 
 <h3 align="center">Privacy-first • Immutable • Built on Linux • Designed for people</h3>
@@ -86,7 +86,7 @@ Source work and recorded test observations toward Developer Preview 2 (see [Fiel
   choose when to restart.
 - 🧱 **Firewall on by default.** An ArkaOS firewall zone rejects connections
   other computers try to open to this one. arkad checks the zone's actual rules
-  and policies, not just its name, and setup, the dashboard and the tray show it.
+  and policies as well as its name, and setup, the dashboard and the tray show it.
 - 🌐 **Encrypted DNS with an honest exception.** On a network that blocks encrypted
   DNS (some hotels and sign-in pages), the dashboard notices that names aren't
   resolving and offers to allow unencrypted DNS **on that network only**. It then
@@ -240,7 +240,7 @@ The dashboard score and report's DNS coverage shown below are obsolete
 indicators, not evidence of current protection or measured traffic.
 
 <p align="center">
-  <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper reading 'your computer is yours', a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
+  <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop — branded ARKAOS wallpaper, a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
 </p>
 
 <p align="center">
