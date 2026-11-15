@@ -1,0 +1,30 @@
+#!/bin/sh
+# Runs inside ArkaWM once it is up: tells the user's services where the screen is, then starts
+# the user's programs.
+
+# Services started on demand (portals, notifications) need to know about this session. Skipped
+# when another desktop of the same user is already running, so that one is left alone.
+vars="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE"
+if ! systemctl --user show-environment 2>/dev/null | grep -q '^WAYLAND_DISPLAY='; then
+    systemctl --user import-environment $vars 2>/dev/null
+    dbus-update-activation-environment $vars 2>/dev/null
+    # forget them again when ArkaWM ends
+    trap 'systemctl --user unset-environment $vars 2>/dev/null' EXIT
+fi
+
+# The user's own start-up programs if there are any. Otherwise the ArkaOS desktop (arka-desk:
+# wallpaper, app ring, menu, status cards, top strip), or failing that a terminal so the screen
+# is not empty. The theme is the one word in ~/.config/arkawm/theme: sky-blue or emerald.
+here=$(dirname "$(readlink -f "$0")")/..
+autostart=${XDG_CONFIG_HOME:-$HOME/.config}/arkawm/autostart
+desk=$(command -v arka-desk || echo "$here/shell-legacy/target/debug/arka-desk")
+if [ -x "$autostart" ]; then
+    "$autostart" &
+elif [ -x "$desk" ]; then
+    "$desk" &
+else
+    ${ARKAWM_TERMINAL:-konsole} &
+fi
+# stay alive for the length of the session, so the EXIT trap runs at its end
+wait
+while kill -0 "$PPID" 2>/dev/null; do sleep 5; done

@@ -1,0 +1,24 @@
+#!/bin/sh
+# ArkaWM as a login session: chosen on the login screen, it takes the screen itself.
+# Prototype. Alt+Shift+E ends the session and returns to the login screen.
+here=$(dirname "$(readlink -f "$0")")/..
+state=${XDG_STATE_HOME:-$HOME/.local/state}/arkawm
+mkdir -p "$state"
+# keep the previous session's log for one more login
+[ -f "$state/session.log" ] && mv -f "$state/session.log" "$state/session.log.old"
+
+# From the login screen there is no desktop underneath. (Set ARKAWM_BACKEND=winit to try this
+# script inside another desktop.)
+if [ -z "$ARKAWM_BACKEND" ]; then
+    export ARKAWM_BACKEND=udev
+    unset WAYLAND_DISPLAY DISPLAY
+fi
+export XDG_CURRENT_DESKTOP=ArkaWM XDG_SESSION_DESKTOP=arkawm XDG_SESSION_TYPE=wayland
+
+bin=$here/target/release/arkawm
+[ -x "$bin" ] || bin=$here/target/debug/arkawm
+if [ ! -x "$bin" ]; then
+    echo "arkawm is not built: run 'cargo build' in $here" > "$state/session.log"
+    exit 1
+fi
+exec "$bin" -c "exec $here/session/arkawm-startup" > "$state/session.log" 2>&1

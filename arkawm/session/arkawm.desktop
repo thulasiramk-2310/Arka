@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaWM (prototype)
+Comment=ArkaOS's own window manager, in development. Alt+Shift+E ends the session.
+Exec=/home/Ram/arkawm-wt/arkawm/session/arkawm-session
+DesktopNames=ArkaWM
