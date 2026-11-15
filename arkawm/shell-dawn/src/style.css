@@ -1,0 +1,115 @@
+/* Colours come from the settings (@background, @panel, @panel_raised, @border, @text, @text_dim,
+   @accent, @accent_muted, @ok, @ok_muted, @warn). glow(x) is the accent at strength x times the
+   glow setting; opaque(x) is x times the panel setting. Surfaces are neutral graphite: the
+   accent is kept for the mark, the ring and what the pointer is on, @ok for Privacy and for
+   settings that were read as configured. */
+window.desk, window.strip { background: transparent; }
+* { font-family: __FONT__; color: @text; }
+button { all: unset; }
+.caps { font-size: 11px; letter-spacing: 3.7px; color: alpha(@text,0.88); text-shadow: 0 1px 6px alpha(@background,0.9); }
+.caps.big { font-size: 15px; letter-spacing: 6.3px; }
+.caps.small { font-size: 10px; letter-spacing: 3.4px; color: alpha(@text,0.78); }
+.caps.italic { font-style: italic; }
+.rule { background: alpha(@text,0.6); min-height: 1px; }
+.glass { background: linear-gradient(160deg, alpha(mix(@panel_raised,@text,0.08),opaque(0.62)), alpha(@panel,opaque(0.76))); border: 1px solid alpha(@border,0.42); box-shadow: 0 12px 30px alpha(@background,0.45), inset 0 1px 0 alpha(@text,0.08); }
+.card { border-radius: 8px; padding: 14px 18px 12px 18px; }
+.card .title { font-size: 15px; font-weight: 500; }
+.card .row { font-size: 13px; }
+.card .value { font-feature-settings: "tnum"; }
+.card .ok { color: @ok; }
+.card .warn { color: @warn; }
+.card .dim { color: @text_dim; font-size: 11px; }
+.quote { border-radius: 8px; padding: 14px 16px 14px 20px; font-size: 13px; letter-spacing: 0.4px; color: alpha(@text,0.92); }
+.brand { font-size: 20px; font-weight: 500; }
+.round { min-width: 38px; min-height: 38px; border-radius: 19px; }
+.statuspill { min-height: 38px; border-radius: 19px; padding: 0 16px; font-size: 13px; font-weight: 500; }
+.dot { min-width: 11px; min-height: 11px; border-radius: 6px; background: @ok; box-shadow: 0 0 6px alpha(@ok,0.6); }
+.dot.off { background: @warn; box-shadow: none; }
+.date { font-size: 13px; color: alpha(@text,0.88); text-shadow: 0 1px 6px alpha(@background,0.9); }
+.clock { font-size: 20px; font-feature-settings: "tnum"; text-shadow: 0 1px 6px alpha(@background,0.9); }
+
+/* The apps on the ring: dark glass with a fine light rim. */
+.disc { min-width: 84px; min-height: 84px; border-radius: 42px; background: radial-gradient(circle at 34% 24%, alpha(mix(@panel_raised,@accent,0.30),opaque(0.72)), alpha(@panel_raised,opaque(0.84)) 48%, alpha(@background,opaque(0.92)) 100%); border: 1.5px solid alpha(mix(@border,@accent,0.45),0.72); box-shadow: 0 0 18px glow(0.16), 0 10px 22px alpha(@background,0.5), inset 0 1px 2px alpha(@text,0.22), inset 0 -8px 14px alpha(@background,0.5); }
+.node:hover .disc { border-color: alpha(@accent,0.9); box-shadow: 0 0 0 5px glow(0.12), 0 0 28px glow(0.5), 0 10px 22px alpha(@background,0.5), inset 0 1px 2px alpha(@text,0.3), inset 0 -8px 14px alpha(@background,0.45); }
+.node:active .disc { box-shadow: 0 0 14px glow(0.4), inset 0 4px 10px alpha(@background,0.7); }
+.disc.green { background: radial-gradient(circle at 34% 24%, alpha(mix(@ok_muted,@ok,0.45),opaque(0.80)), alpha(@ok_muted,opaque(0.86)) 48%, alpha(mix(@background,@ok_muted,0.35),opaque(0.94)) 100%); border-color: alpha(@ok,0.8); box-shadow: 0 0 20px alpha(@ok,0.22), 0 10px 22px alpha(@background,0.5), inset 0 1px 2px alpha(@text,0.28), inset 0 -8px 14px alpha(@background,0.5); }
+.name { font-size: 14px; font-weight: 500; color: @text; text-shadow: 0 1px 3px alpha(@background,0.95), 0 0 10px alpha(@background,0.85); }
+.wordmark { font-size: 31px; font-weight: 600; letter-spacing: 1.9px; color: mix(@text,@accent,0.45); text-shadow: 0 0 14px glow(0.28), 0 2px 8px alpha(@background,0.85); }
+
+/* The left menu. */
+.panel { background: linear-gradient(165deg, alpha(@panel_raised,opaque(0.80)), alpha(@panel,opaque(0.90))); border: 1px solid alpha(@border,0.38); box-shadow: 0 18px 40px alpha(@background,0.55); }
+.panel.main { border-radius: 74px 60px 66px 90px; }
+.panel.side { border-radius: 60px; }
+.orb { min-width: 84px; min-height: 84px; border-radius: 42px; background: radial-gradient(circle at 40% 30%, alpha(mix(@panel_raised,@accent,0.35),0.85), alpha(@background,0.96) 72%); border: 1.5px solid alpha(mix(@border,@accent,0.6),0.85); box-shadow: 0 0 0 6px glow(0.06), 0 0 20px glow(0.26), inset 0 1px 2px alpha(@text,0.3); }
+.orb:hover { border-color: @accent; box-shadow: 0 0 0 7px glow(0.14), 0 0 30px glow(0.6), inset 0 1px 2px alpha(@text,0.35); }
+.open { font-size: 13px; font-weight: 500; text-shadow: 0 1px 6px alpha(@background,0.9); }
+.pill { min-height: 42px; border-radius: 22px; padding: 0 22px; font-size: 14px; font-weight: 500; background: linear-gradient(170deg, alpha(mix(@panel_raised,@text,0.10),opaque(0.92)), alpha(@panel,opaque(0.95))); border: 1px solid alpha(@border,0.5); box-shadow: 0 8px 20px alpha(@background,0.5), inset 0 1px 0 alpha(@text,0.10); }
+.pill:hover { border-color: alpha(@accent,0.8); box-shadow: 0 8px 20px alpha(@background,0.5), 0 0 12px glow(0.3), inset 0 1px 0 alpha(@text,0.14); }
+.pill.green { border-color: alpha(@ok,0.6); background: linear-gradient(170deg, alpha(mix(@ok_muted,@panel_raised,0.35),opaque(0.94)), alpha(mix(@ok_muted,@background,0.6),opaque(0.96))); }
+.crystal { -gtk-icon-shadow: 0 0 22px glow(0.30), 0 10px 24px alpha(@background,0.5); }
+.icon { -gtk-icon-shadow: 0 2px 5px alpha(@background,0.6); }
+
+/* States: every control answers the pointer and the keyboard. */
+.disc, .orb, .pill, .round, .statuspill { transition: box-shadow 220ms cubic-bezier(0.16,1,0.3,1), border-color 220ms cubic-bezier(0.16,1,0.3,1), background-color 220ms cubic-bezier(0.16,1,0.3,1); }
+.node .name { transition: color 220ms cubic-bezier(0.16,1,0.3,1); }
+.node:hover .name { color: mix(@text,@accent,0.5); }
+.round:hover, .statuspill:hover { border-color: alpha(@accent,0.8); box-shadow: 0 10px 30px alpha(@background,0.4), 0 0 12px glow(0.3), inset 0 1px 0 alpha(@text,0.14); }
+.round:active, .statuspill:active, .pill:active { box-shadow: inset 0 3px 8px alpha(@background,0.7); }
+.orb:active { box-shadow: 0 0 14px glow(0.4), inset 0 4px 10px alpha(@background,0.7); }
+.node:focus-visible .disc, .orb:focus-visible, .pill:focus-visible, .round:focus-visible, .statuspill:focus-visible { outline: 2px solid @text; outline-offset: 3px; }
+tooltip { background: alpha(@panel,0.96); border: 1px solid alpha(@border,0.5); border-radius: 8px; padding: 4px 10px; box-shadow: 0 8px 20px alpha(@background,0.5); }
+tooltip label { font-size: 12px; color: @text; }
+
+/* The one authored moment: on start the apps settle onto the ring one after another. */
+@keyframes settle { from { opacity: 0; transform: translateY(12px) scale(0.92); } to { opacity: 1; transform: translateY(0px) scale(1); } }
+@keyframes arrive { from { opacity: 0; } to { opacity: 1; } }
+.node { animation: settle 560ms cubic-bezier(0.16,1,0.3,1) backwards; }
+.n1 { animation-delay: 150ms; } .n2 { animation-delay: 210ms; } .n3 { animation-delay: 270ms; } .n4 { animation-delay: 330ms; }
+.n5 { animation-delay: 390ms; } .n6 { animation-delay: 450ms; } .n7 { animation-delay: 510ms; } .n8 { animation-delay: 570ms; }
+.centre { animation: arrive 700ms cubic-bezier(0.16,1,0.3,1) backwards; }
+.aside { animation: arrive 700ms cubic-bezier(0.16,1,0.3,1) 400ms backwards; }
+
+/* The row of open windows in the strip. */
+.task { min-height: 34px; border-radius: 17px; padding: 0 14px; font-size: 13px; background: alpha(@panel,opaque(0.66)); border: 1px solid alpha(@border,0.32); transition: border-color 220ms cubic-bezier(0.16,1,0.3,1), background-color 220ms cubic-bezier(0.16,1,0.3,1); }
+.task:hover { border-color: alpha(@accent,0.7); }
+.task.focused { background: alpha(mix(@panel_raised,@text,0.12),opaque(0.94)); border-color: alpha(mix(@border,@accent,0.6),0.9); }
+.task.minimized label { color: @text_dim; }
+.task:focus-visible { outline: 2px solid @text; outline-offset: 3px; }
+.round.new { border-color: @warn; box-shadow: 0 0 10px alpha(@warn,0.45); }
+
+/* The sheet under the strip: notifications, quick settings, clipboard; and the toast. */
+window.sheetwin { background: transparent; }
+@keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0px); } }
+.sheet { border-radius: 16px; padding: 16px; background: linear-gradient(165deg, alpha(@panel_raised,0.97), alpha(@panel,0.98)); border: 1px solid alpha(@border,0.45); box-shadow: 0 18px 40px alpha(@background,0.55); animation: drop 240ms cubic-bezier(0.16,1,0.3,1); }
+.sheet .title { font-size: 15px; font-weight: 600; }
+.sheet .row { font-size: 13px; }
+.sheet .dim { font-size: 12px; color: @text_dim; }
+.sheet .item { border-radius: 10px; padding: 10px 12px; background: alpha(@text,0.06); }
+.sheet button.item:hover { background: alpha(@text,0.13); }
+.sheet .link { font-size: 12px; color: mix(@text,@accent,0.6); padding: 4px 10px; border-radius: 8px; }
+.sheet .link:hover { background: alpha(@text,0.10); }
+.sheet .choice { font-size: 13px; padding: 6px 14px; border-radius: 14px; background: alpha(@text,0.06); border: 1px solid alpha(@border,0.4); }
+.sheet .choice:hover { border-color: alpha(@accent,0.7); }
+.sheet .choice.on { background: alpha(@accent_muted,0.55); border-color: alpha(@accent,0.8); }
+.sheet button:focus-visible { outline: 2px solid @text; outline-offset: 2px; }
+scale trough { min-height: 4px; border-radius: 2px; background: alpha(@text,0.18); }
+scale highlight { min-height: 4px; border-radius: 2px; background: @accent; }
+scale slider { min-width: 16px; min-height: 16px; margin: -6px; border-radius: 8px; background: @text; box-shadow: 0 2px 6px alpha(@background,0.6); }
+scale:disabled, switch:disabled { opacity: 0.4; }
+switch { min-width: 40px; min-height: 22px; border-radius: 12px; background: alpha(@text,0.18); }
+switch:checked { background: @accent_muted; }
+switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9px; background: @text; }
+
+/* The left menu opens from the round button: the parts slide out of it one after another. */
+.menuitem { transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 320ms cubic-bezier(0.16,1,0.3,1), box-shadow 220ms cubic-bezier(0.16,1,0.3,1), border-color 220ms cubic-bezier(0.16,1,0.3,1); }
+.menuitem.m1 { transition-delay: 40ms; } .menuitem.m2 { transition-delay: 75ms; } .menuitem.m3 { transition-delay: 110ms; }
+.menuitem.m4 { transition-delay: 145ms; } .menuitem.m5 { transition-delay: 180ms; }
+.menuitem.shut { opacity: 0; transform: translateX(-28px) scale(0.94); transition-delay: 0ms; transition-duration: 160ms; }
+
+/* The mark in the middle brings back the desktop; it answers the pointer quietly. */
+.mark { border-radius: 24px; transition: transform 260ms cubic-bezier(0.16,1,0.3,1); }
+.mark .crystal { transition: -gtk-icon-shadow 260ms cubic-bezier(0.16,1,0.3,1); }
+.mark:hover .crystal { -gtk-icon-shadow: 0 0 30px glow(0.5), 0 10px 24px alpha(@background,0.5); }
+.mark:active { transform: scale(0.97); }
+.mark:active .crystal { -gtk-icon-shadow: 0 0 14px glow(0.6), 0 4px 10px alpha(@background,0.6); }
+.mark:focus-visible { outline: 2px solid @text; outline-offset: 6px; }
