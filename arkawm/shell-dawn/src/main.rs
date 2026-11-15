@@ -78,19 +78,31 @@ fn run(commands: &[String]) {
     eprintln!("arka-desk: none of {commands:?} is installed");
 }
 
+/// Shares of `look.blur` used behind glass: round buttons, the menu and small cards, the
+/// information cards. With the default of 8 that is 4, 6 and 8 design pixels.
+const GLASS_LEVELS: [f64; 3] = [0.5, 0.75, 1.0];
+const ROUND: f64 = 0.5;
+const SMALL: f64 = 0.75;
+const CARD: f64 = 1.0;
+
 struct Ctx {
     k: f64,
     cfg: Config,
     /// Glass surfaces on the desktop and their corner radius in design pixels (negative: round).
     /// A softened copy of the wallpaper is painted behind each, so they read as frosted glass.
-    frost: RefCell<Vec<(gtk::Widget, f64)>>,
-    /// The softened wallpaper, small; it is stretched when painted.
-    soft: RefCell<Option<gtk::cairo::ImageSurface>>,
+    /// The third number is how much of the glass blur this surface gets (see `GLASS_LEVELS`).
+    frost: RefCell<Vec<(gtk::Widget, f64, f64)>>,
+    /// Softened copies of the wallpaper, one per blur level, small; stretched when painted.
+    /// Only these are blurred. The wallpaper itself is shown as it is.
+    soft: RefCell<Vec<(f64, gtk::cairo::ImageSurface)>>,
 }
 
 impl Ctx {
-    fn frosted(&self, widget: &impl IsA<gtk::Widget>, radius: f64) {
-        self.frost.borrow_mut().push((widget.clone().upcast(), radius));
+    fn frosted(&self, widget: &impl IsA<gtk::Widget>, radius: f64, level: f64) {
+        self.frost.borrow_mut().push((widget.clone().upcast(), radius, level));
+    }
+    fn soft(&self, level: f64) -> Option<gtk::cairo::ImageSurface> {
+        self.soft.borrow().iter().find(|(l, _)| *l == level).map(|(_, surface)| surface.clone())
     }
     fn px(&self, v: f64) -> i32 {
         (v * self.k).round() as i32
@@ -152,7 +164,7 @@ impl Ctx {
             disc.add_css_class("green");
         }
         disc.set_halign(Align::Center);
-        self.frosted(&disc, -1.0);
+        self.frosted(&disc, -1.0, ROUND);
         let image = self.icon(icon, 40.0);
         image.add_css_class("icon");
         image.set_hexpand(true);
@@ -182,7 +194,7 @@ impl Ctx {
             button.add_css_class("green");
         }
         button.set_size_request(self.px(width), self.px(44.0));
-        self.frosted(&button, 22.0);
+        self.frosted(&button, 22.0, SMALL);
         button
     }
 }
@@ -344,7 +356,8 @@ fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk_pixb
 /// A small, soft copy of a wallpaper for painting behind glass. `blur` is in screen pixels.
 fn softened(pixbuf: &gtk::gdk_pixbuf::Pixbuf, blur: f64) -> Option<gtk::cairo::ImageSurface> {
     use gtk::gdk::prelude::GdkCairoContextExt;
-    let factor = (blur * 0.5).max(1.0);
+    // shrinking by about the blur radius and stretching back spreads each point that far
+    let factor = blur.max(1.0);
     let (w, h) = (((pixbuf.width() as f64 / factor) as i32).max(8), ((pixbuf.height() as f64 / factor) as i32).max(8));
     let small = pixbuf.scale_simple(w, h, gtk::gdk_pixbuf::InterpType::Bilinear)?;
     let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::Rgb24, w, h).ok()?;
@@ -420,7 +433,7 @@ fn build(app: &gtk::Application) {
         .map(|m| m.geometry().width())
         .unwrap_or(1536);
     let height = (width as f64 * 0.625).round() as i32;
-    let ctx = Rc::new(Ctx { k: width as f64 / DESIGN_WIDTH, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(None) });
+    let ctx = Rc::new(Ctx { k: width as f64 / DESIGN_WIDTH, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(Vec::new()) });
     let (k, cfg) = (ctx.k, &ctx.cfg);
 
     let provider = gtk::CssProvider::new();
@@ -453,14 +466,14 @@ fn build(app: &gtk::Application) {
     frost.set_draw_func({
         let ctx = ctx.clone();
         move |area, cr, w, h| {
-            let soft = ctx.soft.borrow();
-            let Some(surface) = soft.as_ref() else { return };
-            let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
-            let (ox, oy) = ((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
-            for (widget, radius) in ctx.frost.borrow().iter() {
+            for (widget, radius, level) in ctx.frost.borrow().iter() {
                 if !widget.is_mapped() || widget.has_css_class("shut") {
                     continue;
                 }
+                let Some(surface) = ctx.soft(*level) else { continue };
+                let surface = &surface;
+                let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
+                let (ox, oy) = ((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
                 let Some(b) = widget.compute_bounds(area) else { continue };
                 let (x, y, bw, bh) = (b.x() as f64, b.y() as f64, b.width() as f64, b.height() as f64);
                 let r = if *radius < 0.0 { bw.min(bh) / 2.0 } else { (radius * ctx.k).min(bw.min(bh) / 2.0) };
@@ -481,14 +494,15 @@ fn build(app: &gtk::Application) {
             }
         }
     });
-    let glass_blur = cfg.number("look.blur", 14.0).clamp(0.0, 80.0) * k;
+    let glass_blur = cfg.number("look.blur", 8.0).clamp(0.0, 80.0) * k;
     let picture = {
         let (ctx, frost) = (ctx.clone(), frost.clone());
         Rc::new(move |path: &Path| {
             let picture = match graded(path, width, &ctx.cfg, ctx.k) {
                 Some(pixbuf) => {
                     if glass_blur > 0.0 {
-                        *ctx.soft.borrow_mut() = softened(&pixbuf, glass_blur);
+                        *ctx.soft.borrow_mut() =
+                            GLASS_LEVELS.iter().filter_map(|level| Some((*level, softened(&pixbuf, glass_blur * level)?))).collect();
                         frost.queue_draw();
                     }
                     gtk::Picture::for_paintable(&gtk::gdk::Texture::for_pixbuf(&pixbuf))
@@ -568,7 +582,7 @@ fn build(app: &gtk::Application) {
         let quote = gtk::Label::new(Some(text));
         quote.add_css_class("glass");
         quote.add_css_class("quote");
-        ctx.frosted(&quote, 8.0);
+        ctx.frosted(&quote, 8.0, SMALL);
         quote.set_xalign(0.0);
         ctx.put(&overlay, &quote, 36.0, 289.0);
     }
@@ -680,7 +694,7 @@ fn build(app: &gtk::Application) {
             cr.close_path();
             let _ = cr.save();
             cr.clip_preserve();
-            if let Some(surface) = ctx.soft.borrow().as_ref() {
+            if let Some(surface) = ctx.soft(SMALL).as_ref() {
                 let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
                 let _ = cr.save();
                 cr.translate((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
@@ -705,7 +719,7 @@ fn build(app: &gtk::Application) {
     menu_parts.push(body.upcast());
     let orb = gtk::Button::new();
     orb.add_css_class("orb");
-    ctx.frosted(&orb, -1.0);
+    ctx.frosted(&orb, -1.0, ROUND);
     orb.set_child(Some(&ctx.logo(44.0)));
     orb.set_tooltip_text(Some("Menu"));
     orb.update_property(&[gtk::accessible::Property::Label("Menu")]);
@@ -861,7 +875,7 @@ fn build(app: &gtk::Application) {
         let column = gtk::Box::new(Orientation::Vertical, ctx.px(gap));
         column.add_css_class("glass");
         column.add_css_class("card");
-        ctx.frosted(&column, 8.0);
+        ctx.frosted(&column, 8.0, CARD);
         let head = gtk::Box::new(Orientation::Horizontal, 0);
         let label = gtk::Label::new(Some(title));
         label.add_css_class("title");
@@ -971,7 +985,7 @@ fn build(app: &gtk::Application) {
         let quote = gtk::Label::new(Some(text));
         quote.add_css_class("glass");
         quote.add_css_class("quote");
-        ctx.frosted(&quote, 8.0);
+        ctx.frosted(&quote, 8.0, SMALL);
         quote.set_xalign(0.0);
         quote.set_size_request(ctx.px(240.0), -1);
         ctx.put(&overlay, &quote, 1246.0, 663.0);
