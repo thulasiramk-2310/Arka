@@ -8,7 +8,7 @@ OVMF_VARS.4m.fd.bak
 sway-screenshot*
 sway-foot*
 # dev-scratch preview screenshots (root only — anchored so they don't shadow
-# real assets like assets/screenshots/dp1/launcher.png)
+# real assets like assets/screenshots/dp1/wizard.png)
 /hyprland-desktop.png
 /arka-post-boot.png
 /dash-final.png

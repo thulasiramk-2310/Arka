@@ -468,16 +468,7 @@ The dashboard score and report's DNS coverage shown below are obsolete
 indicators, not evidence of current protection or measured traffic.
 
 <p align="center">
-  <img src="assets/screenshots/dp1/desktop.png" width="100%" alt="ArkaOS KDE Plasma desktop: branded ARKAOS wallpaper, a slim top bar with launcher, system tray and clock, and a floating icons-only dock"/>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/dp1/lockscreen.png" width="49%" alt="ArkaOS lock screen: KDE kscreenlocker showing a large clock and date over the branded ARKAOS wallpaper"/>
   <img src="assets/screenshots/dp1/wizard.png" width="49%" alt="ArkaOS first-boot welcome wizard: privacy feature list (composefs, DoT DNS, MAC random, IPv6, bwrap) beside an account-setup prompt"/>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/dp1/launcher.png" width="100%" alt="ArkaOS full-screen application launcher (kickerdash): search, favorites, application categories and power actions over the ARKAOS wallpaper"/>
 </p>
 
 <p align="center">
@@ -490,8 +481,8 @@ indicators, not evidence of current protection or measured traffic.
   <img src="assets/screenshots/dp1/settings.png" width="49%" alt="ArkaOS Settings: General page with automatic login, ArkaOS version and hostname, and a category sidebar"/>
 </p>
 
-<p align="center"><em>Live DP1 captures (2026-07-11): desktop, KDE lock screen, first-boot
-wizard, full-screen launcher, Privacy Dashboard, Privacy Report, Capsule, and Settings.</em></p>
+<p align="center"><em>Live DP1 captures (2026-07-11): first-boot wizard, Privacy Dashboard,
+Privacy Report, Capsule, and Settings.</em></p>
 
 </details>
 
