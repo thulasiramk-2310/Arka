@@ -133,6 +133,8 @@ pub struct Shell {
     dnd: Cell<bool>,
     /// Whether any window is on screen (not minimised).
     windows_up: Cell<bool>,
+    /// Told each time the list of windows changes: how many there are, and whether any is up.
+    window_watchers: RefCell<Vec<Box<dyn Fn(usize, bool)>>>,
     /// Set while a control is being moved to a value just read, so that does not count as the
     /// user changing it.
     applying: Cell<bool>,
@@ -352,6 +354,17 @@ impl Shell {
             glib::Propagation::Proceed
         });
         quick_page.append(&setting("sparkle-bold", "Glowing paths", breathe.upcast_ref()));
+        // The cards on the right of the desktop: on shows them all again.
+        let cards = gtk::Switch::new();
+        cards.set_active(closed_cards().is_empty());
+        cards.set_tooltip_text(Some("The Privacy Status, System Health and Updates cards on the desktop"));
+        cards.connect_state_set(|_, on| {
+            let all = if on { Vec::new() } else { ["privacy", "health", "updates"].map(String::from).to_vec() };
+            save_closed_cards(&all);
+            start_again();
+            glib::Propagation::Proceed
+        });
+        quick_page.append(&setting("cards-bold", "Desktop cards", cards.upcast_ref()));
 
         // Clipboard history.
         let clips_page = page("clipboard");
@@ -403,6 +416,7 @@ impl Shell {
             toast_turn: Cell::new(0),
             dnd: Cell::new(false),
             windows_up: Cell::new(false),
+            window_watchers: RefCell::new(Vec::new()),
             applying: Cell::new(false),
             volume,
             brightness,
@@ -541,6 +555,16 @@ impl Shell {
 
     /// Back to the bare desktop: shut the sheet, and put away the windows if any are up.
     /// With none up this asks ArkaWM for nothing, so a second click does not bring them back.
+    /// Call `watcher` each time the windows change, with their number and whether any is up.
+    pub fn watch_windows(&self, watcher: impl Fn(usize, bool) + 'static) {
+        self.window_watchers.borrow_mut().push(Box::new(watcher));
+    }
+
+    /// Whether notifications, quick settings or the clipboard are open.
+    pub fn sheet_open(&self) -> bool {
+        self.panel.is_visible()
+    }
+
     pub fn show_desktop(&self) {
         self.panel.set_visible(false);
         if self.windows_up.get() {
@@ -708,6 +732,9 @@ impl Shell {
 
     fn show_tasks(self: &Rc<Self>, tasks: &[Task]) {
         self.windows_up.set(tasks.iter().any(|task| !task.minimized));
+        for watcher in self.window_watchers.borrow().iter() {
+            watcher(tasks.len(), self.windows_up.get());
+        }
         clear(&self.tasks);
         let theme = gtk::gdk::Display::default().map(|display| gtk::IconTheme::for_display(&display));
         for task in tasks {
@@ -755,6 +782,20 @@ fn stop_watcher() {
     let pid = CLIP_WATCHER.swap(0, Ordering::Relaxed);
     if pid != 0 {
         let _ = Command::new("kill").arg(pid.to_string()).status();
+    }
+}
+
+/// The cards on the desktop that were closed with their ×.
+pub fn closed_cards() -> Vec<String> {
+    settings_dir()
+        .and_then(|dir| std::fs::read_to_string(dir.join("closed-cards")).ok())
+        .map(|text| text.lines().map(str::trim).filter(|line| !line.is_empty()).map(String::from).collect())
+        .unwrap_or_default()
+}
+
+pub fn save_closed_cards(closed: &[String]) {
+    if let Some(dir) = settings_dir() {
+        let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join("closed-cards"), closed.join("\n") + "\n"));
     }
 }
 

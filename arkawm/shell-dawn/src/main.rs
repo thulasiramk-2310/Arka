@@ -61,6 +61,18 @@ fn scale_css(css: &str, k: f64) -> String {
     out
 }
 
+/// Whether this part, or what holds it, is folded away, shut or closed (its glass is not drawn).
+fn put_away(widget: &gtk::Widget) -> bool {
+    let mut at = Some(widget.clone());
+    while let Some(part) = at {
+        if ["shut", "folded", "gone"].iter().any(|class| part.has_css_class(class)) {
+            return true;
+        }
+        at = part.parent();
+    }
+    false
+}
+
 fn installed(program: &str) -> bool {
     let path = std::env::var("PATH").unwrap_or_default();
     path.split(':').any(|dir| Path::new(dir).join(program).is_file())
@@ -90,20 +102,81 @@ fn write_fuzzel_style(cfg: &config::Config) {
     }
 }
 
-/// Start the first of these commands whose program is installed.
+thread_local! {
+    /// Apps on the ring that were clicked and have no window yet; their circle pulses meanwhile.
+    static STARTING: RefCell<Vec<gtk::Widget>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A window has appeared: the apps that were starting have started.
+fn started() {
+    STARTING.with(|list| list.borrow_mut().drain(..).for_each(|widget| widget.remove_css_class("starting")));
+}
+
+/// Start the first of these commands that works.
 fn run(commands: &[String]) {
-    for command in commands {
-        let program = command.split(' ').next().unwrap_or_default();
-        if installed(program) {
-            let command = match FUZZEL_STYLE.get() {
-                Some(style) if program == "fuzzel" && !command.contains("--config") => format!("{command} --config '{style}'"),
-                _ => command.clone(),
-            };
-            let _ = Command::new("sh").arg("-c").arg(command).spawn();
-            return;
+    start(commands, None);
+}
+
+/// Start the first of these commands that works, with `button` pulsing until a window appears.
+/// A program that is there but fails at once (a launcher left behind when its app was removed,
+/// say) counts as missing, and the next one is tried.
+fn start(commands: &[String], button: Option<gtk::Widget>) {
+    let ready: VecDeque<String> =
+        commands.iter().filter(|command| installed(command.split(' ').next().unwrap_or_default())).cloned().collect();
+    if let Some(button) = &button {
+        if !ready.is_empty() {
+            button.add_css_class("starting");
+            STARTING.with(|list| list.borrow_mut().push(button.clone()));
+            // some apps open no window, or one the strip does not list: stop pulsing after a while
+            let button = button.clone();
+            glib::timeout_add_seconds_local_once(12, move || button.remove_css_class("starting"));
         }
     }
-    eprintln!("arka-desk: none of {commands:?} is installed");
+    try_next(ready, button, commands.to_vec());
+}
+
+fn try_next(mut ready: VecDeque<String>, button: Option<gtk::Widget>, mut all: Vec<String>) {
+    let Some(command) = ready.pop_front() else {
+        if let Some(button) = &button {
+            button.remove_css_class("starting");
+        }
+        let programs: Vec<&str> = all.iter().filter_map(|command| command.split(' ').next()).collect();
+        eprintln!("arka-desk: none of {programs:?} could be started");
+        let _ = Command::new("notify-send")
+            .args(["-a", "ArkaOS", "Nothing opened", &format!("None of these could be started: {}.", programs.join(", "))])
+            .spawn()
+            .map(|mut child| std::thread::spawn(move || child.wait()));
+        return;
+    };
+    let program = command.split(' ').next().unwrap_or_default().to_string();
+    let line = match FUZZEL_STYLE.get() {
+        Some(style) if program == "fuzzel" && !command.contains("--config") => format!("{command} --config '{style}'"),
+        _ => command.clone(),
+    };
+    let Ok(child) = Command::new("sh").arg("-c").arg(&line).spawn() else {
+        return try_next(ready, button, all);
+    };
+    let since = std::time::Instant::now();
+    let mut child = Some(child);
+    glib::timeout_add_local(std::time::Duration::from_millis(150), move || {
+        let Some(running) = child.as_mut() else { return glib::ControlFlow::Break };
+        match running.try_wait() {
+            Ok(Some(status)) if !status.success() && since.elapsed().as_secs() < 3 => {
+                eprintln!("arka-desk: {program} failed at once ({status}); trying the next one");
+                try_next(std::mem::take(&mut ready), button.clone(), std::mem::take(&mut all));
+                glib::ControlFlow::Break
+            }
+            Ok(Some(_)) | Err(_) => glib::ControlFlow::Break,
+            Ok(None) if since.elapsed().as_secs() < 3 => glib::ControlFlow::Continue,
+            Ok(None) => {
+                // it is running: leave a thread to collect it when it ends
+                if let Some(mut running) = child.take() {
+                    std::thread::spawn(move || running.wait());
+                }
+                glib::ControlFlow::Break
+            }
+        }
+    });
 }
 
 /// Shares of `look.blur` used behind glass: round buttons, the menu and small cards, the
@@ -208,7 +281,7 @@ impl Ctx {
         button.add_css_class("node");
         button.set_size_request(self.px(120.0), -1);
         button.set_tooltip_text(Some(name));
-        button.connect_clicked(move |_| run(&commands));
+        button.connect_clicked(move |button| start(&commands, Some(button.clone().upcast())));
         button
     }
     fn pill(&self, icon: &str, name: &str, width: f64, green: bool) -> gtk::Button {
@@ -533,7 +606,7 @@ fn build(app: &gtk::Application) {
         let ctx = ctx.clone();
         move |area, cr, w, h| {
             for (widget, radius, level) in ctx.frost.borrow().iter() {
-                if !widget.is_mapped() || widget.has_css_class("shut") {
+                if !widget.is_mapped() || put_away(widget) {
                     continue;
                 }
                 let Some(surface) = ctx.soft(*level) else { continue };
@@ -639,7 +712,7 @@ fn build(app: &gtk::Application) {
         glow.set_opacity(0.0);
         overlay.add_overlay(&glow);
         let period = cfg.number("wallpaper.breathe_every", 7.0).clamp(2.0, 120.0);
-        let peak = cfg.number("wallpaper.breathe_strength", 0.8).clamp(0.0, 1.0);
+        let peak = cfg.number("wallpaper.breathe_strength", 1.0).clamp(0.0, 1.0);
         let started = std::time::Instant::now();
         glib::timeout_add_local(std::time::Duration::from_millis(66), move || {
             let phase = started.elapsed().as_secs_f64() / period * std::f64::consts::TAU;
@@ -685,6 +758,7 @@ fn build(app: &gtk::Application) {
 
     // The ring and its lights.
     let ring = gtk::DrawingArea::new();
+    ring.add_css_class("ringlights");
     ring.set_content_width(ctx.px(560.0));
     ring.set_content_height(ctx.px(560.0));
     ring.set_can_target(false);
@@ -721,13 +795,13 @@ fn build(app: &gtk::Application) {
     let centre = gtk::Box::new(Orientation::Vertical, 0);
     centre.set_size_request(ctx.px(400.0), -1);
     centre.add_css_class("centre");
-    // The mark is a control: it brings back the desktop (see below, once the strip exists).
+    // The mark is a control: it folds the apps into it and brings them back (see below).
     let mark = gtk::Button::new();
     mark.add_css_class("mark");
     mark.set_child(Some(&ctx.logo(196.0)));
     mark.set_halign(Align::Center);
-    mark.set_tooltip_text(Some("Show the desktop"));
-    mark.update_property(&[gtk::accessible::Property::Label("Show the desktop")]);
+    mark.set_tooltip_text(Some("Hide the apps"));
+    mark.update_property(&[gtk::accessible::Property::Label("Hide the apps")]);
     centre.append(&mark);
     if let Some(text) = text("wordmark") {
         let wordmark = gtk::Label::new(Some(text));
@@ -742,11 +816,13 @@ fn build(app: &gtk::Application) {
     // The eight places on the ring, clockwise from the top.
     const PLACES: [(f64, f64); 8] =
         [(708.0, 110.0), (866.0, 176.0), (932.0, 334.0), (866.0, 492.0), (708.0, 558.0), (550.0, 492.0), (484.0, 334.0), (550.0, 176.0)];
+    let mut nodes: Vec<gtk::Button> = Vec::new();
     if show_ring {
         for (i, ((name, icon, commands, highlight), (x, y))) in cfg.apps().into_iter().zip(PLACES).enumerate() {
             let node = ctx.node(&icon, &name, highlight, commands);
             node.add_css_class(&format!("n{}", i + 1));
             ctx.put(&overlay, &node, x, y);
+            nodes.push(node);
         }
         if let Some(text) = caption("platform") {
             ctx.put_center(&overlay, &ctx.caps(text, &[], true, 40.0), 724.0);
@@ -760,15 +836,27 @@ fn build(app: &gtk::Application) {
     let mut menu_parts: Vec<gtk::Widget> = Vec::new();
     // The menu's body and the lobe around the round button are one shape with one outline:
     // the button grows into the menu. Drawn here because a style sheet cannot join two shapes.
+    // Opening, the shape grows out of the round button with a little overshoot and the entries
+    // fan out of it; shutting, it all draws back in, quicker.
     let body = gtk::DrawingArea::new();
     body.set_can_target(false);
+    let body_share = Rc::new(Cell::new(0.0f64));
     body.set_draw_func({
         let ctx = ctx.clone();
+        let share = body_share.clone();
         let (raised, panel, border) = (ctx.cfg.color("panel_raised"), ctx.cfg.color("panel"), ctx.cfg.color("border"));
         let strength = ctx.cfg.number("look.panel_opacity", 1.0);
         move |_, cr, w, h| {
             use std::f64::consts::{FRAC_PI_2, PI};
             let k = ctx.k;
+            let p = share.get();
+            if p <= 0.001 {
+                return;
+            }
+            // ease out with a slight overshoot, so the panel settles rather than stops
+            let t = p - 1.0;
+            let grow = 1.0 + 2.2 * t.powi(3) + 1.2 * t.powi(2);
+            cr.push_group();
             // design pixels: the lobe (centre, radius), the body's box and corners, the fillet
             let (cx, cy, r) = (116.0 * k, 551.0 * k, 62.0 * k);
             let (x0, y0, x1, y1) = (152.0 * k, 422.0 * k, 420.0 * k, 704.0 * k);
@@ -777,6 +865,11 @@ fn build(app: &gtk::Application) {
             let fx = x0 - f;
             let reach = ((r + f).powi(2) - (fx - cx).powi(2)).max(0.0).sqrt();
             let (up, low) = (cy - reach, cy + reach);
+            // the outline is built scaled about the button; what fills it is not
+            let _ = cr.save();
+            cr.translate(cx, cy);
+            cr.scale(0.25 + 0.75 * grow, 0.25 + 0.75 * grow);
+            cr.translate(-cx, -cy);
             cr.new_path();
             cr.arc(x0 + tl, y0 + tl, tl, PI, PI + FRAC_PI_2);
             cr.arc(x1 - tr, y0 + tr, tr, -FRAC_PI_2, 0.0);
@@ -788,6 +881,7 @@ fn build(app: &gtk::Application) {
             cr.arc(cx, cy, r, toward(low) + PI, toward(up) + PI);
             cr.arc_negative(fx, up, f, toward(up), 0.0);
             cr.close_path();
+            let _ = cr.restore();
             let _ = cr.save();
             cr.clip_preserve();
             if let Some(surface) = ctx.soft(SMALL).as_ref() {
@@ -808,11 +902,42 @@ fn build(app: &gtk::Application) {
             cr.set_source_rgba(border.0, border.1, border.2, 0.5);
             cr.set_line_width(1.2 * k);
             let _ = cr.stroke();
+            let _ = cr.pop_group_to_source();
+            let _ = cr.paint_with_alpha((p * 1.8).min(1.0));
         }
     });
     overlay.add_overlay(&body);
     // shut, only the round button is left: a clean circle
-    menu_parts.push(body.upcast());
+    let body_motion: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let move_body = {
+        let (body, share, running) = (body.clone(), body_share.clone(), body_motion.clone());
+        Rc::new(move |open: bool| {
+            if let Some(id) = running.borrow_mut().take() {
+                id.remove();
+            }
+            let (from, to) = (share.get(), if open { 1.0 } else { 0.0 });
+            let length = if open { 440.0 } else { 200.0 } * (to - from).abs();
+            if !motion || length < 1.0 {
+                share.set(to);
+                body.queue_draw();
+                return;
+            }
+            let since = std::time::Instant::now();
+            let (body2, share2, running2) = (body.clone(), share.clone(), running.clone());
+            let id = glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+                let t = (since.elapsed().as_secs_f64() * 1000.0 / length).min(1.0);
+                share2.set(from + (to - from) * t);
+                body2.queue_draw();
+                if t >= 1.0 {
+                    running2.borrow_mut().take();
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
+            *running.borrow_mut() = Some(id);
+        })
+    };
     let orb = gtk::Button::new();
     orb.add_css_class("orb");
     ctx.frosted(&orb, -1.0, ROUND);
@@ -869,9 +994,12 @@ fn build(app: &gtk::Application) {
     let always_open = cfg.get("menu.open") == "always";
     let menu_open = Rc::new(Cell::new(false));
     let set_menu = {
-        let (parts, open, refrost) = (menu_parts, menu_open.clone(), refrost.clone());
+        let (parts, open, refrost, move_body) = (menu_parts, menu_open.clone(), refrost.clone(), move_body.clone());
         Rc::new(move |on: bool| {
             let on = on || always_open;
+            if on != open.get() || on {
+                move_body(on);
+            }
             open.set(on);
             for part in &parts {
                 part.add_css_class("menuitem");
@@ -967,7 +1095,10 @@ fn build(app: &gtk::Application) {
     let aside = gtk::Box::new(Orientation::Vertical, ctx.px(10.0));
     aside.set_size_request(ctx.px(300.0), -1);
     aside.add_css_class("aside");
-    let card = |title: &str, gap: f64| {
+    // Each card can be closed with its ×; which ones are closed is remembered, and the
+    // "Desktop cards" switch in quick settings brings them all back.
+    let closed_cards = std::rc::Rc::new(RefCell::new(panels::closed_cards()));
+    let card = |title: &str, gap: f64, id: &'static str| {
         let column = gtk::Box::new(Orientation::Vertical, ctx.px(gap));
         column.add_css_class("glass");
         column.add_css_class("card");
@@ -980,13 +1111,36 @@ fn build(app: &gtk::Application) {
         head.append(&label);
         head.set_margin_bottom(ctx.px(4.0));
         column.append(&head);
-        (column, head)
+        let close = gtk::Button::new();
+        close.set_child(Some(&ctx.icon("x-bold", 12.0)));
+        close.add_css_class("cardclose");
+        close.set_valign(Align::Center);
+        close.set_tooltip_text(Some("Close this card (quick settings brings it back)"));
+        close.update_property(&[gtk::accessible::Property::Label(&format!("Close {title}"))]);
+        close.connect_clicked({
+            let (column, closed, refrost) = (column.clone(), closed_cards.clone(), refrost.clone());
+            move |_| {
+                column.add_css_class("gone");
+                closed.borrow_mut().push(id.to_string());
+                panels::save_closed_cards(&closed.borrow());
+                let (column, refrost) = (column.clone(), refrost.clone());
+                glib::timeout_add_local_once(std::time::Duration::from_millis(if motion { 260 } else { 0 }), move || {
+                    column.set_visible(false);
+                    refrost();
+                });
+            }
+        });
+        if closed_cards.borrow().iter().any(|closed| closed == id) {
+            column.set_visible(false);
+        }
+        (column, head, close)
     };
 
-    let (privacy_card, privacy_head) = card("Privacy Status", 5.0);
-    let count = gtk::Label::new(Some("–"));
+    let (privacy_card, privacy_head, privacy_close) = card("Privacy Status", 5.0, "privacy");
+    let count = gtk::Label::new(Some(""));
     count.add_css_class("title");
     privacy_head.append(&count);
+    privacy_head.append(&privacy_close);
     let mut privacy_rows = Vec::new();
     for name in PRIVACY_NAMES {
         let row = gtk::Box::new(Orientation::Horizontal, ctx.px(14.0));
@@ -1012,7 +1166,8 @@ fn build(app: &gtk::Application) {
     privacy_card.append(&checked_row);
     aside.append(&privacy_card);
 
-    let (health_card, _) = card("System Health", 11.0);
+    let (health_card, health_head, health_close) = card("System Health", 11.0, "health");
+    health_head.append(&health_close);
     let mut health = Vec::new();
     for (icon, name, rgb) in [
         ("cpu-bold", "CPU", accent_rgb),
@@ -1041,7 +1196,8 @@ fn build(app: &gtk::Application) {
     }
     aside.append(&health_card);
 
-    let (updates_card, _) = card("Updates", 6.0);
+    let (updates_card, updates_head, updates_close) = card("Updates", 6.0, "updates");
+    updates_head.append(&updates_close);
     let updates_row = gtk::Box::new(Orientation::Horizontal, ctx.px(14.0));
     updates_row.add_css_class("row");
     updates_row.append(&ctx.icon("arrows-clockwise-bold", 21.0));
@@ -1112,30 +1268,66 @@ fn build(app: &gtk::Application) {
 
     // ───── The strip along the top, above the windows ─────
     let strip = layer_window(app, "strip", Layer::Top);
-    strip.set_exclusive_zone(ctx.px(56.0));
+    // Windows get the whole screen: the strip shows on the bare desktop and, while a window is
+    // up, tucks itself away until the pointer touches the top edge (see below).
+    strip.set_exclusive_zone(0);
     strip.set_default_size(width, ctx.px(60.0));
     let bar = gtk::CenterBox::new();
     bar.set_margin_start(ctx.px(34.0));
     bar.set_margin_end(ctx.px(30.0));
     bar.set_margin_top(ctx.px(11.0));
     bar.set_margin_bottom(ctx.px(11.0));
-    let brand = gtk::Box::new(Orientation::Horizontal, ctx.px(14.0));
-    brand.append(&ctx.logo(36.0));
+    let brand_row = gtk::Box::new(Orientation::Horizontal, ctx.px(14.0));
+    brand_row.append(&ctx.logo(36.0));
     if let Some(text) = text("brand") {
         let name = gtk::Label::new(Some(text));
         name.add_css_class("brand");
-        brand.append(&name);
+        brand_row.append(&name);
     }
+    // the mark in the strip shows the desktop (the big mark folds the apps instead)
+    let brand = gtk::Button::new();
+    brand.add_css_class("brandbutton");
+    brand.set_child(Some(&brand_row));
+    brand.set_tooltip_text(Some("Show the desktop"));
+    brand.update_property(&[gtk::accessible::Property::Label("Show the desktop")]);
     bar.set_start_widget(Some(&brand));
 
     // Open windows in the middle; notifications, quick settings and clipboard history on the right.
     let shell = panels::Shell::new(app, ctx.clone());
-    mark.connect_clicked({
+    brand.connect_clicked({
         let (shell, swap, set_menu) = (shell.clone(), swap.clone(), set_menu.clone());
         move |_| {
             swap(false);
             set_menu(false);
             shell.show_desktop();
+        }
+    });
+    mark.connect_clicked({
+        let (swap, set_menu, refrost, ring) = (swap.clone(), set_menu.clone(), refrost.clone(), ring.clone());
+        let folded = Cell::new(false);
+        move |mark| {
+            swap(false);
+            set_menu(false);
+            let fold = !folded.get();
+            folded.set(fold);
+            for node in &nodes {
+                if fold {
+                    node.add_css_class("folded");
+                } else {
+                    node.remove_css_class("folded");
+                }
+                node.set_can_target(!fold);
+                node.set_can_focus(!fold);
+            }
+            if fold {
+                ring.add_css_class("folded");
+            } else {
+                ring.remove_css_class("folded");
+            }
+            let tip = if fold { "Show the apps" } else { "Hide the apps" };
+            mark.set_tooltip_text(Some(tip));
+            mark.update_property(&[gtk::accessible::Property::Label(tip)]);
+            refrost();
         }
     });
     if cfg.on("show.tasks") {
@@ -1193,8 +1385,87 @@ fn build(app: &gtk::Application) {
     clock.add_css_class("clock");
     right.append(&clock);
     bar.set_end_widget(Some(&right));
+    bar.add_css_class("bar");
     strip.set_child(Some(&bar));
     strip.present();
+
+    // Tucked away, the strip keeps a thin line at the top edge: the pointer touching it brings
+    // the strip down; leaving it (with nothing of the strip's open) sends it back up.
+    let strip_height = ctx.px(60.0);
+    let tucked = Rc::new(Cell::new(false));
+    let pointer_in = Rc::new(Cell::new(false));
+    let windows_up = Rc::new(Cell::new(false));
+    let tuck = {
+        let (strip, bar, tucked) = (strip.clone(), bar.clone(), tucked.clone());
+        Rc::new(move |away: bool| {
+            if away == tucked.get() {
+                return;
+            }
+            tucked.set(away);
+            if away {
+                bar.add_css_class("tucked");
+                let (strip, tucked) = (strip.clone(), tucked.clone());
+                glib::timeout_add_local_once(std::time::Duration::from_millis(if motion { 240 } else { 0 }), move || {
+                    if tucked.get() {
+                        strip.set_margin(Edge::Top, -(strip_height - 3));
+                    }
+                });
+            } else {
+                strip.set_margin(Edge::Top, 0);
+                bar.remove_css_class("tucked");
+            }
+        })
+    };
+    // put the strip away once the pointer has left it and nothing of it is open
+    let tuck_later = {
+        let (tuck, pointer_in, windows_up, shell) = (tuck.clone(), pointer_in.clone(), windows_up.clone(), shell.clone());
+        Rc::new(move || {
+            let (tuck, pointer_in, windows_up, shell) = (tuck.clone(), pointer_in.clone(), windows_up.clone(), shell.clone());
+            glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+                if pointer_in.get() || !windows_up.get() {
+                    return glib::ControlFlow::Break;
+                }
+                if shell.sheet_open() {
+                    return glib::ControlFlow::Continue;
+                }
+                tuck(true);
+                glib::ControlFlow::Break
+            });
+        })
+    };
+    let hover = gtk::EventControllerMotion::new();
+    hover.connect_enter({
+        let (tuck, pointer_in) = (tuck.clone(), pointer_in.clone());
+        move |_, _, _| {
+            pointer_in.set(true);
+            tuck(false);
+        }
+    });
+    hover.connect_leave({
+        let (pointer_in, tuck_later) = (pointer_in.clone(), tuck_later.clone());
+        move |_| {
+            pointer_in.set(false);
+            tuck_later();
+        }
+    });
+    strip.add_controller(hover);
+    let window_count = Cell::new(0usize);
+    shell.watch_windows({
+        let (tuck, windows_up, tuck_later, pointer_in) = (tuck.clone(), windows_up.clone(), tuck_later.clone(), pointer_in.clone());
+        move |count, up| {
+            // a new window: the app that was clicked has started
+            if count > window_count.get() {
+                started();
+            }
+            window_count.set(count);
+            windows_up.set(up);
+            if !up {
+                tuck(false);
+            } else if !pointer_in.get() {
+                tuck_later();
+            }
+        }
+    });
     panels::serve_notifications(&shell);
     shell.start();
 
@@ -1249,7 +1520,7 @@ fn build(app: &gtk::Application) {
             }
             // The count and the pill never claim more than was actually read.
             if known == 0 {
-                live.count.set_text("–");
+                live.count.set_text("");
                 live.pill_text.set_text("Status unavailable");
                 live.pill_dot.add_css_class("off");
             } else {

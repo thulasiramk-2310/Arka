@@ -99,10 +99,16 @@ switch:checked { background: @accent_muted; }
 switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9px; background: @text; }
 
 /* The left menu opens from the round button: the parts slide out of it one after another. */
-.menuitem { transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 320ms cubic-bezier(0.16,1,0.3,1), box-shadow 220ms cubic-bezier(0.16,1,0.3,1), border-color 220ms cubic-bezier(0.16,1,0.3,1); }
-.menuitem.m1 { transition-delay: 40ms; } .menuitem.m2 { transition-delay: 75ms; } .menuitem.m3 { transition-delay: 110ms; }
-.menuitem.m4 { transition-delay: 145ms; } .menuitem.m5 { transition-delay: 180ms; }
-.menuitem.shut { opacity: 0; transform: translateX(-28px) scale(0.94); transition-delay: 0ms; transition-duration: 160ms; }
+/* The entries fan out of the round button, each from where the button is, and settle in place. */
+.menuitem { transition: opacity 220ms cubic-bezier(0.16,1,0.3,1), transform 460ms cubic-bezier(0.34,1.32,0.64,1), box-shadow 220ms cubic-bezier(0.16,1,0.3,1), border-color 220ms cubic-bezier(0.16,1,0.3,1); }
+.menuitem.m1 { transition-delay: 90ms; } .menuitem.m2 { transition-delay: 125ms; } .menuitem.m3 { transition-delay: 160ms; }
+.menuitem.m4 { transition-delay: 195ms; } .menuitem.m5 { transition-delay: 230ms; }
+.menuitem.shut { opacity: 0; transition-delay: 0ms; transition-duration: 150ms; }
+.menuitem.m1.shut { transform: translate(-164px, 87px) scale(0.35); }
+.menuitem.m2.shut { transform: translate(-155px, 39px) scale(0.35); }
+.menuitem.m3.shut { transform: translate(-158px, -10px) scale(0.35); }
+.menuitem.m4.shut { transform: translate(-173px, -59px) scale(0.35); }
+.menuitem.m5.shut { transform: translate(-192px, -108px) scale(0.35); }
 
 /* The mark in the middle brings back the desktop; it answers the pointer quietly. */
 .mark { border-radius: 24px; transition: transform 260ms cubic-bezier(0.16,1,0.3,1); }
@@ -120,3 +126,36 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 .sheet .thumb:hover { border-color: alpha(@accent,0.7); }
 .sheet .thumb.on { border-color: @accent; }
 .sheet .thumb.own { min-width: 52px; }
+
+/* The mark folds the apps into itself and lets them out again. */
+.node { transition: opacity 280ms cubic-bezier(0.16,1,0.3,1), transform 520ms cubic-bezier(0.34,1.28,0.64,1); }
+.node.folded { opacity: 0; transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 360ms cubic-bezier(0.5,0,0.75,0); }
+.node.n1.folded { transform: translate(0px, 224px) scale(0.3); }
+.node.n2.folded { transform: translate(-158px, 158px) scale(0.3); }
+.node.n3.folded { transform: translate(-224px, 0px) scale(0.3); }
+.node.n4.folded { transform: translate(-158px, -158px) scale(0.3); }
+.node.n5.folded { transform: translate(0px, -224px) scale(0.3); }
+.node.n6.folded { transform: translate(158px, -158px) scale(0.3); }
+.node.n7.folded { transform: translate(224px, 0px) scale(0.3); }
+.node.n8.folded { transform: translate(158px, 158px) scale(0.3); }
+.ringlights { transition: opacity 420ms cubic-bezier(0.16,1,0.3,1), transform 520ms cubic-bezier(0.34,1.2,0.64,1); }
+.ringlights.folded { opacity: 0; transform: scale(0.5); transition-duration: 300ms; }
+
+/* An app that was clicked and has no window yet: its circle breathes. */
+@keyframes starting { 0% { box-shadow: 0 0 0 0px glow(0.45), 0 10px 22px alpha(@background,0.5); } 70% { box-shadow: 0 0 0 14px glow(0.0), 0 10px 22px alpha(@background,0.5); } 100% { box-shadow: 0 0 0 0px glow(0.0), 0 10px 22px alpha(@background,0.5); } }
+.node.starting .disc { border-color: @accent; animation: starting 1100ms cubic-bezier(0.16,1,0.3,1) infinite; }
+
+/* Closing a card: it slides out to the right and fades. */
+.card { transition: opacity 240ms cubic-bezier(0.16,1,0.3,1), transform 260ms cubic-bezier(0.5,0,0.75,0); }
+.card.gone { opacity: 0; transform: translateX(32px); }
+.cardclose { min-width: 22px; min-height: 22px; border-radius: 11px; margin-left: 8px; opacity: 0.55; transition: opacity 200ms, background-color 200ms; }
+.cardclose image { margin: 5px; }
+.cardclose:hover { opacity: 1; background: alpha(@text,0.14); }
+.cardclose:focus-visible { opacity: 1; box-shadow: 0 0 0 2px @text; }
+
+/* The strip slides up out of the way while a window is up, and back down at the top edge. */
+.bar { transition: transform 260ms cubic-bezier(0.16,1,0.3,1), opacity 220ms cubic-bezier(0.16,1,0.3,1); }
+.bar.tucked { transform: translateY(-64px); opacity: 0; transition-timing-function: cubic-bezier(0.5,0,0.75,0); }
+.brandbutton { border-radius: 14px; padding: 2px 10px 2px 2px; transition: background-color 200ms; }
+.brandbutton:hover { background: alpha(@text,0.08); }
+.brandbutton:focus-visible { box-shadow: 0 0 0 2px @text; }
