@@ -43,6 +43,9 @@ pub struct ArkaWm {
 
     pub space: Space<Window>,
     pub loop_signal: LoopSignal,
+    pub loop_handle: smithay::reexports::calloop::LoopHandle<'static, ArkaWm>,
+    /// The timer repeating a held volume or brightness key.
+    pub media_repeat: Option<smithay::reexports::calloop::RegistrationToken>,
 
     /// Every window, in the order they were opened (and their row order).
     pub windows: Vec<Managed>,
@@ -185,6 +188,8 @@ impl ArkaWm {
 
             space,
             loop_signal,
+            loop_handle: event_loop.handle(),
+            media_repeat: None,
             windows: Vec::new(),
             focused: 0,
             mode: LayoutMode::Free,

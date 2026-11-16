@@ -44,6 +44,8 @@ impl ArkaWm {
                         FilterResult::Intercept(Action::None)
                     }
                 }
+                // sound and brightness keep working on the lock screen, as on Plasma
+                Some(Action::Media(key)) => FilterResult::Intercept(if pressed { Action::Media(key) } else { Action::None }),
                 _ if state.locked => FilterResult::Forward,
                 // Esc backs out of the window switcher and of picking a part of the screen.
                 _ if (state.switcher.is_some() || state.region.is_some()) && handle.modified_sym() == Keysym::Escape => {
@@ -55,12 +57,45 @@ impl ArkaWm {
                 None => FilterResult::Forward,
             }},
         );
+        // a held volume or brightness key repeats until any key is let go or another is pressed
+        if self.media_repeat.is_some() && (!pressed || !matches!(action, Some(Action::Media(_)))) {
+            self.stop_media_repeat();
+        }
         if let Some(action) = action {
             self.run(action);
         }
         // Letting go of Alt picks the window the switcher is on.
         if self.switcher.is_some() && !self.seat.get_keyboard().unwrap().modifier_state().alt {
             self.switcher_close(true);
+        }
+    }
+
+    /// A media key: run its command here (so the keys work without the shell), then let the
+    /// shell show what changed.
+    fn media(&mut self, key: &'static str) {
+        // run here, so the keys work even without the shell; the shell then shows the result
+        let (command, shown) = match key {
+            "volume-up" => ("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+", Some("volume")),
+            "volume-down" => ("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-", Some("volume")),
+            "mute" => ("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", Some("volume")),
+            "mic-mute" => ("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", Some("mic")),
+            // never all the way to black
+            "brightness-up" => ("brightnessctl -q set 5%+", Some("brightness")),
+            "brightness-down" => ("brightnessctl -q --min-value=2% set 5%-", Some("brightness")),
+            "wifi" => ("if [ \"$(nmcli radio wifi)\" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi", Some("wifi")),
+            "play" => ("playerctl play-pause", None),
+            "next" => ("playerctl next", None),
+            _ => ("playerctl previous", None),
+        };
+        crate::state::spawn(&format!("{command} >/dev/null 2>&1"));
+        if let Some(what) = shown {
+            self.tell_shell(&format!("media {what}\n"));
+        }
+    }
+
+    fn stop_media_repeat(&mut self) {
+        if let Some(token) = self.media_repeat.take() {
+            self.loop_handle.remove(token);
         }
     }
 
@@ -406,23 +441,18 @@ impl ArkaWm {
             }
             Action::Panel(name) => self.tell_shell(&format!("show {name}\n")),
             Action::Media(key) => {
-                // run here, so the keys work even without the shell; the shell then shows the result
-                let (command, shown) = match key {
-                    "volume-up" => ("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+", Some("volume")),
-                    "volume-down" => ("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-", Some("volume")),
-                    "mute" => ("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", Some("volume")),
-                    "mic-mute" => ("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", Some("mic")),
-                    // never all the way to black
-                    "brightness-up" => ("brightnessctl -q set 5%+", Some("brightness")),
-                    "brightness-down" => ("brightnessctl -q --min-value=2% set 5%-", Some("brightness")),
-                    "wifi" => ("if [ \"$(nmcli radio wifi)\" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi", Some("wifi")),
-                    "play" => ("playerctl play-pause", None),
-                    "next" => ("playerctl next", None),
-                    _ => ("playerctl previous", None),
-                };
-                crate::state::spawn(&format!("{command} >/dev/null 2>&1"));
-                if let Some(what) = shown {
-                    self.tell_shell(&format!("media {what}\n"));
+                self.media(key);
+                if matches!(key, "volume-up" | "volume-down" | "brightness-up" | "brightness-down") {
+                    self.stop_media_repeat();
+                    use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+                    let timer = Timer::from_duration(std::time::Duration::from_millis(400));
+                    self.media_repeat = self
+                        .loop_handle
+                        .insert_source(timer, move |_, _, state| {
+                            state.media(key);
+                            TimeoutAction::ToDuration(std::time::Duration::from_millis(90))
+                        })
+                        .ok();
                 }
             }
             Action::MoveLeft => self.move_focused(-1),
