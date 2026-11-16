@@ -50,6 +50,7 @@ impl ArkaWm {
     }
 
     pub fn add_window(&mut self, window: Window) {
+        tracing::info!("new window");
         let area = self.usable_area();
         // Until the window's first frame says how big it is, cascade it.
         let offset = 32 * (self.windows.len() as i32 % 8);
