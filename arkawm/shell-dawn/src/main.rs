@@ -19,6 +19,8 @@ use gtk4 as gtk;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 mod config;
+mod devices;
+mod network;
 mod panels;
 
 use config::Config;

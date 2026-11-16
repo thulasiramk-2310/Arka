@@ -59,7 +59,12 @@ pub struct Quick {
     brightness: Option<f64>,
     wifi: Option<bool>,
     bluetooth: Option<bool>,
+    /// `None`: no Wi-Fi profile is set up as a hotspot.
+    hotspot: Option<bool>,
 }
+
+use crate::devices::{Charge, Device, Extras};
+use crate::network::{Network, FIND_HOTSPOT};
 
 /// The percentage in `Volume: 0.45 [MUTED]`.
 pub fn parse_volume(text: &str) -> Option<f64> {
@@ -87,6 +92,8 @@ fn read_quick() -> Quick {
             "blocked" => Some(false),
             _ => None,
         }),
+        hotspot: output_of(&format!(r#"c=$({FIND_HOTSPOT}); [ -n "$c" ] && nmcli -g GENERAL.STATE connection show "$c""#))
+            .map(|state| state.starts_with("activat")),
     }
 }
 
@@ -103,6 +110,21 @@ enum Event {
     Quick(Quick),
     /// What a media key just changed, to show briefly ("Volume 45%").
     Level(String),
+    /// The Wi-Fi networks in reach, or why there is no list.
+    Networks(Result<Vec<Network>, String>),
+    /// Joining this network worked, or failed with this message.
+    Joined(String, Result<(), String>),
+    /// The hotspot's name and password, when there is a hotspot.
+    HotspotDetails(Option<(String, String)>),
+    HotspotSaved(Result<(), String>),
+    /// Battery, power mode and sound outputs.
+    Extras(Extras),
+    /// The Bluetooth devices, or why there is no list.
+    Devices(Result<Vec<Device>, String>),
+    /// A Bluetooth device connected, disconnected or failed to: the message to show.
+    DeviceDone(Result<String, String>),
+    /// Changing the power mode or the sound output failed.
+    Failed(String, String),
 }
 
 /// The new state after a media key, read once the change has had time to land.
@@ -162,6 +184,30 @@ pub struct Shell {
     brightness: gtk::Scale,
     wifi: gtk::Switch,
     bluetooth: gtk::Switch,
+    hotspot: gtk::Switch,
+    /// The Wi-Fi page: its list and the button that looks again.
+    networks: gtk::Box,
+    /// The scrolled list around `networks`, sized to it (the sheet does not grow by itself).
+    network_list: gtk::ScrolledWindow,
+    scan: gtk::Button,
+    /// The hotspot page.
+    hotspot_name: gtk::Entry,
+    hotspot_password: gtk::PasswordEntry,
+    hotspot_note: gtk::Label,
+    hotspot_save: gtk::Button,
+    /// Sound output, battery and power mode rows; each hidden when this computer has no such thing.
+    output_row: gtk::Box,
+    output_pick: gtk::DropDown,
+    output_names: RefCell<Vec<String>>,
+    battery_row: gtk::Box,
+    battery_icon: gtk::Image,
+    battery_text: gtk::Label,
+    power_row: gtk::Box,
+    power_modes: Vec<(&'static str, gtk::Button)>,
+    /// The Bluetooth page.
+    devices: gtk::Box,
+    device_list: gtk::ScrolledWindow,
+    look: gtk::Button,
 }
 
 fn sheet_window(app: &gtk::Application, ctx: &Ctx, name: &str) -> gtk::ApplicationWindow {
@@ -268,10 +314,48 @@ impl Shell {
         let brightness = gtk::Scale::with_range(Orientation::Horizontal, 5.0, 100.0, 1.0);
         let wifi = gtk::Switch::new();
         let bluetooth = gtk::Switch::new();
+        let hotspot = gtk::Switch::new();
         quick_page.append(&setting("speaker-high-bold", "Volume", volume.upcast_ref()));
         quick_page.append(&setting("sun-bold", "Brightness", brightness.upcast_ref()));
-        quick_page.append(&setting("wifi-high-bold", "Wi-Fi", wifi.upcast_ref()));
-        quick_page.append(&setting("bluetooth-bold", "Bluetooth", bluetooth.upcast_ref()));
+        // a link between a row's name and its switch, to the page with more
+        let more = |row: &gtk::Box, text: &str, tip: &str| {
+            let button = link(text);
+            button.set_tooltip_text(Some(tip));
+            button.set_valign(Align::Center);
+            row.insert_child_after(&button, row.first_child().and_then(|icon| icon.next_sibling()).as_ref());
+            button
+        };
+        let wifi_row = setting("wifi-high-bold", "Wi-Fi", wifi.upcast_ref());
+        let networks_link = more(&wifi_row, "Networks", "See the networks in reach and join one");
+        quick_page.append(&wifi_row);
+        let bluetooth_row = setting("bluetooth-bold", "Bluetooth", bluetooth.upcast_ref());
+        let devices_link = more(&bluetooth_row, "Devices", "See, connect and pair Bluetooth devices");
+        quick_page.append(&bluetooth_row);
+        let hotspot_row = setting("broadcast-bold", "Hotspot", hotspot.upcast_ref());
+        let hotspot_link = more(&hotspot_row, "Edit", "Change the hotspot's name and password");
+        quick_page.append(&hotspot_row);
+        let output_pick = gtk::DropDown::from_strings(&[]);
+        let output_row = setting("headphones-bold", "Sound out", output_pick.upcast_ref());
+        output_row.set_visible(false);
+        quick_page.append(&output_row);
+        let battery_text = gtk::Label::new(None);
+        battery_text.add_css_class("dim");
+        let battery_row = setting("battery-high-bold", "Battery", battery_text.upcast_ref());
+        battery_text.set_halign(Align::End);
+        let battery_icon = battery_row.first_child().and_downcast::<gtk::Image>().unwrap();
+        battery_row.set_visible(false);
+        quick_page.append(&battery_row);
+        let modes = gtk::Box::new(Orientation::Horizontal, ctx.px(8.0));
+        let mut power_modes = Vec::new();
+        for (mode, label) in [("power-saver", "Saver"), ("balanced", "Balanced"), ("performance", "Performance")] {
+            let choice = gtk::Button::with_label(label);
+            choice.add_css_class("choice");
+            modes.append(&choice);
+            power_modes.push((mode, choice));
+        }
+        let power_row = setting("lightning-bold", "Power", modes.upcast_ref());
+        power_row.set_visible(false);
+        quick_page.append(&power_row);
         let themes = gtk::Box::new(Orientation::Horizontal, ctx.px(8.0));
         for (name, label) in crate::config::themes() {
             let choice = gtk::Button::with_label(&label);
@@ -405,6 +489,57 @@ impl Shell {
         let toast = sheet_window(app, &ctx, "arka-toast");
         let toast_box = gtk::Box::new(Orientation::Vertical, ctx.px(4.0));
         toast_box.add_css_class("sheet");
+        // Wi-Fi networks.
+        let wifi_page = page("wifi");
+        let wifi_head = head("Wi-Fi networks");
+        let scan = link("Look again");
+        let wifi_back = link("Back");
+        wifi_head.append(&scan);
+        wifi_head.append(&wifi_back);
+        wifi_page.append(&wifi_head);
+        let networks = gtk::Box::new(Orientation::Vertical, ctx.px(6.0));
+        let network_list = scrolled(&networks);
+        wifi_page.append(&network_list);
+
+        // Bluetooth devices.
+        let bluetooth_page = page("bluetooth");
+        let bluetooth_head = head("Bluetooth devices");
+        let look = link("Look for new");
+        let bluetooth_back = link("Back");
+        bluetooth_head.append(&look);
+        bluetooth_head.append(&bluetooth_back);
+        bluetooth_page.append(&bluetooth_head);
+        let devices = gtk::Box::new(Orientation::Vertical, ctx.px(6.0));
+        let device_list = scrolled(&devices);
+        bluetooth_page.append(&device_list);
+
+        // The hotspot's name and password.
+        let hotspot_page = page("hotspot");
+        let hotspot_head = head("Hotspot");
+        let hotspot_back = link("Back");
+        hotspot_head.append(&hotspot_back);
+        hotspot_page.append(&hotspot_head);
+        let hotspot_name = gtk::Entry::new();
+        hotspot_name.set_max_length(32);
+        let hotspot_password = gtk::PasswordEntry::new();
+        hotspot_password.set_show_peek_icon(true);
+        for (title, entry) in [("Network name", hotspot_name.upcast_ref::<gtk::Widget>()), ("Password", hotspot_password.upcast_ref())] {
+            let label = gtk::Label::new(Some(title));
+            label.add_css_class("dim");
+            label.set_xalign(0.0);
+            hotspot_page.append(&label);
+            hotspot_page.append(entry);
+        }
+        let hotspot_note = empty_note("Devices on the hotspot drop off for a moment while it restarts with the new details.");
+        hotspot_note.set_wrap(true);
+        hotspot_note.set_max_width_chars(40);
+        hotspot_page.append(&hotspot_note);
+        let hotspot_save = gtk::Button::with_label("Save");
+        hotspot_save.add_css_class("choice");
+        hotspot_save.add_css_class("on");
+        hotspot_save.set_halign(Align::End);
+        hotspot_page.append(&hotspot_save);
+
         toast_box.set_size_request(ctx.px(320.0), -1);
         let toast_title = gtk::Label::new(None);
         toast_title.add_css_class("title");
@@ -442,7 +577,69 @@ impl Shell {
             brightness,
             wifi,
             bluetooth,
+            hotspot,
+            networks,
+            network_list,
+            scan: scan.clone(),
+            hotspot_name,
+            hotspot_password,
+            hotspot_note,
+            hotspot_save: hotspot_save.clone(),
+            output_row,
+            output_pick: output_pick.clone(),
+            output_names: RefCell::new(Vec::new()),
+            battery_row,
+            battery_icon,
+            battery_text,
+            power_row,
+            power_modes: power_modes.clone(),
+            devices,
+            device_list,
+            look: look.clone(),
         });
+        for (button, to) in [(&devices_link, "bluetooth"), (&bluetooth_back, "quick")] {
+            let me = shell.clone();
+            button.connect_clicked(move |_| me.go(to));
+        }
+        let me = shell.clone();
+        look.connect_clicked(move |_| me.load_devices(true));
+        for (mode, button) in power_modes {
+            let me = shell.clone();
+            button.connect_clicked(move |_| {
+                for (other, choice) in &me.power_modes {
+                    if *other == mode {
+                        choice.add_css_class("on");
+                    } else {
+                        choice.remove_css_class("on");
+                    }
+                }
+                me.in_background(move || match crate::devices::set_power(mode) {
+                    Ok(()) => Event::Extras(crate::devices::read_extras()),
+                    Err(why) => Event::Failed("The power mode did not change".into(), why),
+                });
+            });
+        }
+        let me = shell.clone();
+        output_pick.connect_selected_notify(move |pick| {
+            if me.applying.get() {
+                return;
+            }
+            let Some(name) = me.output_names.borrow().get(pick.selected() as usize).cloned() else { return };
+            me.in_background(move || match crate::devices::set_output(&name) {
+                Ok(()) => Event::Extras(crate::devices::read_extras()),
+                Err(why) => Event::Failed("The sound output did not change".into(), why),
+            });
+        });
+        for (button, to) in [(&networks_link, "wifi"), (&hotspot_link, "hotspot"), (&wifi_back, "quick"), (&hotspot_back, "quick")] {
+            let me = shell.clone();
+            button.connect_clicked(move |_| me.go(to));
+        }
+        let me = shell.clone();
+        scan.connect_clicked(move |_| me.load_networks(true));
+        let me = shell.clone();
+        hotspot_save.connect_clicked(move |_| me.save_hotspot());
+        let me = shell.clone();
+        shell.hotspot_password.connect_activate(move |_| me.save_hotspot());
 
         // Controls.
         let me = shell.clone();
@@ -484,6 +681,20 @@ impl Shell {
         shell.bluetooth.connect_state_set(move |_, on| {
             if !me.applying.get() {
                 spawn(if on { "rfkill unblock bluetooth" } else { "rfkill block bluetooth" });
+            }
+            glib::Propagation::Proceed
+        });
+        let me = shell.clone();
+        shell.hotspot.connect_state_set(move |_, on| {
+            if !me.applying.get() {
+                spawn(&format!(
+                    r#"c=$({FIND_HOTSPOT}); [ -n "$c" ] && {}"#,
+                    if on {
+                        r#"{ nmcli connection up "$c" >/dev/null 2>&1 || notify-send -a ArkaOS "Hotspot did not start" "NetworkManager could not start the hotspot. Is Wi-Fi on?"; }"#
+                    } else {
+                        r#"nmcli connection down "$c" >/dev/null 2>&1"#
+                    }
+                ));
             }
             glib::Propagation::Proceed
         });
@@ -616,6 +827,47 @@ impl Shell {
             Event::Shot => self.toast("Screenshot saved", "It is in Pictures, in the Screenshots folder."),
             Event::ShotFailed => self.toast("Screenshot not saved", "The Pictures folder could not be written to."),
             Event::Level(text) => self.toast_for(&text, "", 1500),
+            Event::Networks(found) => self.show_networks(found),
+            Event::Extras(extras) => self.show_extras(extras),
+            Event::Devices(found) => self.show_devices(found),
+            Event::DeviceDone(result) => {
+                match result {
+                    Ok(done) => self.toast(&done, ""),
+                    Err(why) => self.toast("Bluetooth", &why),
+                }
+                if self.panel.is_visible() && self.stack.visible_child_name().as_deref() == Some("bluetooth") {
+                    self.load_devices(false);
+                }
+            }
+            Event::Failed(title, why) => self.toast(&title, &why),
+            Event::Joined(ssid, result) => {
+                match result {
+                    Ok(()) => self.toast(&format!("Connected to {ssid}"), ""),
+                    Err(why) => self.toast(&format!("Couldn't connect to {ssid}"), &why),
+                }
+                if self.panel.is_visible() && self.stack.visible_child_name().as_deref() == Some("wifi") {
+                    self.load_networks(false);
+                }
+            }
+            Event::HotspotDetails(details) => match details {
+                Some((name, password)) => {
+                    self.hotspot_name.set_text(&name);
+                    self.hotspot_password.set_text(&password);
+                    self.hotspot_note.set_text("Devices on the hotspot drop off for a moment while it restarts with the new details.");
+                    self.hotspot_save.set_sensitive(true);
+                }
+                None => self.hotspot_note.set_text("No hotspot is set up yet. Create one in the network settings first."),
+            },
+            Event::HotspotSaved(result) => {
+                self.hotspot_save.set_sensitive(true);
+                match result {
+                    Ok(()) => {
+                        self.hotspot_note.set_text("Saved.");
+                        self.toast("Hotspot saved", &format!("Its name is now {}.", self.hotspot_name.text()));
+                    }
+                    Err(why) => self.hotspot_note.set_text(&why),
+                }
+            }
             Event::Clip(text) => {
                 if text.trim().is_empty() {
                     return;
@@ -635,10 +887,11 @@ impl Shell {
                         scale.set_value(value);
                     }
                 }
-                for (switch, value) in [(&self.wifi, quick.wifi), (&self.bluetooth, quick.bluetooth)] {
+                for (switch, value) in [(&self.wifi, quick.wifi), (&self.bluetooth, quick.bluetooth), (&self.hotspot, quick.hotspot)] {
                     switch.set_sensitive(value.is_some());
                     switch.set_active(value.unwrap_or(false));
                 }
+                self.hotspot.set_tooltip_text(quick.hotspot.is_none().then_some("No hotspot is set up yet. Create one in the network settings first."));
                 self.applying.set(false);
             }
         }
@@ -651,9 +904,14 @@ impl Shell {
             self.panel.set_visible(false);
             return;
         }
-        self.stack.set_visible_child_name(name);
         self.toast.set_visible(false);
         self.panel.present();
+        self.go(name);
+    }
+
+    /// Show this page of the sheet and read what it shows.
+    fn go(self: &Rc<Self>, name: &str) {
+        self.stack.set_visible_child_name(name);
         match name {
             "quick" => {
                 // read on another thread: these tools talk to hardware
@@ -663,14 +921,240 @@ impl Shell {
                         wake();
                     }
                 });
+                self.in_background(|| Event::Extras(crate::devices::read_extras()));
             }
             "notifications" => {
                 if let Some(bell) = self.bell.borrow().as_ref() {
                     bell.remove_css_class("new");
                 }
             }
+            "wifi" => self.load_networks(false),
+            "bluetooth" => self.load_devices(false),
+            "hotspot" => {
+                self.hotspot_note.set_text("Reading the hotspot…");
+                self.hotspot_save.set_sensitive(false);
+                self.in_background(|| Event::HotspotDetails(crate::network::hotspot_details()));
+            }
             _ => {}
         }
+    }
+
+    /// Work that waits on NetworkManager runs on another thread; its answer comes back as an event.
+    fn in_background(&self, work: impl FnOnce() -> Event + Send + 'static) {
+        let sender = self.sender.clone();
+        std::thread::spawn(move || {
+            if sender.send(work()).is_ok() {
+                wake();
+            }
+        });
+    }
+
+    fn note_in(list: &gtk::Box, text: &str) {
+        clear(list);
+        let note = empty_note(text);
+        note.set_wrap(true);
+        note.set_max_width_chars(34);
+        list.append(&note);
+    }
+
+    /// Size a list to what it holds and let the sheet fit it again (it does not grow by itself).
+    fn fit_list(&self, list: &gtk::ScrolledWindow, rows: usize) {
+        let height = if rows == 0 { 0.0 } else { (rows.min(7) as f64) * 42.0 };
+        list.set_min_content_height(self.ctx.px(height));
+        self.panel.set_default_size(1, 1);
+    }
+
+    fn fit_networks(&self, rows: usize) {
+        self.fit_list(&self.network_list, rows);
+    }
+
+    fn load_networks(self: &Rc<Self>, rescan: bool) {
+        Self::note_in(&self.networks, if rescan { "Looking for networks…" } else { "Reading the networks…" });
+        self.fit_networks(0);
+        self.scan.set_sensitive(false);
+        self.in_background(move || Event::Networks(crate::network::networks(rescan)));
+    }
+
+    fn show_networks(self: &Rc<Self>, found: Result<Vec<Network>, String>) {
+        self.scan.set_sensitive(true);
+        let found = match found {
+            Ok(found) => found,
+            Err(why) => {
+                Self::note_in(&self.networks, &why);
+                return self.fit_networks(0);
+            }
+        };
+        clear(&self.networks);
+        self.fit_networks(found.len());
+        for network in found {
+            let holder = gtk::Box::new(Orientation::Vertical, self.ctx.px(6.0));
+            let item = gtk::Button::new();
+            item.add_css_class("item");
+            let line = gtk::Box::new(Orientation::Horizontal, self.ctx.px(10.0));
+            let name = gtk::Label::new(Some(&network.ssid));
+            name.add_css_class("row");
+            name.set_xalign(0.0);
+            name.set_hexpand(true);
+            name.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            let kind = if network.active {
+                "Connected"
+            } else if network.saved.is_some() {
+                "Saved"
+            } else if network.open() {
+                "Open"
+            } else {
+                "Password"
+            };
+            let state = gtk::Label::new(Some(&format!("{kind}  ·  {}%", network.signal)));
+            state.add_css_class("dim");
+            line.append(&name);
+            line.append(&state);
+            item.set_child(Some(&line));
+            holder.append(&item);
+            // the password box under a network that needs one
+            let ask = gtk::Box::new(Orientation::Horizontal, self.ctx.px(8.0));
+            let password = gtk::PasswordEntry::new();
+            password.set_show_peek_icon(true);
+            password.set_hexpand(true);
+            let go = gtk::Button::with_label("Join");
+            go.add_css_class("choice");
+            go.add_css_class("on");
+            ask.append(&password);
+            ask.append(&go);
+            ask.set_visible(false);
+            holder.append(&ask);
+            self.networks.append(&holder);
+
+            let join = {
+                let (me, network, state, ask, password) = (self.clone(), network.clone(), state.clone(), ask.clone(), password.clone());
+                Rc::new(move || {
+                    let typed = password.text().to_string();
+                    if !network.open() && network.saved.is_none() && typed.is_empty() {
+                        ask.set_visible(true);
+                        // room for the password box
+                        me.fit_networks(me.networks.observe_children().n_items() as usize + 1);
+                        password.grab_focus();
+                        return;
+                    }
+                    ask.set_visible(false);
+                    state.set_text("Connecting…");
+                    let network = network.clone();
+                    me.in_background(move || Event::Joined(network.ssid.clone(), crate::network::join(&network, &typed)));
+                })
+            };
+            let (me, network) = (self.clone(), network.clone());
+            let join_now = join.clone();
+            item.connect_clicked(move |_| {
+                if network.active {
+                    return;
+                }
+                if !network.simple() {
+                    me.toast("Join it from the network settings", "This network needs more than a password, such as a user name.");
+                    return;
+                }
+                join_now();
+            });
+            let join_now = join.clone();
+            go.connect_clicked(move |_| join_now());
+            password.connect_activate(move |_| join());
+        }
+    }
+
+    fn load_devices(self: &Rc<Self>, look: bool) {
+        Self::note_in(&self.devices, if look { "Looking for devices for 8 seconds. Put yours in pairing mode." } else { "Reading the devices…" });
+        self.fit_list(&self.device_list, 0);
+        self.look.set_sensitive(false);
+        self.in_background(move || Event::Devices(crate::devices::devices(look)));
+    }
+
+    fn show_devices(self: &Rc<Self>, found: Result<Vec<Device>, String>) {
+        self.look.set_sensitive(true);
+        let found = match found {
+            Ok(found) if found.is_empty() => Err("No devices paired yet. Choose Look for new to find one.".to_string()),
+            other => other,
+        };
+        let found = match found {
+            Ok(found) => found,
+            Err(why) => {
+                Self::note_in(&self.devices, &why);
+                return self.fit_list(&self.device_list, 0);
+            }
+        };
+        clear(&self.devices);
+        self.fit_list(&self.device_list, found.len());
+        for device in found {
+            let item = gtk::Button::new();
+            item.add_css_class("item");
+            let line = gtk::Box::new(Orientation::Horizontal, self.ctx.px(10.0));
+            let name = gtk::Label::new(Some(&device.name));
+            name.add_css_class("row");
+            name.set_xalign(0.0);
+            name.set_hexpand(true);
+            name.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            let state = gtk::Label::new(Some(if device.connected {
+                "Connected"
+            } else if device.paired {
+                "Paired"
+            } else {
+                "New: pair"
+            }));
+            state.add_css_class("dim");
+            line.append(&name);
+            line.append(&state);
+            item.set_child(Some(&line));
+            self.devices.append(&item);
+            let me = self.clone();
+            item.connect_clicked(move |_| {
+                state.set_text(if device.connected { "Disconnecting…" } else if device.paired { "Connecting…" } else { "Pairing…" });
+                let device = device.clone();
+                me.in_background(move || Event::DeviceDone(crate::devices::toggle_device(&device)));
+            });
+        }
+    }
+
+    fn show_extras(self: &Rc<Self>, extras: Extras) {
+        self.applying.set(true);
+        // a choice of outputs only when there is one to make
+        let names: Vec<String> = extras.outputs.iter().map(|(name, _)| name.clone()).collect();
+        let labels: Vec<&str> = extras.outputs.iter().map(|(_, label)| label.as_str()).collect();
+        self.output_pick.set_model(Some(&gtk::StringList::new(&labels)));
+        if let Some(at) = extras.output.as_ref().and_then(|current| names.iter().position(|name| name == current)) {
+            self.output_pick.set_selected(at as u32);
+        }
+        self.output_row.set_visible(names.len() > 1);
+        *self.output_names.borrow_mut() = names;
+        self.applying.set(false);
+
+        self.battery_row.set_visible(extras.battery.is_some());
+        if let Some((level, charge)) = extras.battery {
+            let (icon, state) = match charge {
+                Charge::Charging => ("battery-charging-bold", "charging"),
+                Charge::Full => ("battery-high-bold", "plugged in"),
+                Charge::OnBattery if level <= 20 => ("battery-low-bold", "on battery"),
+                Charge::OnBattery => ("battery-high-bold", "on battery"),
+            };
+            self.battery_icon.set_from_file(Some(self.ctx.cfg.file(&format!("{icon}.svg"))));
+            self.battery_text.set_text(&format!("{level}%  ·  {state}"));
+        }
+        self.power_row.set_visible(extras.power.is_some());
+        for (mode, choice) in &self.power_modes {
+            if extras.power.as_deref() == Some(*mode) {
+                choice.add_css_class("on");
+            } else {
+                choice.remove_css_class("on");
+            }
+        }
+    }
+
+    fn save_hotspot(self: &Rc<Self>) {
+        let (name, password) = (self.hotspot_name.text().to_string(), self.hotspot_password.text().to_string());
+        if let Some(problem) = crate::network::hotspot_problem(&name, &password) {
+            self.hotspot_note.set_text(problem);
+            return;
+        }
+        self.hotspot_note.set_text("Saving…");
+        self.hotspot_save.set_sensitive(false);
+        self.in_background(move || Event::HotspotSaved(crate::network::set_hotspot(&name, &password)));
     }
 
     fn toast(self: &Rc<Self>, title: &str, body: &str) {
@@ -681,6 +1165,8 @@ impl Shell {
         self.toast_title.set_text(title);
         self.toast_body.set_text(body);
         self.toast_body.set_visible(!body.is_empty());
+        // fit the new text, smaller or larger than the last
+        self.toast.set_default_size(1, 1);
         self.toast.present();
         let turn = self.toast_turn.get() + 1;
         self.toast_turn.set(turn);
