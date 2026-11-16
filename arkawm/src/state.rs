@@ -113,6 +113,8 @@ pub struct ArkaWm {
     pub decoration_state: smithay::wayland::shell::xdg::decoration::XdgDecorationState,
     /// The last click on a title bar, to recognise a double click.
     pub last_bar_click: Option<(std::time::Instant, usize)>,
+    /// The title-bar button under the pointer, lit in its colour.
+    pub bar_hover: Option<(usize, crate::titlebar::Button)>,
     /// Developer test hook: save the next frame to this file (PPM).
     pub shot_request: Option<std::path::PathBuf>,
     /// The picture of ArkaWM's own pointer, drawn when running on hardware.
@@ -236,6 +238,7 @@ impl ArkaWm {
             idle_inhibitors: Vec::new(),
             decoration_state: smithay::wayland::shell::xdg::decoration::XdgDecorationState::new::<Self>(&dh),
             last_bar_click: None,
+            bar_hover: None,
             shot_request: None,
             pointer_buffer: None,
             cursor_status: smithay::input::pointer::CursorImageStatus::default_named(),

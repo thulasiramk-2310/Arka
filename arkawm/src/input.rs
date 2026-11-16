@@ -111,6 +111,12 @@ impl ArkaWm {
         } else {
             self.surface_under(pos)
         };
+        // light the title-bar button under the pointer
+        let hover = if self.locked { None } else { self.bar_at(pos).and_then(|(index, button)| Some((index, button?))) };
+        if hover != self.bar_hover {
+            self.bar_hover = hover;
+            self.redraw_wanted = true;
+        }
         pointer.motion(self, under, &MotionEvent { location: pos, serial, time });
         pointer.frame(self);
     }

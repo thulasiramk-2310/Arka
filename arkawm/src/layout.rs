@@ -436,6 +436,7 @@ impl ArkaWm {
                 title,
                 focused: index == self.focused,
                 scale120,
+                hover: self.bar_hover.filter(|(at, _)| *at == index).map(|(_, button)| button),
             };
             if key.width > 0 && managed.bar.as_ref().map(|(k, _)| k) != Some(&key) {
                 let buffer = crate::titlebar::draw(&key);

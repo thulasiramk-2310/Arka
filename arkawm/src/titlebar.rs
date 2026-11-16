@@ -19,6 +19,10 @@ const FOCUSED: [u8; 3] = [0x1B, 0x1E, 0x22];
 const UNFOCUSED: [u8; 3] = [0x2A, 0x2E, 0x33];
 const INK: [u8; 3] = [0xE6, 0xE8, 0xEB];
 const DIM: [u8; 3] = [0x9A, 0xA0, 0xA6];
+/// Hover colours and the ink on them: close red, maximise Arka green, minimise amber.
+const CLOSE_HOVER: ([u8; 3], [u8; 3]) = ([0xE5, 0x48, 0x4D], [0xFF, 0xFF, 0xFF]);
+const MAXIMIZE_HOVER: ([u8; 3], [u8; 3]) = ([0x16, 0xC7, 0x84], [0x06, 0x1F, 0x14]);
+const MINIMIZE_HOVER: ([u8; 3], [u8; 3]) = ([0xF5, 0xA5, 0x24], [0x2B, 0x1B, 0x02]);
 
 /// What a bar was drawn from; it is redrawn only when one of these changes.
 #[derive(Clone, PartialEq)]
@@ -27,6 +31,8 @@ pub struct BarKey {
     pub title: String,
     pub focused: bool,
     pub scale120: i32,
+    /// The button under the pointer.
+    pub hover: Option<Button>,
 }
 
 /// The buttons at the right end of a bar, each a square: minimise, maximise, close.
@@ -136,10 +142,23 @@ pub fn draw(key: &BarKey) -> MemoryRenderBuffer {
     let width = text(&mut pixels, w, h, 0.0, room, px, ink, &key.title, false);
     let x = buttons + ((room - width) / 2.0).max(0.0);
     text(&mut pixels, w, h, x, w as f32 - buttons, px, ink, &key.title, true);
+    // the hovered button is filled with its colour
+    let lit = |which: Button, colours: ([u8; 3], [u8; 3])| if key.hover == Some(which) { Some(colours) } else { None };
+    let mut ink_of = |which: Button, colours, right: f32| match lit(which, colours) {
+        Some((fill, on)) => {
+            rect(&mut pixels, w, h, w as f32 - right * button, 0.0, w as f32 - (right - 1.0) * button, h as f32, fill);
+            on
+        }
+        None => ink,
+    };
+    let min_ink = ink_of(Button::Minimize, MINIMIZE_HOVER, 3.0);
+    let max_ink = ink_of(Button::Maximize, MAXIMIZE_HOVER, 2.0);
+    let close_ink = ink_of(Button::Close, CLOSE_HOVER, 1.0);
     // minimise: a short line; maximise: a square outline
     let (half, line, mid) = (5.0 * scale, (1.4 * scale).max(1.0), h as f32 / 2.0);
     let cx = w as f32 - 2.5 * button;
-    rect(&mut pixels, w, h, cx - half, mid + half - line, cx + half, mid + half, ink);
+    rect(&mut pixels, w, h, cx - half, mid + half - line, cx + half, mid + half, min_ink);
+    let ink = max_ink;
     let cx = w as f32 - 1.5 * button;
     rect(&mut pixels, w, h, cx - half, mid - half, cx + half, mid - half + line, ink);
     rect(&mut pixels, w, h, cx - half, mid + half - line, cx + half, mid + half, ink);
@@ -148,7 +167,7 @@ pub fn draw(key: &BarKey) -> MemoryRenderBuffer {
     // close button
     let glyph = 17.0 * scale;
     let cross = text(&mut pixels, w, h, 0.0, f32::MAX, glyph, ink, "\u{00D7}", false);
-    text(&mut pixels, w, h, w as f32 - button + (button - cross) / 2.0, w as f32, glyph, ink, "\u{00D7}", true);
+    text(&mut pixels, w, h, w as f32 - button + (button - cross) / 2.0, w as f32, glyph, close_ink, "\u{00D7}", true);
 
     // The buffer is at 1:1 with the screen; it is placed with a logical size when drawn.
     MemoryRenderBuffer::from_slice(&pixels, Fourcc::Argb8888, (w, h), 1, Transform::Normal, None)
@@ -172,7 +191,7 @@ mod tests {
 
     #[test]
     fn a_bar_is_drawn_at_the_scaled_size() {
-        let key = BarKey { width: 400, title: "Files".into(), focused: true, scale120: 180 };
+        let key = BarKey { width: 400, title: "Files".into(), focused: true, scale120: 180, hover: None };
         // must not panic with or without a font, and with a title too long for the bar
         let _ = draw(&key);
         let _ = draw(&BarKey { width: 40, title: "A very long title that cannot fit".into(), ..key });
