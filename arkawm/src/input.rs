@@ -439,7 +439,7 @@ impl ArkaWm {
                 "gdbus call --session --dest org.arkaos.Wheel --object-path /Wheel --method org.arkaos.Wheel.{} >/dev/null 2>&1",
                 if edit { "ShowEditForDrag" } else { "ShowForDrag" }
             )),
-            Action::Settings => crate::state::spawn("${ARKAWM_SETTINGS:-systemsettings}"),
+            Action::Settings => crate::state::spawn("${ARKAWM_SETTINGS:-$(command -v arka-settings || echo systemsettings)}"),
             Action::Screenshot => self.capture = Some(crate::capture::Capture { crop: None }),
             Action::Region => {
                 let now = self.seat.get_pointer().unwrap().current_location();
