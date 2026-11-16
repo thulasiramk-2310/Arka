@@ -58,12 +58,13 @@ button { all: unset; }
 tooltip { background: alpha(@panel,0.96); border: 1px solid alpha(@border,0.5); border-radius: 8px; padding: 4px 10px; box-shadow: 0 8px 20px alpha(@background,0.5); }
 tooltip label { font-size: 12px; color: @text; }
 
-/* The one authored moment: on start the apps settle onto the ring one after another. */
+/* The one authored moment: on start the ring draws itself round and the apps settle onto it one after another. */
 @keyframes settle { from { opacity: 0; transform: translateY(12px) scale(0.92); } to { opacity: 1; transform: translateY(0px) scale(1); } }
 @keyframes arrive { from { opacity: 0; } to { opacity: 1; } }
 .node { animation: settle 560ms cubic-bezier(0.16,1,0.3,1) backwards; }
-.n1 { animation-delay: 150ms; } .n2 { animation-delay: 210ms; } .n3 { animation-delay: 270ms; } .n4 { animation-delay: 330ms; }
-.n5 { animation-delay: 390ms; } .n6 { animation-delay: 450ms; } .n7 { animation-delay: 510ms; } .n8 { animation-delay: 570ms; }
+/* timed to the ring drawing itself round (main.rs: from 120 ms, 600 ms, eased in and out) */
+.n1 { animation-delay: 120ms; } .n2 { animation-delay: 258ms; } .n3 { animation-delay: 320ms; } .n4 { animation-delay: 372ms; }
+.n5 { animation-delay: 420ms; } .n6 { animation-delay: 468ms; } .n7 { animation-delay: 520ms; } .n8 { animation-delay: 582ms; }
 .centre { animation: arrive 700ms cubic-bezier(0.16,1,0.3,1) backwards; }
 .aside { animation: arrive 700ms cubic-bezier(0.16,1,0.3,1) 400ms backwards; }
 
@@ -128,8 +129,8 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 .sheet .thumb.own { min-width: 52px; }
 
 /* The mark folds the apps into itself and lets them out again. */
-.node { transition: opacity 280ms cubic-bezier(0.16,1,0.3,1), transform 520ms cubic-bezier(0.34,1.28,0.64,1); }
-.node.folded { opacity: 0; transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 360ms cubic-bezier(0.5,0,0.75,0); }
+.node { transition: opacity 220ms cubic-bezier(0.16,1,0.3,1), transform 420ms cubic-bezier(0.34,1.28,0.64,1); }
+.node.folded { opacity: 0; transition: opacity 200ms cubic-bezier(0.16,1,0.3,1), transform 280ms cubic-bezier(0.5,0,0.75,0); }
 .node.n1.folded { transform: translate(0px, 224px) scale(0.3); }
 .node.n2.folded { transform: translate(-158px, 158px) scale(0.3); }
 .node.n3.folded { transform: translate(-224px, 0px) scale(0.3); }
@@ -138,8 +139,14 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 .node.n6.folded { transform: translate(158px, -158px) scale(0.3); }
 .node.n7.folded { transform: translate(224px, 0px) scale(0.3); }
 .node.n8.folded { transform: translate(158px, 158px) scale(0.3); }
-.ringlights { transition: opacity 420ms cubic-bezier(0.16,1,0.3,1), transform 520ms cubic-bezier(0.34,1.2,0.64,1); }
-.ringlights.folded { opacity: 0; transform: scale(0.5); transition-duration: 300ms; }
+/* The ring draws itself round from the top (main.rs, 440 ms, eased in and out) and each app comes
+   out as the line reaches it; folding winds it back (300 ms) and the apps drop in from the last one. */
+.node.n2 { transition-delay: 101ms; } .node.n3 { transition-delay: 147ms; } .node.n4 { transition-delay: 185ms; }
+.node.n5 { transition-delay: 220ms; } .node.n6 { transition-delay: 255ms; } .node.n7 { transition-delay: 293ms; }
+.node.n8 { transition-delay: 339ms; }
+.node.n8.folded { transition-delay: 0ms; } .node.n7.folded { transition-delay: 30ms; } .node.n6.folded { transition-delay: 60ms; }
+.node.n5.folded { transition-delay: 90ms; } .node.n4.folded { transition-delay: 120ms; } .node.n3.folded { transition-delay: 150ms; }
+.node.n2.folded { transition-delay: 180ms; } .node.n1.folded { transition-delay: 210ms; }
 
 /* An app that was clicked and has no window yet: its circle breathes. */
 @keyframes starting { 0% { box-shadow: 0 0 0 0px glow(0.45), 0 10px 22px alpha(@background,0.5); } 70% { box-shadow: 0 0 0 14px glow(0.0), 0 10px 22px alpha(@background,0.5); } 100% { box-shadow: 0 0 0 0px glow(0.0), 0 10px 22px alpha(@background,0.5); } }

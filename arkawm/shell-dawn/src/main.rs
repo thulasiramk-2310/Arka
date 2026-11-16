@@ -762,34 +762,90 @@ fn build(app: &gtk::Application) {
     ring.set_content_width(ctx.px(560.0));
     ring.set_content_height(ctx.px(560.0));
     ring.set_can_target(false);
-    ring.set_draw_func(move |_, cr, _, _| {
-        use std::f64::consts::TAU;
-        cr.scale(k, k);
-        let (r, g, b) = ring_rgb;
-        for (width, alpha) in [(9.0, 0.06), (5.0, 0.11), (1.4, 0.62)] {
-            cr.set_source_rgba(r, g, b, alpha);
-            cr.set_line_width(width);
-            cr.arc(280.0, 280.0, 224.0, 0.0, TAU);
+    // How much of the ring is drawn, clockwise from the top: 1 whole, 0 none. Folding the apps
+    // away winds it back; bringing them out draws it round again (see the mark below).
+    let sweep = Rc::new(Cell::new(1.0f64));
+    ring.set_draw_func({
+        let sweep = sweep.clone();
+        move |_, cr, _, _| {
+            use std::f64::consts::{FRAC_PI_2, TAU};
+            let share = sweep.get();
+            if share <= 0.0 {
+                return;
+            }
+            // how far round from the top this angle is, 0..1
+            let along = |angle: f64| (angle + FRAC_PI_2).rem_euclid(TAU) / TAU;
+            let (start, end) = (-FRAC_PI_2, -FRAC_PI_2 + TAU * share);
+            cr.scale(k, k);
+            let (r, g, b) = ring_rgb;
+            for (width, alpha) in [(9.0, 0.06), (5.0, 0.11), (1.4, 0.62)] {
+                cr.set_source_rgba(r, g, b, alpha);
+                cr.set_line_width(width);
+                cr.new_sub_path();
+                cr.arc(280.0, 280.0, 224.0, start, end);
+                let _ = cr.stroke();
+            }
+            cr.set_source_rgba(r, g, b, 0.38);
+            cr.set_line_width(1.0);
+            cr.new_sub_path();
+            cr.arc(280.0, 280.0, 162.0, start, end);
             let _ = cr.stroke();
-        }
-        cr.set_source_rgba(r, g, b, 0.38);
-        cr.set_line_width(1.0);
-        cr.arc(280.0, 280.0, 162.0, 0.0, TAU);
-        let _ = cr.stroke();
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
-        for i in 0..8 {
-            let angle = TAU * (i as f64 + 0.5) / 8.0;
-            cr.arc(280.0 + 224.0 * angle.cos(), 280.0 + 224.0 * angle.sin(), 2.6, 0.0, TAU);
-            let _ = cr.fill();
-        }
-        for i in 0..4 {
-            let angle = TAU * i as f64 / 4.0;
-            cr.arc(280.0 + 162.0 * angle.cos(), 280.0 + 162.0 * angle.sin(), 2.0, 0.0, TAU);
-            let _ = cr.fill();
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
+            for i in 0..8 {
+                let angle = TAU * (i as f64 + 0.5) / 8.0;
+                if along(angle) <= share {
+                    cr.arc(280.0 + 224.0 * angle.cos(), 280.0 + 224.0 * angle.sin(), 2.6, 0.0, TAU);
+                    let _ = cr.fill();
+                }
+            }
+            for i in 0..4 {
+                let angle = TAU * i as f64 / 4.0;
+                if along(angle) <= share {
+                    cr.arc(280.0 + 162.0 * angle.cos(), 280.0 + 162.0 * angle.sin(), 2.0, 0.0, TAU);
+                    let _ = cr.fill();
+                }
+            }
         }
     });
     if show_ring {
         ctx.put(&overlay, &ring, 488.0, 96.0);
+    }
+    // Draw the ring round to `to` (1 whole, 0 none) over `ms`, eased in and out; the apps' delays
+    // in style.css are timed to this curve.
+    let wind: Rc<dyn Fn(f64, f64)> = {
+        let (sweep, ring) = (sweep.clone(), ring.clone());
+        let running: Rc<RefCell<Option<gtk::TickCallbackId>>> = Rc::new(RefCell::new(None));
+        Rc::new(move |to: f64, ms: f64| {
+            if let Some(old) = running.borrow_mut().take() {
+                old.remove();
+            }
+            let ms = if motion { ms } else { 0.0 };
+            let from = sweep.get();
+            // one step per screen refresh, timed by the frame clock, so the line moves evenly
+            let started: Cell<Option<i64>> = Cell::new(None);
+            let (sweep, slot) = (sweep.clone(), running.clone());
+            let id = ring.add_tick_callback(move |ring, clock| {
+                let now = clock.frame_time();
+                let begin = *started.get().get_or_insert(now);
+                started.set(Some(begin));
+                let t = if ms <= 0.0 { 1.0 } else { ((now - begin) as f64 / 1000.0 / ms).min(1.0) };
+                sweep.set(from + (to - from) * (0.5 - 0.5 * (std::f64::consts::PI * t).cos()));
+                ring.queue_draw();
+                if t >= 1.0 {
+                    slot.borrow_mut().take();
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
+            *running.borrow_mut() = Some(id);
+        })
+    };
+    // on start the ring draws itself round as the apps settle onto it
+    if motion {
+        sweep.set(0.0);
+        let wind = wind.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(120), move || wind(1.0, 600.0));
     }
 
     let centre = gtk::Box::new(Orientation::Vertical, 0);
@@ -1303,8 +1359,9 @@ fn build(app: &gtk::Application) {
         }
     });
     mark.connect_clicked({
-        let (swap, set_menu, refrost, ring) = (swap.clone(), set_menu.clone(), refrost.clone(), ring.clone());
+        let (swap, set_menu, frost, ring) = (swap.clone(), set_menu.clone(), frost.clone(), ring.clone());
         let folded = Cell::new(false);
+        let wind = wind.clone();
         move |mark| {
             swap(false);
             set_menu(false);
@@ -1324,10 +1381,20 @@ fn build(app: &gtk::Application) {
             } else {
                 ring.remove_css_class("folded");
             }
+            // wind the ring back, or draw it round again, in step with the apps (style.css)
+            wind(if fold { 0.0 } else { 1.0 }, if fold { 300.0 } else { 440.0 });
             let tip = if fold { "Show the apps" } else { "Hide the apps" };
             mark.set_tooltip_text(Some(tip));
             mark.update_property(&[gtk::accessible::Property::Label(tip)]);
-            refrost();
+            // The glass is one picture the size of the screen: repaint it once, not while things
+            // move. Folding: at once, so no glass is left where the apps were. Unfolding: when the
+            // apps have landed (style.css: last delay 345 ms + 420 ms).
+            if fold {
+                frost.queue_draw();
+            } else {
+                let frost = frost.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(780), move || frost.queue_draw());
+            }
         }
     });
     if cfg.on("show.tasks") {
