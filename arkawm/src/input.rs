@@ -277,6 +277,8 @@ pub enum Action {
     Region,
     /// Ask the shell to open one of its panels.
     Panel(&'static str),
+    /// A media key on the keyboard: sound, microphone, brightness, Wi-Fi, playback.
+    Media(&'static str),
     MoveLeft,
     MoveRight,
     CycleWidth,
@@ -289,6 +291,25 @@ pub enum Action {
 /// ArkaWM's shortcuts. Nested in another desktop, Super belongs to that
 /// desktop, so the modifier is Alt for now.
 fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
+    // The keyboard's own keys for sound, brightness, Wi-Fi and playback.
+    if !modifiers.ctrl && !modifiers.alt && !modifiers.logo {
+        let media = match sym {
+            Keysym::XF86_AudioRaiseVolume => Some("volume-up"),
+            Keysym::XF86_AudioLowerVolume => Some("volume-down"),
+            Keysym::XF86_AudioMute => Some("mute"),
+            Keysym::XF86_AudioMicMute => Some("mic-mute"),
+            Keysym::XF86_MonBrightnessUp => Some("brightness-up"),
+            Keysym::XF86_MonBrightnessDown => Some("brightness-down"),
+            Keysym::XF86_WLAN | Keysym::XF86_RFKill => Some("wifi"),
+            Keysym::XF86_AudioPlay | Keysym::XF86_AudioPause => Some("play"),
+            Keysym::XF86_AudioNext => Some("next"),
+            Keysym::XF86_AudioPrev => Some("previous"),
+            _ => None,
+        };
+        if let Some(key) = media {
+            return Some(Action::Media(key));
+        }
+    }
     // Print Screen: the whole screen; with Shift, a part of it.
     if sym == Keysym::Print && !modifiers.ctrl && !modifiers.alt && !modifiers.logo {
         return Some(if modifiers.shift { Action::Region } else { Action::Screenshot });
@@ -384,6 +405,26 @@ impl ArkaWm {
                 self.region = Some(crate::capture::Region { start: None, now });
             }
             Action::Panel(name) => self.tell_shell(&format!("show {name}\n")),
+            Action::Media(key) => {
+                // run here, so the keys work even without the shell; the shell then shows the result
+                let (command, shown) = match key {
+                    "volume-up" => ("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+", Some("volume")),
+                    "volume-down" => ("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-", Some("volume")),
+                    "mute" => ("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", Some("volume")),
+                    "mic-mute" => ("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", Some("mic")),
+                    // never all the way to black
+                    "brightness-up" => ("brightnessctl -q set 5%+", Some("brightness")),
+                    "brightness-down" => ("brightnessctl -q --min-value=2% set 5%-", Some("brightness")),
+                    "wifi" => ("if [ \"$(nmcli radio wifi)\" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi", Some("wifi")),
+                    "play" => ("playerctl play-pause", None),
+                    "next" => ("playerctl next", None),
+                    _ => ("playerctl previous", None),
+                };
+                crate::state::spawn(&format!("{command} >/dev/null 2>&1"));
+                if let Some(what) = shown {
+                    self.tell_shell(&format!("media {what}\n"));
+                }
+            }
             Action::MoveLeft => self.move_focused(-1),
             Action::MoveRight => self.move_focused(1),
             Action::CycleWidth => self.cycle_width(),

@@ -101,6 +101,26 @@ enum Event {
     ShotFailed,
     Clip(String),
     Quick(Quick),
+    /// What a media key just changed, to show briefly ("Volume 45%").
+    Level(String),
+}
+
+/// The new state after a media key, read once the change has had time to land.
+fn level(what: &str) -> Option<String> {
+    std::thread::sleep(std::time::Duration::from_millis(if what == "wifi" { 700 } else { 150 }));
+    match what {
+        "volume" => {
+            let text = output_of("wpctl get-volume @DEFAULT_AUDIO_SINK@")?;
+            Some(if text.contains("MUTED") { "Sound muted".into() } else { format!("Volume {}%", parse_volume(&text)?) })
+        }
+        "mic" => {
+            let text = output_of("wpctl get-volume @DEFAULT_AUDIO_SOURCE@")?;
+            Some(if text.contains("MUTED") { "Microphone muted".into() } else { "Microphone on".into() })
+        }
+        "brightness" => Some(format!("Brightness {}%", parse_brightness(&output_of("brightnessctl -m")?)?)),
+        "wifi" => Some(if output_of("nmcli radio wifi")? == "enabled" { "Wi-Fi on".into() } else { "Wi-Fi off".into() }),
+        _ => None,
+    }
 }
 
 thread_local! {
@@ -514,6 +534,17 @@ impl Shell {
                                 "show" => Event::Show(rest.to_string()),
                                 "shot" => Event::Shot,
                                 "shot-failed" => Event::ShotFailed,
+                                "media" => {
+                                    let (sender, what) = (sender.clone(), rest.to_string());
+                                    std::thread::spawn(move || {
+                                        if let Some(text) = level(&what) {
+                                            if sender.send(Event::Level(text)).is_ok() {
+                                                wake();
+                                            }
+                                        }
+                                    });
+                                    continue;
+                                }
                                 _ => continue,
                             };
                             if sender.send(event).is_err() {
@@ -584,6 +615,7 @@ impl Shell {
             Event::Show(name) => self.toggle(&name),
             Event::Shot => self.toast("Screenshot saved", "It is in Pictures, in the Screenshots folder."),
             Event::ShotFailed => self.toast("Screenshot not saved", "The Pictures folder could not be written to."),
+            Event::Level(text) => self.toast_for(&text, "", 1500),
             Event::Clip(text) => {
                 if text.trim().is_empty() {
                     return;
@@ -642,6 +674,10 @@ impl Shell {
     }
 
     fn toast(self: &Rc<Self>, title: &str, body: &str) {
+        self.toast_for(title, body, 5000);
+    }
+
+    fn toast_for(self: &Rc<Self>, title: &str, body: &str, ms: u64) {
         self.toast_title.set_text(title);
         self.toast_body.set_text(body);
         self.toast_body.set_visible(!body.is_empty());
@@ -649,7 +685,7 @@ impl Shell {
         let turn = self.toast_turn.get() + 1;
         self.toast_turn.set(turn);
         let me = self.clone();
-        glib::timeout_add_seconds_local_once(5, move || {
+        glib::timeout_add_local_once(std::time::Duration::from_millis(ms), move || {
             // a newer toast keeps the window up
             if me.toast_turn.get() == turn {
                 me.toast.set_visible(false);
