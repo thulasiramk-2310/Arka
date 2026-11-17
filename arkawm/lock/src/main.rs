@@ -110,47 +110,111 @@ impl Look {
         format!(
             r#"
             window.lock {{ background: {bg}; font-family: "{font}", "Noto Sans", sans-serif; color: {text}; }}
-            .veil {{ background: linear-gradient(180deg, {bg_soft} 0%, {bg_mid} 55%, {bg_deep} 100%); }}
-            .time {{ font-size: 104px; font-weight: 300; letter-spacing: -2px; font-feature-settings: "tnum"; }}
-            .date {{ font-size: 19px; font-weight: 500; color: {dim}; }}
-            .avatar {{ min-width: 76px; min-height: 76px; border-radius: 999px; background: {panel};
-                       border: 1px solid {border}; color: {accent}; font-size: 32px; font-weight: 600; }}
-            .name {{ font-size: 19px; font-weight: 600; }}
-            .field {{ background: {panel}; border: 1px solid {border}; border-radius: 999px; padding: 4px 6px 4px 18px; }}
+            /* darker at the top for the clock and at the bottom for the status row; clear between */
+            .veil {{ background: linear-gradient(180deg, {veil_top} 0%, {veil_clear} 34%, {veil_clear} 62%, {veil_low} 100%); }}
+
+            .time {{ font-size: 120px; font-weight: 200; letter-spacing: -3px; font-feature-settings: "tnum";
+                     text-shadow: 0 2px 28px {shade}; }}
+            .date {{ font-size: 18px; font-weight: 600; color: {text}; text-shadow: 0 1px 3px {shade}, 0 0 18px {shade}; }}
+
+            /* the card: the softened wallpaper (drawn in code) under a tint, a hairline and a soft drop */
+            .card {{ border-radius: 28px; border: 1px solid {hair};
+                     box-shadow: 0 28px 64px {drop}, 0 2px 8px {drop_near}; }}
+            .cardbody {{ padding: 30px 34px 24px 34px;
+                         background: linear-gradient(165deg, {tint_top}, {tint_low});
+                         box-shadow: inset 0 1px 0 {inner}; }}
+            .avatar {{ min-width: 72px; min-height: 72px; border-radius: 999px; background: {accent_wash};
+                       border: 1px solid {accent_line}; color: {accent}; font-size: 30px; font-weight: 600; }}
+            .name {{ font-size: 18px; font-weight: 600; }}
+            .field {{ background: {well}; border: 1px solid {hair}; border-radius: 999px; padding: 4px 5px 4px 18px;
+                      transition: border-color 180ms cubic-bezier(0.16,1,0.3,1), box-shadow 220ms cubic-bezier(0.16,1,0.3,1),
+                                  opacity 180ms cubic-bezier(0.16,1,0.3,1); }}
             .field.focused {{ border-color: {accent}; box-shadow: 0 0 0 3px {accent_ring}; }}
-            .field.wrong {{ border-color: {warn}; }}
+            .field.wrong {{ border-color: {warn}; box-shadow: 0 0 0 3px {warn_ring}; }}
+            .field.busy {{ opacity: 0.72; }}
             .field entry {{ background: none; border: none; box-shadow: none; outline: none; color: {text};
                             font-size: 15px; min-height: 38px; padding: 0; caret-color: {accent}; }}
             .field entry > text > placeholder {{ color: {dim}; }}
+            .field entry > text > selection {{ background: {accent_ring}; color: {text}; }}
             .go {{ min-width: 38px; min-height: 38px; border-radius: 999px; padding: 0; background: {accent};
-                   color: {bg}; border: none; box-shadow: none; }}
+                   color: {bg}; border: none; box-shadow: none; transition: background-color 160ms, transform 160ms cubic-bezier(0.16,1,0.3,1); }}
             .go:hover {{ background: {accent_hover}; }}
-            .go:disabled {{ background: {panel}; color: {dim}; }}
+            .go:active {{ transform: scale(0.94); }}
+            .go:disabled {{ background: {well}; color: {dim}; }}
             .note {{ font-size: 13px; color: {dim}; min-height: 18px; }}
             .note.wrong {{ color: {warn}; }}
-            .layout {{ font-size: 12px; color: {dim}; margin-top: 6px; }}
-            .status {{ font-size: 13px; font-weight: 500; color: {text}; }}
-            .power {{ min-width: 40px; min-height: 40px; border-radius: 999px; padding: 0; background: {panel};
-                      border: 1px solid {border}; box-shadow: none; }}
-            .power:hover {{ border-color: {accent}; }}
+            .layout {{ font-size: 12px; color: {dim}; margin-top: 4px; }}
+
+            .status {{ font-size: 13px; font-weight: 500; color: {text_soft}; font-feature-settings: "tnum"; text-shadow: 0 1px 10px {shade}; }}
+            .power {{ min-width: 40px; min-height: 40px; border-radius: 999px; padding: 0; background: {glass};
+                      border: 1px solid {hair}; box-shadow: 0 6px 18px {drop_near};
+                      transition: background-color 160ms cubic-bezier(0.16,1,0.3,1), border-color 160ms cubic-bezier(0.16,1,0.3,1); }}
+            .power:hover {{ background: {glass_hover}; border-color: {accent_line}; }}
             .power:focus-visible {{ border-color: {accent}; box-shadow: 0 0 0 3px {accent_ring}; }}
-            .power.armed {{ border-color: {warn}; }}
+            .power.armed {{ border-color: {warn}; background: {warn_wash}; }}
+
+            /* Arriving: the clock settles down, the card rises, the edges come last. One movement,
+               eased out. "waiting" comes off once the first frame is on screen (see `arrive`), so
+               the movement is seen from its start; GTK skips it when animations are turned off. */
+            .clockblock {{ transition: opacity 560ms cubic-bezier(0.16,1,0.3,1), transform 640ms cubic-bezier(0.16,1,0.3,1); }}
+            .card {{ transition: opacity 520ms cubic-bezier(0.16,1,0.3,1) 80ms, transform 640ms cubic-bezier(0.16,1,0.3,1) 80ms; }}
+            .edge {{ transition: opacity 480ms cubic-bezier(0.16,1,0.3,1) 240ms; }}
+            .waiting .clockblock {{ opacity: 0; transform: translateY(-10px); }}
+            .waiting .card {{ opacity: 0; transform: translateY(18px) scale(0.985); }}
+            .waiting .edge {{ opacity: 0; }}
+            /* a wrong password: the box shakes its head, once */
+            @keyframes shake {{ 0% {{ transform: translateX(0px); }} 14% {{ transform: translateX(-9px); }} 30% {{ transform: translateX(8px); }}
+                               46% {{ transform: translateX(-6px); }} 62% {{ transform: translateX(4px); }} 78% {{ transform: translateX(-2px); }}
+                               100% {{ transform: translateX(0px); }} }}
+            .field.shake {{ animation: shake 440ms cubic-bezier(0.36,0.07,0.19,0.97); }}
+            /* unlocked: the card and clock step back before the desktop shows */
+            @keyframes leave {{ from {{ opacity: 1; transform: scale(1); }} to {{ opacity: 0; transform: scale(0.97); }} }}
+            .leaving .card, .leaving .clockblock, .leaving .edge {{ animation: leave 180ms cubic-bezier(0.4,0,1,1) forwards; }}
             "#,
             bg = self.get("background"),
-            bg_soft = self.rgba("background", 0.35),
-            bg_mid = self.rgba("background", 0.55),
-            bg_deep = self.rgba("background", 0.8),
+            veil_top = self.rgba("background", 0.50),
+            veil_clear = self.rgba("background", 0.10),
+            veil_low = self.rgba("background", 0.50),
+            shade = self.rgba("background", 0.45),
             font = self.get("font"),
             text = self.get("text"),
+            text_soft = self.rgba("text", 0.88),
             dim = self.get("text_dim"),
-            panel = self.rgba("panel", 0.82),
-            border = self.rgba("border", 0.45),
+            hair = self.rgba("text", 0.16),
+            inner = self.rgba("text", 0.10),
+            drop = self.rgba("background", 0.42),
+            drop_near = self.rgba("background", 0.28),
+            tint_top = self.rgba("panel", 0.46),
+            tint_low = self.rgba("panel", 0.66),
+            well = self.rgba("background", 0.40),
+            glass = self.rgba("panel", 0.52),
+            glass_hover = self.rgba("panel", 0.72),
             accent = self.get("accent"),
-            accent_ring = self.rgba("accent", 0.3),
+            accent_wash = self.rgba("accent", 0.14),
+            accent_line = self.rgba("accent", 0.45),
+            accent_ring = self.rgba("accent", 0.28),
             accent_hover = self.rgba("accent", 0.85),
             warn = self.get("warn"),
+            warn_ring = self.rgba("warn", 0.22),
+            warn_wash = self.rgba("warn", 0.14),
         )
     }
+}
+
+/// A small, softened copy of the wallpaper, painted stretched behind the card so it reads as
+/// frosted glass (GTK has no backdrop blur). Shrinking to about 1/28 and stretching back spreads
+/// each point that far.
+fn softened(path: &str) -> Option<gtk::cairo::ImageSurface> {
+    use gtk::gdk::prelude::GdkCairoContextExt;
+    let full = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(path, 1920, -1, true).ok()?;
+    let (w, h) = ((full.width() / 28).max(8), (full.height() / 28).max(8));
+    let small = full.scale_simple(w, h, gtk::gdk_pixbuf::InterpType::Bilinear)?;
+    let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::Rgb24, w, h).ok()?;
+    let cr = gtk::cairo::Context::new(&surface).ok()?;
+    cr.set_source_pixbuf(&small, 0.0, 0.0);
+    cr.paint().ok()?;
+    drop(cr);
+    Some(surface)
 }
 
 /// `key = value` lines; `#` starts a comment.
@@ -197,6 +261,10 @@ fn now(format: &str) -> String {
 
 /// The password box and what goes with it, on the first screen only.
 struct Form {
+    /// The window the form is on: marked "leaving" for the short exit before unlocking.
+    window: gtk::Window,
+    /// Paints the softened wallpaper behind the card.
+    frost: gtk::DrawingArea,
     entry: gtk::PasswordEntry,
     go: gtk::Button,
     field: gtk::Box,
@@ -214,6 +282,10 @@ fn start(app: &gtk::Application, failed: Rc<Cell<bool>>) {
         return;
     }
     let look = Rc::new(Look::read());
+    // The frosted copy is made after the screens are up: the lock screen covers the desktop as
+    // fast as it can, and the card is still fading in when the glass arrives.
+    let soft: Rc<RefCell<Option<gtk::cairo::ImageSurface>>> = Rc::default();
+    let frosts: Rc<RefCell<Vec<gtk::DrawingArea>>> = Rc::default();
     let css = gtk::CssProvider::new();
     css.load_from_string(&look.css());
     if let Some(display) = gdk::Display::default() {
@@ -228,10 +300,15 @@ fn start(app: &gtk::Application, failed: Rc<Cell<bool>>) {
     let hold = app.hold();
 
     {
-        let (app, look, person, form, clocks) = (app.clone(), look.clone(), person.clone(), form.clone(), clocks.clone());
+        let (app, look, person, form, clocks, soft, frosts) =
+            (app.clone(), look.clone(), person.clone(), form.clone(), clocks.clone(), soft.clone(), frosts.clone());
         lock.connect_monitor(move |lock, monitor| {
             let with_form = form.borrow().is_none();
-            let (window, time, date, built) = screen(&app, &look, &person, with_form);
+            let height = monitor.geometry().height();
+            let (window, time, date, built) = screen(&app, &look, &person, &soft, height, with_form);
+            if let Some(built) = &built {
+                frosts.borrow_mut().push(built.frost.clone());
+            }
             if let Some(built) = built {
                 wire(lock, &built, &person);
                 *form.borrow_mut() = Some(built);
@@ -283,6 +360,15 @@ fn start(app: &gtk::Application, failed: Rc<Cell<bool>>) {
         glib::ControlFlow::Continue
     });
 
+    {
+        let (soft, frosts, look) = (soft.clone(), frosts.clone(), look.clone());
+        glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
+            *soft.borrow_mut() = softened(look.get("wallpaper"));
+            for frost in frosts.borrow().iter() {
+                frost.queue_draw();
+            }
+        });
+    }
     if !lock.lock() {
         eprintln!("arka-lock: the screen could not be locked");
         failed.set(true);
@@ -290,10 +376,19 @@ fn start(app: &gtk::Application, failed: Rc<Cell<bool>>) {
     }
 }
 
-/// One screen's window: wallpaper, veil, clock and date, and on the first screen the form.
+/// One screen's window: the wallpaper, the clock high up, and on the first screen the glass card
+/// (who is signed in, the password box) with the battery and power buttons along the bottom.
 /// A plain window: an application window crashed GTK when the lock library destroyed it at unlock.
-fn screen(_app: &gtk::Application, look: &Look, person: &Person, with_form: bool) -> (gtk::Window, gtk::Label, gtk::Label, Option<Rc<Form>>) {
-    let window = gtk::Window::builder().css_classes(["lock"]).build();
+fn screen(
+    _app: &gtk::Application,
+    look: &Look,
+    person: &Person,
+    soft: &Rc<RefCell<Option<gtk::cairo::ImageSurface>>>,
+    height: i32,
+    with_form: bool,
+) -> (gtk::Window, gtk::Label, gtk::Label, Option<Rc<Form>>) {
+    let window = gtk::Window::builder().css_classes(["lock", "waiting"]).build();
+    arrive(&window);
     let overlay = gtk::Overlay::new();
 
     let wallpaper = gtk::Picture::for_filename(look.get("wallpaper"));
@@ -303,25 +398,27 @@ fn screen(_app: &gtk::Application, look: &Look, person: &Person, with_form: bool
     let veil = gtk::Box::builder().css_classes(["veil"]).hexpand(true).vexpand(true).build();
     overlay.add_overlay(&veil);
 
-    let column = gtk::Box::builder()
+    let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center).build();
+    // the clock sits about a tenth of the way down, whatever the screen's height
+    let clockblock = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
-        .halign(gtk::Align::Center)
-        .valign(gtk::Align::Center)
-        .spacing(0)
+        .css_classes(["clockblock"])
+        .margin_top((height as f64 * 0.10).round() as i32)
         .build();
     let time = gtk::Label::builder().label(now("%H:%M")).css_classes(["time"]).build();
     let date = gtk::Label::builder().label(now("%A, %-d %B")).css_classes(["date"]).build();
-    column.append(&time);
-    column.append(&date);
+    clockblock.append(&time);
+    clockblock.append(&date);
+    column.append(&clockblock);
 
     let mut built = None;
     if with_form {
-        let who = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).margin_top(64).halign(gtk::Align::Center).build();
+        let body = gtk::Box::builder().orientation(gtk::Orientation::Vertical).css_classes(["cardbody"]).build();
         let avatar = gtk::Label::builder().label(initial(&person.shown)).css_classes(["avatar"]).halign(gtk::Align::Center).build();
         avatar.set_accessible_role(gtk::AccessibleRole::Presentation);
-        let name = gtk::Label::builder().label(&person.shown).css_classes(["name"]).build();
-        who.append(&avatar);
-        who.append(&name);
+        let name = gtk::Label::builder().label(&person.shown).css_classes(["name"]).margin_top(12).build();
+        body.append(&avatar);
+        body.append(&name);
 
         let entry = gtk::PasswordEntry::builder().show_peek_icon(true).hexpand(true).build();
         entry.set_placeholder_text(Some("Password"));
@@ -329,19 +426,47 @@ fn screen(_app: &gtk::Application, look: &Look, person: &Person, with_form: bool
         let go = gtk::Button::builder().icon_name("go-next-symbolic").css_classes(["go"]).valign(gtk::Align::Center).build();
         go.set_tooltip_text(Some("Unlock"));
         go.update_property(&[gtk::accessible::Property::Label("Unlock")]);
-        let field = gtk::Box::builder().spacing(8).css_classes(["field"]).width_request(340).margin_top(20).halign(gtk::Align::Center).build();
+        let field = gtk::Box::builder().spacing(8).css_classes(["field"]).width_request(312).margin_top(22).halign(gtk::Align::Center).build();
         field.append(&entry);
         field.append(&go);
-        let note = gtk::Label::builder().css_classes(["note"]).margin_top(14).wrap(true).max_width_chars(48).justify(gtk::Justification::Center).build();
+        let note = gtk::Label::builder().css_classes(["note"]).margin_top(12).wrap(true).max_width_chars(40).justify(gtk::Justification::Center).build();
         note.set_accessible_role(gtk::AccessibleRole::Status);
         let layout = gtk::Label::builder().css_classes(["layout"]).visible(false).build();
+        body.append(&field);
+        body.append(&note);
+        body.append(&layout);
 
-        column.append(&who);
-        column.append(&field);
-        column.append(&note);
-        column.append(&layout);
-        let form = Rc::new(Form { entry, go, field, note, layout, busy: Cell::new(false), armed: RefCell::default() });
+        // the card: the softened wallpaper where the card is, the tinted body over it
+        let card = gtk::Overlay::builder().css_classes(["card"]).halign(gtk::Align::Center).overflow(gtk::Overflow::Hidden).build();
+        let frost = gtk::DrawingArea::new();
+        frost.set_draw_func({
+            let (soft, window) = (soft.clone(), window.clone());
+            move |area, cr, _, _| {
+                let soft = soft.borrow();
+                let Some(surface) = soft.as_ref() else { return };
+                let (ww, wh) = (window.width() as f64, window.height() as f64);
+                let Some(at) = area.compute_point(&window, &gtk::graphene::Point::new(0.0, 0.0)) else { return };
+                // the same cover fit as the wallpaper picture, seen through the card's place
+                let scale = (ww / surface.width() as f64).max(wh / surface.height() as f64);
+                cr.translate(-at.x() as f64 + (ww - surface.width() as f64 * scale) / 2.0, -at.y() as f64 + (wh - surface.height() as f64 * scale) / 2.0);
+                cr.scale(scale, scale);
+                let _ = cr.set_source_surface(surface, 0.0, 0.0);
+                cr.source().set_filter(gtk::cairo::Filter::Good);
+                let _ = cr.paint();
+            }
+        });
+        card.set_child(Some(&frost));
+        card.add_overlay(&body);
+        card.set_measure_overlay(&body, true);
 
+        // the card in the middle of the room left under the clock, nudged up for the bottom row
+        let top_room = gtk::Box::builder().vexpand(true).build();
+        let low_room = gtk::Box::builder().vexpand(true).margin_bottom(72).build();
+        column.append(&top_room);
+        column.append(&card);
+        column.append(&low_room);
+
+        let form = Rc::new(Form { window: window.clone(), frost: frost.clone(), entry, go, field, note, layout, busy: Cell::new(false), armed: RefCell::default() });
         overlay.add_overlay(&battery(look));
         overlay.add_overlay(&power_row(look, &form));
         built = Some(form);
@@ -349,6 +474,38 @@ fn screen(_app: &gtk::Application, look: &Look, person: &Person, with_form: bool
     overlay.add_overlay(&column);
     window.set_child(Some(&overlay));
     (window, time, date, built)
+}
+
+/// Take "waiting" off once the window's first frame has been drawn, which starts the entrance.
+fn arrive(window: &gtk::Window) {
+    let frames = Cell::new(0);
+    window.add_tick_callback(move |window, _| {
+        frames.set(frames.get() + 1);
+        if frames.get() < 2 {
+            return glib::ControlFlow::Continue;
+        }
+        window.remove_css_class("waiting");
+        glib::ControlFlow::Break
+    });
+}
+
+/// Run `then` once the short exit has played (straight away when animations are off).
+fn after_exit(form: &Form, then: impl FnOnce() + 'static) {
+    let motion = gtk::Settings::default().is_none_or(|s| s.is_gtk_enable_animations());
+    if !motion {
+        then();
+        return;
+    }
+    form.window.add_css_class("leaving");
+    glib::timeout_add_local_once(std::time::Duration::from_millis(170), then);
+}
+
+/// Shake the password box once; the class comes off after, so the next wrong guess shakes again.
+fn shake(form: &Rc<Form>) {
+    form.field.remove_css_class("shake");
+    form.field.add_css_class("shake");
+    let field = form.field.clone();
+    glib::timeout_add_local_once(std::time::Duration::from_millis(460), move || field.remove_css_class("shake"));
 }
 
 fn say(form: &Form, text: &str, wrong: bool) {
@@ -380,6 +537,7 @@ fn wire(lock: &Lock, form: &Rc<Form>, person: &Rc<Person>) {
                 return;
             }
             form.busy.set(true);
+            form.field.add_css_class("busy");
             form.entry.set_sensitive(false);
             form.go.set_sensitive(false);
             say(&form, "Checking…", false);
@@ -390,13 +548,15 @@ fn wire(lock: &Lock, form: &Rc<Form>, person: &Rc<Person>) {
                 let said = match check.await {
                     Ok(Ok(())) => {
                         say(&form, "", false);
-                        lock.unlock();
+                        after_exit(&form, move || lock.unlock());
                         return;
                     }
                     Ok(Err(said)) => said,
                     Err(_) => None,
                 };
                 form.busy.set(false);
+                form.field.remove_css_class("busy");
+                shake(&form);
                 form.entry.set_text("");
                 form.entry.set_sensitive(true);
                 form.go.set_sensitive(true);
@@ -482,9 +642,9 @@ fn show_layout(form: &Form, keyboard: &gdk::Device) {
     }
 }
 
-/// The battery, top right, when the computer has one: level and whether it is charging.
+/// The battery, bottom left, when the computer has one: level and whether it is charging.
 fn battery(look: &Look) -> gtk::Box {
-    let row = gtk::Box::builder().spacing(8).halign(gtk::Align::End).valign(gtk::Align::Start).margin_top(24).margin_end(28).visible(false).build();
+    let row = gtk::Box::builder().spacing(8).css_classes(["edge"]).halign(gtk::Align::Start).valign(gtk::Align::End).margin_bottom(36).margin_start(32).visible(false).build();
     let icon_slot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     let level = gtk::Label::builder().css_classes(["status"]).build();
     row.append(&icon_slot);
@@ -539,7 +699,7 @@ fn read_battery() -> Option<(u32, bool)> {
 /// Sleep, Restart and Shut down, bottom right. Restart and Shut down ask for a second click,
 /// since they end the session's open work.
 fn power_row(look: &Look, form: &Rc<Form>) -> gtk::Box {
-    let row = gtk::Box::builder().spacing(10).halign(gtk::Align::End).valign(gtk::Align::End).margin_bottom(28).margin_end(28).build();
+    let row = gtk::Box::builder().spacing(10).css_classes(["edge"]).halign(gtk::Align::End).valign(gtk::Align::End).margin_bottom(28).margin_end(28).build();
     for (icon, name, command, confirm) in [
         ("moon-bold", "Sleep", "suspend", false),
         ("arrow-clockwise-bold", "Restart", "reboot", true),
