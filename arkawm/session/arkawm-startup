@@ -12,6 +12,31 @@ if ! systemctl --user show-environment 2>/dev/null | grep -q '^WAYLAND_DISPLAY='
     trap 'systemctl --user unset-environment $vars 2>/dev/null' EXIT
 fi
 
+# GTK apps take their icons, pointer and light or dark look from these settings. Plasma copies
+# its own choices into them; ArkaWM has no settings of its own for these, so it copies the same
+# KDE choices at every start. Without it GTK apps fell back to icons that lack many of the ones
+# ArkaOS apps use, and showed blanks.
+config=${XDG_CONFIG_HOME:-$HOME/.config}
+kde_value() { sed -n "/^\[$2\]/,/^\[/s/^$3=//p" "$config/$1" 2>/dev/null | head -n 1; }
+if command -v gsettings >/dev/null; then
+    icons=$(kde_value kdeglobals Icons Theme)
+    scheme=$(kde_value kdeglobals General ColorScheme)
+    case $scheme in *Light*) look=prefer-light ;; *) look=prefer-dark ;; esac
+    gsettings set org.gnome.desktop.interface icon-theme "${icons:-Arka}" 2>/dev/null
+    gsettings set org.gnome.desktop.interface cursor-theme "$XCURSOR_THEME" 2>/dev/null
+    gsettings set org.gnome.desktop.interface color-scheme "$look" 2>/dev/null
+fi
+
+# The password prompt for actions that need an administrator: joining a new Wi-Fi network,
+# installing updates, changing system settings. Plasma starts KDE's own; without one those
+# actions were refused without asking (Wi-Fi could not connect in ArkaWM, reported on hardware).
+for agent in /usr/libexec/kf6/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1; do
+    if [ -x "$agent" ]; then
+        "$agent" &
+        break
+    fi
+done
+
 # The user's own start-up programs if there are any. Otherwise the ArkaOS desktop (arka-desk:
 # wallpaper, app ring, menu, status cards, top strip), or failing that a terminal so the screen
 # is not empty. The theme is the one word in ~/.config/arkawm/theme: sky-blue or emerald.

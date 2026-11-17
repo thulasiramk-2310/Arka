@@ -16,6 +16,12 @@ fi
 # programs installed for this user only (arka-wheel, arka-convert) live here
 export PATH="$HOME/.local/bin:$PATH"
 export XDG_CURRENT_DESKTOP=ArkaWM XDG_SESSION_DESKTOP=arkawm XDG_SESSION_TYPE=wayland
+# Qt and KDE apps look as they do on the Plasma desktop: the Arka icons, the ArkaOS colours and
+# fonts, KDE's file dialogs. Without this their icons were blank in ArkaWM (reported on hardware).
+export QT_QPA_PLATFORMTHEME=kde
+# The pointer of the Plasma desktop, for X11 apps and anything that reads these.
+cursor=$(sed -n '/^\[Mouse\]/,/^\[/s/^cursorTheme=//p' "${XDG_CONFIG_HOME:-$HOME/.config}/kcminputrc" 2>/dev/null | head -n 1)
+export XCURSOR_THEME=${cursor:-ArkaCursor} XCURSOR_SIZE=${XCURSOR_SIZE:-24}
 
 bin=$here/target/release/arkawm
 [ -x "$bin" ] || bin=$here/target/debug/arkawm
