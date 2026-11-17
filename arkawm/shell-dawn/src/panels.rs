@@ -107,6 +107,10 @@ enum Event {
     Shot,
     ShotFailed,
     Clip(String),
+    /// The clipboard went empty: the program that copied closed (or cleared it).
+    ClipGone,
+    /// A password manager copied a secret; it is neither kept nor put back.
+    ClipSecret,
     Quick(Quick),
     /// What a media key just changed, to show briefly ("Volume 45%").
     Level(String),
@@ -167,6 +171,11 @@ pub struct Shell {
     /// "Clear" over the notifications; shown only when there is something to clear.
     clear_notes: gtk::Button,
     clips: gtk::Box,
+    /// The search page: the box people type in, and the apps it narrows.
+    find: gtk::SearchEntry,
+    found: gtk::ListBox,
+    /// The last text copied, whole and not secret: put back when the program it came from closes.
+    restorable: RefCell<Option<String>>,
     history: RefCell<Vec<String>>,
     toast: gtk::ApplicationWindow,
     toast_title: gtk::Label,
@@ -185,6 +194,8 @@ pub struct Shell {
     wifi: gtk::Switch,
     bluetooth: gtk::Switch,
     hotspot: gtk::Switch,
+    /// Night light, shown only where ArkaWM drives the real screen.
+    night: gtk::Switch,
     /// The Wi-Fi page: its list and the button that looks again.
     networks: gtk::Box,
     /// The scrolled list around `networks`, sized to it (the sheet does not grow by itself).
@@ -218,9 +229,36 @@ fn sheet_window(app: &gtk::Application, ctx: &Ctx, name: &str) -> gtk::Applicati
     window.set_namespace(name);
     window.set_anchor(Edge::Top, true);
     window.set_anchor(Edge::Right, true);
-    window.set_margin(Edge::Top, ctx.px(8.0));
+    window.set_margin(Edge::Top, ctx.px(64.0));
     window.set_margin(Edge::Right, ctx.px(16.0));
     window
+}
+
+/// How often each app was started from search (app id → count), kept in ~/.config/arkawm/launches
+/// as "count<TAB>id" lines. Used only to put the apps someone uses first; nothing else reads it.
+pub fn launch_counts() -> std::collections::HashMap<String, u32> {
+    let Some(file) = settings_dir().map(|dir| dir.join("launches")) else { return Default::default() };
+    std::fs::read_to_string(file)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| {
+            let (count, id) = line.split_once('\t')?;
+            Some((id.to_string(), count.trim().parse().ok()?))
+        })
+        .collect()
+}
+
+fn save_launch_counts(counts: &std::collections::HashMap<String, u32>) {
+    let Some(dir) = settings_dir() else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    let text: String = counts.iter().map(|(id, count)| format!("{count}\t{id}\n")).collect();
+    let _ = std::fs::write(dir.join("launches"), text);
+}
+
+/// Apps used before come first (most used first), then the rest by name.
+pub fn by_use(counts: &std::collections::HashMap<String, u32>, a: (&str, &str), b: (&str, &str)) -> std::cmp::Ordering {
+    let (ca, cb) = (counts.get(a.0).copied().unwrap_or(0), counts.get(b.0).copied().unwrap_or(0));
+    cb.cmp(&ca).then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
 }
 
 fn clear(list: &gtk::Box) {
@@ -315,7 +353,18 @@ impl Shell {
         let wifi = gtk::Switch::new();
         let bluetooth = gtk::Switch::new();
         let hotspot = gtk::Switch::new();
-        quick_page.append(&setting("speaker-high-bold", "Volume", volume.upcast_ref()));
+        let volume_row = setting("speaker-high-bold", "Volume", volume.upcast_ref());
+        // the speaker shows when the sound is off
+        if let Some(speaker) = volume_row.first_child().and_downcast::<gtk::Image>() {
+            let (ctx, speaker) = (ctx.clone(), speaker.clone());
+            volume.connect_value_changed(move |scale| {
+                let icon = if scale.value() < 0.5 { "speaker-x-bold" } else { "speaker-high-bold" };
+                speaker.set_from_file(Some(ctx.cfg.file(&format!("{icon}.svg"))));
+            });
+            // the slider starts at 0 before the level is read, so show that now
+            volume.emit_by_name::<()>("value-changed", &[]);
+        }
+        quick_page.append(&volume_row);
         quick_page.append(&setting("sun-bold", "Brightness", brightness.upcast_ref()));
         // a link between a row's name and its switch, to the page with more
         let more = |row: &gtk::Box, text: &str, tip: &str| {
@@ -334,6 +383,14 @@ impl Shell {
         let hotspot_row = setting("broadcast-bold", "Hotspot", hotspot.upcast_ref());
         let hotspot_link = more(&hotspot_row, "Edit", "Change the hotspot's name and password");
         quick_page.append(&hotspot_row);
+        let night = gtk::Switch::new();
+        night.set_active(night_saved());
+        let night_row = setting("moon-bold", "Night light", night.upcast_ref());
+        night_row.set_tooltip_text(Some("Warmer colours on the screen, easier on the eyes in the evening"));
+        // ArkaWM changes the screen's colours itself, which it can only do on the real screen
+        // (not inside another desktop).
+        night_row.set_visible(std::env::var("ARKAWM_BACKEND").is_ok_and(|backend| backend == "udev"));
+        quick_page.append(&night_row);
         let output_pick = gtk::DropDown::from_strings(&[]);
         let output_row = setting("headphones-bold", "Sound out", output_pick.upcast_ref());
         output_row.set_visible(false);
@@ -367,6 +424,11 @@ impl Shell {
             }
             themes.append(&choice);
         }
+        // what follows changes only how the desktop looks
+        let look_head = gtk::Label::new(Some("Desktop look"));
+        look_head.add_css_class("group");
+        look_head.set_xalign(0.0);
+        quick_page.append(&look_head);
         quick_page.append(&setting("palette-bold", "Theme", themes.upcast_ref()));
 
         // Wallpaper: the pictures that come with the theme, and any picture of the user's own.
@@ -485,6 +547,107 @@ impl Shell {
             note.set_max_width_chars(34);
         }
 
+        // Search: every app, narrowed as you type; Enter starts the first one left.
+        let search_page = page("search");
+        search_page.append(&head("Apps"));
+        let find = gtk::SearchEntry::new();
+        find.set_placeholder_text(Some("Type to find an app"));
+        search_page.append(&find);
+        let found = gtk::ListBox::new();
+        found.set_selection_mode(gtk::SelectionMode::None);
+        found.add_css_class("found");
+        let mut apps: Vec<gio::AppInfo> = gio::AppInfo::all().into_iter().filter(|app| app.should_show()).collect();
+        apps.sort_by_key(|app| app.display_name().to_lowercase());
+        apps.dedup_by_key(|app| app.display_name().to_lowercase());
+        let counts = Rc::new(RefCell::new(launch_counts()));
+        for app in apps {
+            let row = gtk::Box::new(Orientation::Horizontal, ctx.px(12.0));
+            if let Some(icon) = app.icon() {
+                let image = gtk::Image::from_gicon(&icon);
+                image.set_pixel_size(ctx.px(24.0));
+                row.append(&image);
+            }
+            let label = gtk::Label::new(Some(&app.display_name()));
+            label.set_xalign(0.0);
+            label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            row.append(&label);
+            let button = gtk::Button::new();
+            button.set_child(Some(&row));
+            button.add_css_class("item");
+            // matched on the name, the description and the app's own search words
+            let words = [app.display_name().to_string(), app.description().map(|d| d.to_string()).unwrap_or_default(), app
+                .downcast_ref::<gio::DesktopAppInfo>()
+                .map(|d| d.keywords().iter().map(|k| k.to_string()).collect::<Vec<_>>().join(" "))
+                .unwrap_or_default()]
+            .join(" ")
+            .to_lowercase();
+            button.set_widget_name(&words);
+            let id = app.id().map(|id| id.to_string()).unwrap_or_else(|| app.display_name().to_string());
+            let panel = panel.clone();
+            let (counts, found2, row_id) = (counts.clone(), found.clone(), id.clone());
+            button.connect_clicked(move |button| {
+                let context = button.display().app_launch_context();
+                match app.launch(&[], Some(&context)) {
+                    Ok(()) => {
+                        *counts.borrow_mut().entry(row_id.clone()).or_insert(0) += 1;
+                        save_launch_counts(&counts.borrow());
+                        found2.invalidate_sort();
+                    }
+                    Err(err) => eprintln!("arka-desk: {} did not start: {err}", app.display_name()),
+                }
+                panel.set_visible(false);
+            });
+            found.append(&button);
+            // the row carries the app's id, for the order (the button carries the words searched)
+            if let Some(row) = found.last_child() {
+                row.set_widget_name(&id);
+            }
+        }
+        found.set_sort_func({
+            let counts = counts.clone();
+            move |a, b| {
+                // the words searched start with the app's name
+                let key = |row: &gtk::ListBoxRow| (row.widget_name().to_string(), row.child().map(|c| c.widget_name().to_string()).unwrap_or_default());
+                let (ka, kb) = (key(a), key(b));
+                by_use(&counts.borrow(), (&ka.0, &ka.1), (&kb.0, &kb.1)).into()
+            }
+        });
+        found.set_filter_func({
+            let find = find.clone();
+            move |row| {
+                let wanted = find.text().to_lowercase();
+                let wanted = wanted.trim();
+                let words = row.child().map(|child| child.widget_name().to_string()).unwrap_or_default();
+                wanted.is_empty() || wanted.split_whitespace().all(|part| words.contains(part))
+            }
+        });
+        find.connect_search_changed({
+            let found = found.clone();
+            move |_| found.invalidate_filter()
+        });
+        find.connect_activate({
+            let found = found.clone();
+            move |_| {
+                let mut row = found.first_child();
+                while let Some(widget) = row {
+                    if widget.is_child_visible() {
+                        if let Some(button) = widget.downcast_ref::<gtk::ListBoxRow>().and_then(|r| r.child()).and_downcast::<gtk::Button>() {
+                            button.emit_clicked();
+                        }
+                        return;
+                    }
+                    row = widget.next_sibling();
+                }
+            }
+        });
+        let found_scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .min_content_height(ctx.px(380.0))
+            .max_content_height(ctx.px(380.0))
+            .child(&found)
+            .build();
+        search_page.append(&found_scroll);
+
         // The toast: one short message under the strip.
         let toast = sheet_window(app, &ctx, "arka-toast");
         let toast_box = gtk::Box::new(Orientation::Vertical, ctx.px(4.0));
@@ -564,6 +727,9 @@ impl Shell {
             notes,
             clear_notes: clear_notes.clone(),
             clips,
+            find,
+            found,
+            restorable: RefCell::new(None),
             history: RefCell::new(Vec::new()),
             toast,
             toast_title,
@@ -578,6 +744,7 @@ impl Shell {
             wifi,
             bluetooth,
             hotspot,
+            night,
             networks,
             network_list,
             scan: scan.clone(),
@@ -698,6 +865,14 @@ impl Shell {
             }
             glib::Propagation::Proceed
         });
+        let me = shell.clone();
+        shell.night.connect_state_set(move |_, on| {
+            if let Some(dir) = settings_dir() {
+                let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join("night"), if on { "on\n" } else { "off\n" }));
+            }
+            me.send(if on { "night on\n" } else { "night off\n" });
+            glib::Propagation::Proceed
+        });
         // Esc closes the sheet.
         let keys = gtk::EventControllerKey::new();
         let me = shell.clone();
@@ -735,6 +910,10 @@ impl Shell {
     pub fn start(self: &Rc<Self>) {
         if let Some(mut stream) = std::env::var_os("ARKAWM_SOCKET").and_then(|path| UnixStream::connect(path).ok()) {
             if stream.write_all(b"watch\n").is_ok() {
+                // night light chosen in an earlier session
+                if night_saved() {
+                    let _ = stream.write_all(b"night on\n");
+                }
                 if let Ok(reader) = stream.try_clone() {
                     let sender = self.sender.clone();
                     std::thread::spawn(move || {
@@ -770,8 +949,12 @@ impl Shell {
         }
 
         // Each time something is copied, wl-paste runs the small script, which hands the text
-        // over as one base64 line. Text marked as a secret by a password manager is left out.
-        let script = "wl-paste -l 2>/dev/null | grep -q passwordManagerHint && exit 0; head -c 8000 | base64 -w0; echo";
+        // over as one base64 line. Text marked as a secret by a password manager is left out
+        // ("+"). "-": the clipboard went empty, because the program that copied it closed.
+        // One byte over the history's limit is read, to tell whole texts from cut ones.
+        let script = "case \"$CLIPBOARD_STATE\" in nil) echo -; exit 0;; sensitive) echo +; exit 0;; esac; \
+                      wl-paste -l 2>/dev/null | grep -q passwordManagerHint && { echo +; exit 0; }; \
+                      head -c 8001 | base64 -w0; echo";
         let watcher = Command::new("wl-paste")
             .args(["--type", "text", "--watch", "sh", "-c", script])
             .stdout(Stdio::piped())
@@ -783,8 +966,12 @@ impl Shell {
                 let sender = self.sender.clone();
                 std::thread::spawn(move || {
                     for line in BufReader::new(out).lines().map_while(Result::ok) {
-                        let text = String::from_utf8_lossy(&glib::base64_decode(line.trim())).into_owned();
-                        if sender.send(Event::Clip(text)).is_err() {
+                        let event = match line.trim() {
+                            "-" => Event::ClipGone,
+                            "+" => Event::ClipSecret,
+                            line => Event::Clip(String::from_utf8_lossy(&glib::base64_decode(line)).into_owned()),
+                        };
+                        if sender.send(event).is_err() {
                             break;
                         }
                         wake();
@@ -868,10 +1055,31 @@ impl Shell {
                     Err(why) => self.hotspot_note.set_text(&why),
                 }
             }
+            Event::ClipSecret => *self.restorable.borrow_mut() = None,
+            Event::ClipGone => {
+                // Put the last text back, so it can still be pasted after its program closed. Only
+                // when nothing at all is on offer, so a picture copied meanwhile is never replaced.
+                if let Some(text) = self.restorable.borrow_mut().take() {
+                    if let Ok(mut child) = Command::new("sh")
+                        .args(["-c", "wl-paste -l >/dev/null 2>&1 || exec wl-copy"])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()
+                    {
+                        if let Some(mut input) = child.stdin.take() {
+                            let _ = input.write_all(text.as_bytes());
+                        }
+                        std::thread::spawn(move || child.wait());
+                    }
+                }
+            }
             Event::Clip(text) => {
                 if text.trim().is_empty() {
                     return;
                 }
+                // a text cut at the history's limit is not put back whole, so it is not put back
+                *self.restorable.borrow_mut() = (text.len() <= 8000).then(|| text.clone());
                 let mut history = self.history.borrow_mut();
                 history.retain(|old| *old != text);
                 history.insert(0, text);
@@ -904,9 +1112,37 @@ impl Shell {
             self.panel.set_visible(false);
             return;
         }
+        self.show(name);
+    }
+
+    /// Open the sheet at this page (it stays open if it already shows it).
+    pub fn show(self: &Rc<Self>, name: &str) {
+        self.place(false);
         self.toast.set_visible(false);
         self.panel.present();
         self.go(name);
+    }
+
+    /// Open the sheet at this page beside the left menu, which asked for it.
+    pub fn show_beside_menu(self: &Rc<Self>, name: &str) {
+        self.place(true);
+        self.toast.set_visible(false);
+        self.panel.present();
+        self.go(name);
+    }
+
+    /// Under the top bar on the right, or beside the menu on the left.
+    fn place(&self, by_menu: bool) {
+        let ctx = &self.ctx;
+        self.panel.set_anchor(Edge::Right, !by_menu);
+        self.panel.set_anchor(Edge::Left, by_menu);
+        if by_menu {
+            self.panel.set_margin(Edge::Left, ctx.px(452.0) + ctx.ox.round() as i32);
+            self.panel.set_margin(Edge::Top, ctx.px(300.0) + ctx.oy.round() as i32);
+        } else {
+            self.panel.set_margin(Edge::Right, ctx.px(16.0));
+            self.panel.set_margin(Edge::Top, ctx.px(64.0));
+        }
     }
 
     /// Show this page of the sheet and read what it shows.
@@ -927,6 +1163,11 @@ impl Shell {
                 if let Some(bell) = self.bell.borrow().as_ref() {
                     bell.remove_css_class("new");
                 }
+            }
+            "search" => {
+                self.find.set_text("");
+                self.found.invalidate_filter();
+                self.find.grab_focus();
             }
             "wifi" => self.load_networks(false),
             "bluetooth" => self.load_devices(false),
@@ -1321,7 +1562,12 @@ pub fn save_closed_cards(closed: &[String]) {
     }
 }
 
-fn settings_dir() -> Option<std::path::PathBuf> {
+/// Night light was left on.
+fn night_saved() -> bool {
+    settings_dir().and_then(|dir| std::fs::read_to_string(dir.join("night")).ok()).is_some_and(|text| text.trim() == "on")
+}
+
+pub fn settings_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".config/arkawm"))
 }
 
@@ -1357,7 +1603,7 @@ fn set_theme(name: &str) {
 }
 
 /// Start a fresh copy of the desktop with the settings just saved, and leave.
-fn start_again() {
+pub fn start_again() {
     stop_watcher();
     if let Ok(me) = std::env::current_exe() {
         // the choice in the file wins over a theme forced for testing

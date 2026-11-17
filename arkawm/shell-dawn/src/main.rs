@@ -33,6 +33,17 @@ fn next_frame(at: usize, forward: bool, len: usize) -> (usize, bool) {
 
 /// Width of the screen the layout was drawn for.
 const DESIGN_WIDTH: f64 = 1536.0;
+/// The plain form of a green icon ("shield-green" is drawn as "shield-fill" until checked).
+fn plain_icon(icon: &str) -> String {
+    match icon.strip_suffix("-green") {
+        Some(base) => format!("{base}-fill"),
+        None => icon.to_string(),
+    }
+}
+
+/// The layout is drawn for a 16:10 screen. On another shape it is scaled to fit and centred,
+/// and the wallpaper still fills the whole screen.
+const DESIGN_HEIGHT: f64 = 960.0;
 
 /// Multiply every `px` length in the stylesheet by `k`, so the design scales with the screen.
 fn scale_css(css: &str, k: f64) -> String {
@@ -102,6 +113,228 @@ fn write_fuzzel_style(cfg: &config::Config) {
     if std::fs::write(&path, style).is_ok() {
         let _ = FUZZEL_STYLE.set(path);
     }
+}
+
+/// The lock screen in the desktop's look: the wallpaper behind it and the theme's colours on the
+/// ring that shows typing. swaylock reads it through `LOCK`, unless the user has a swaylock
+/// config of their own or set ARKAWM_LOCKER.
+fn write_lock_style(cfg: &config::Config) {
+    let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") else { return };
+    let hex = |key: &str, alpha: &str| format!("{}{alpha}", cfg.get(&format!("colors.{key}")).trim_start_matches('#'));
+    let font = cfg.get("look.font").split(',').next().unwrap_or("sans-serif").trim().trim_matches('"').to_string();
+    let chosen = Some(cfg.get("wallpaper.file")).filter(|file| !file.is_empty()).map(PathBuf::from);
+    let picture = chosen.unwrap_or_else(|| cfg.file("wallpaper.jpg"));
+    let mut style = format!(
+        "color={}\nfont={font}\nindicator-radius=72\nindicator-thickness=7\nindicator-idle-visible\nshow-failed-attempts\n\
+         ignore-empty-password\ninside-color={}\ninside-clear-color={}\ninside-ver-color={}\ninside-wrong-color={}\n\
+         ring-color={}\nring-clear-color={}\nring-ver-color={}\nring-wrong-color={}\nkey-hl-color={}\nbs-hl-color={}\n\
+         line-color=00000000\nline-clear-color=00000000\nline-ver-color=00000000\nline-wrong-color=00000000\n\
+         separator-color=00000000\ntext-color={}\ntext-clear-color={}\ntext-ver-color={}\ntext-wrong-color={}\n",
+        hex("background", "ff"),
+        hex("panel", "e0"), hex("panel", "e0"), hex("panel", "e0"), hex("panel", "e0"),
+        hex("border", "66"), hex("text_dim", "ff"), hex("accent", "ff"), hex("warn", "ff"),
+        hex("accent", "ff"), hex("warn", "ff"),
+        hex("text", "ff"), hex("text", "ff"), hex("text", "ff"), hex("warn", "ff"),
+    );
+    if config::is_picture(&picture) && picture.exists() {
+        style.push_str(&format!("image={}\nscaling=fill\n", picture.display()));
+    }
+    let _ = std::fs::write(format!("{dir}/arka-desk-swaylock.conf"), style);
+}
+
+/// How the Lock button starts the locker: with the desktop's lock style when nothing else was chosen.
+const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -z "$ARKAWM_LOCKER" ] && [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec ${ARKAWM_LOCKER:-swaylock}; fi"#;
+
+/// The theme's glyph for an app of this kind, so a picked app looks like the rest of the ring.
+fn glyph_for(categories: &str) -> Option<&'static str> {
+    let has = |kind: &str| categories.split(';').any(|c| c == kind);
+    [
+        ("WebBrowser", "globe-bold"),
+        ("TerminalEmulator", "terminal-bold"),
+        ("FileManager", "folder-fill"),
+        ("PackageManager", "storefront-bold"),
+        ("Security", "shield-fill"),
+        ("Monitor", "cube-fill"),
+        ("Settings", "gear-fill"),
+        ("IDE", "code-bold"),
+        ("TextEditor", "code-bold"),
+        ("Development", "code-bold"),
+        ("Photography", "image-bold"),
+        ("Graphics", "image-bold"),
+        ("Music", "headphones-bold"),
+        ("Audio", "headphones-bold"),
+    ]
+    .into_iter()
+    .find(|(kind, _)| has(kind))
+    .map(|(_, glyph)| glyph)
+}
+
+/// The ring line for an installed app: its name, a glyph (or its own icon), and how to start it.
+fn ring_line(app: &gtk::gio::DesktopAppInfo) -> Option<String> {
+    let file = app.filename()?;
+    let name = app.display_name().replace(['|', ';', '\n'], " ");
+    let icon = match glyph_for(&app.categories().map(|c| c.to_string()).unwrap_or_default()) {
+        Some(glyph) => glyph.to_string(),
+        None => match app.icon().and_then(|icon| icon.downcast::<gtk::gio::ThemedIcon>().ok()) {
+            Some(themed) => format!("app:{}", themed.names().first().map(|n| n.to_string()).unwrap_or_default()),
+            None => "squares-four-fill".to_string(),
+        },
+    };
+    let path = file.to_string_lossy().replace('\'', "'\\''");
+    Some(format!("{name} | {icon} | gio launch '{path}'"))
+}
+
+/// Save what this place on the ring holds (`None` puts back the original) and start again with it.
+fn save_place(place: usize, line: Option<String>) {
+    let Some(dir) = panels::settings_dir() else { return };
+    let file = dir.join("ring");
+    let mut places = std::collections::HashMap::new();
+    config::parse(&std::fs::read_to_string(&file).unwrap_or_default(), &mut places);
+    let key = format!("apps.{place}");
+    match line {
+        Some(line) => places.insert(key, line),
+        None => places.remove(&key),
+    };
+    let changed: Vec<String> =
+        (1..=8).filter_map(|n| places.get(&format!("apps.{n}")).map(|line| format!("{n} = {line}\n"))).collect();
+    let saved = if changed.is_empty() {
+        // nothing left changed: the ring is the original again
+        std::fs::remove_file(&file).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) })
+    } else {
+        let text = format!("# The ring's places as changed from the desktop. Delete a line to put the original back.\n[apps]\n{}", changed.concat());
+        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, text))
+    };
+    if saved.is_ok() {
+        panels::start_again();
+    }
+}
+
+/// A right-click on a ring circle: choose another installed app for that place. Drawn inside the
+/// desktop beside the circle (a pop-up would not get the keyboard for the search box).
+fn offer_apps(node: &gtk::Widget, overlay: &gtk::Overlay, place: usize, now: &str) {
+    use gtk::gio;
+    // one chooser at a time
+    let mut child = overlay.first_child();
+    while let Some(widget) = child {
+        child = widget.next_sibling();
+        if widget.has_css_class("app-chooser") {
+            overlay.remove_overlay(&widget);
+        }
+    }
+    let column = gtk::Box::new(Orientation::Vertical, 8);
+    column.add_css_class("chooser");
+    column.add_css_class("app-chooser");
+    column.set_halign(Align::Start);
+    column.set_valign(Align::Start);
+    let close: Rc<dyn Fn()> = {
+        let (overlay, column) = (overlay.clone(), column.clone());
+        Rc::new(move || {
+            if column.parent().is_some() {
+                overlay.remove_overlay(&column);
+            }
+        })
+    };
+    let head = gtk::Box::new(Orientation::Horizontal, 8);
+    let title = gtk::Label::new(Some(&format!("Replace {now}")));
+    title.add_css_class("title");
+    title.set_xalign(0.0);
+    title.set_hexpand(true);
+    head.append(&title);
+    let shut = gtk::Button::with_label("Cancel");
+    shut.add_css_class("link");
+    shut.connect_clicked({
+        let close = close.clone();
+        move |_| close()
+    });
+    head.append(&shut);
+    column.append(&head);
+    let keys = gtk::EventControllerKey::new();
+    keys.connect_key_pressed({
+        let close = close.clone();
+        move |_, key, _, _| {
+            if key == gtk::gdk::Key::Escape {
+                close();
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        }
+    });
+    column.add_controller(keys);
+    let search = gtk::SearchEntry::new();
+    search.set_placeholder_text(Some("Find an app"));
+    column.append(&search);
+    let list = gtk::ListBox::new();
+    list.set_selection_mode(gtk::SelectionMode::None);
+    let mut apps: Vec<gio::DesktopAppInfo> = gio::AppInfo::all()
+        .into_iter()
+        .filter(|app| app.should_show())
+        .filter_map(|app| app.downcast::<gio::DesktopAppInfo>().ok())
+        .collect();
+    apps.sort_by_key(|app| app.display_name().to_lowercase());
+    apps.dedup_by_key(|app| app.display_name().to_lowercase());
+    // the apps used from search come first, as in search
+    let counts = panels::launch_counts();
+    apps.sort_by(|a, b| {
+        let (ia, ib) = (a.id().map(|i| i.to_string()).unwrap_or_default(), b.id().map(|i| i.to_string()).unwrap_or_default());
+        panels::by_use(&counts, (&ia, &a.display_name()), (&ib, &b.display_name()))
+    });
+    for app in apps {
+        let Some(line) = ring_line(&app) else { continue };
+        let row = gtk::Box::new(Orientation::Horizontal, 10);
+        if let Some(icon) = app.icon() {
+            let image = gtk::Image::from_gicon(&icon);
+            image.set_pixel_size(24);
+            row.append(&image);
+        }
+        let label = gtk::Label::new(Some(&app.display_name()));
+        label.set_xalign(0.0);
+        row.append(&label);
+        let button = gtk::Button::new();
+        button.set_child(Some(&row));
+        button.add_css_class("item");
+        button.set_widget_name(&app.display_name().to_lowercase());
+        let close = close.clone();
+        button.connect_clicked(move |_| {
+            close();
+            save_place(place, Some(line.clone()));
+        });
+        list.append(&button);
+    }
+    list.set_filter_func({
+        let search = search.clone();
+        move |row| {
+            let wanted = search.text().to_lowercase();
+            wanted.is_empty() || row.child().is_some_and(|child| child.widget_name().contains(wanted.trim()))
+        }
+    });
+    search.connect_search_changed({
+        let list = list.clone();
+        move |_| list.invalidate_filter()
+    });
+    let scroll = gtk::ScrolledWindow::builder()
+        .child(&list)
+        .min_content_height(320)
+        .min_content_width(280)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .build();
+    column.append(&scroll);
+    let reset = gtk::Button::with_label("Put back the original");
+    reset.add_css_class("item");
+    reset.connect_clicked({
+        let close = close.clone();
+        move |_| {
+            close();
+            save_place(place, None);
+        }
+    });
+    column.append(&reset);
+    // beside the circle, kept on the screen
+    let at = node.compute_point(overlay, &gtk::graphene::Point::new(node.width() as f32 + 12.0, 0.0)).unwrap_or(gtk::graphene::Point::new(0.0, 0.0));
+    let (room_x, room_y) = (overlay.width() as f32 - 340.0, overlay.height() as f32 - 480.0);
+    column.set_margin_start(at.x().min(room_x).max(16.0) as i32);
+    column.set_margin_top(at.y().min(room_y).max(16.0) as i32);
+    overlay.add_overlay(&column);
+    search.grab_focus();
 }
 
 thread_local! {
@@ -190,11 +423,19 @@ const CARD: f64 = 1.0;
 
 struct Ctx {
     k: f64,
+    /// Where the scaled layout starts on the screen, in pixels: the margins left when the
+    /// screen is wider or taller than 16:10.
+    ox: f64,
+    oy: f64,
     cfg: Config,
     /// Glass surfaces on the desktop and their corner radius in design pixels (negative: round).
     /// A softened copy of the wallpaper is painted behind each, so they read as frosted glass.
     /// The third number is how much of the glass blur this surface gets (see `GLASS_LEVELS`).
     frost: RefCell<Vec<(gtk::Widget, f64, f64)>>,
+    /// The Privacy entries (the ring circle and the menu pill), with their picture and its name.
+    /// They turn green only once the privacy service has answered and all six settings were read
+    /// as configured; until then they look like every other entry.
+    verified: RefCell<Vec<(gtk::Widget, gtk::Image, String)>>,
     /// Softened copies of the wallpaper, one per blur level, small; stretched when painted.
     /// Only these are blurred. The wallpaper itself is shown as it is.
     soft: RefCell<Vec<(f64, gtk::cairo::ImageSurface)>>,
@@ -211,9 +452,27 @@ impl Ctx {
         (v * self.k).round() as i32
     }
     fn icon(&self, name: &str, size: f64) -> gtk::Image {
-        let image = gtk::Image::from_file(self.cfg.file(&format!("{name}.svg")));
+        // "app:<icon>": an app picked for the ring that has no glyph of the theme's own.
+        let image = match name.strip_prefix("app:") {
+            Some(theme_icon) => gtk::Image::from_icon_name(theme_icon),
+            None => gtk::Image::from_file(self.cfg.file(&format!("{name}.svg"))),
+        };
         image.set_pixel_size(self.px(size));
         image
+    }
+    /// Green for the Privacy entries only when the privacy settings were read and all are on.
+    fn show_verified(&self, verified: bool) {
+        for (widget, image, icon) in self.verified.borrow().iter() {
+            if verified {
+                widget.add_css_class("green");
+            } else {
+                widget.remove_css_class("green");
+            }
+            let shown = if verified { icon.clone() } else { plain_icon(icon) };
+            if !shown.starts_with("app:") {
+                image.set_from_file(Some(self.cfg.file(&format!("{shown}.svg"))));
+            }
+        }
     }
     /// The Arka mark, fitted inside a square of this size.
     fn logo(&self, size: f64) -> gtk::Image {
@@ -228,15 +487,15 @@ impl Ctx {
     fn put(&self, overlay: &gtk::Overlay, widget: &impl IsA<gtk::Widget>, x: f64, y: f64) {
         widget.set_halign(Align::Start);
         widget.set_valign(Align::Start);
-        widget.set_margin_start(self.px(x));
-        widget.set_margin_top(self.px(y));
+        widget.set_margin_start(self.px(x) + self.ox.round() as i32);
+        widget.set_margin_top(self.px(y) + self.oy.round() as i32);
         overlay.add_overlay(widget);
     }
     /// Place a widget centred across the screen at a design height.
     fn put_center(&self, overlay: &gtk::Overlay, widget: &impl IsA<gtk::Widget>, y: f64) {
         widget.set_halign(Align::Center);
         widget.set_valign(Align::Start);
-        widget.set_margin_top(self.px(y));
+        widget.set_margin_top(self.px(y) + self.oy.round() as i32);
         overlay.add_overlay(widget);
     }
     /// Spaced-out capitals with a short line under them.
@@ -263,12 +522,12 @@ impl Ctx {
         let column = gtk::Box::new(Orientation::Vertical, self.px(10.0));
         let disc = gtk::Box::new(Orientation::Horizontal, 0);
         disc.add_css_class("disc");
-        if green {
-            disc.add_css_class("green");
-        }
         disc.set_halign(Align::Center);
         self.frosted(&disc, -1.0, ROUND);
-        let image = self.icon(icon, 40.0);
+        let image = self.icon(&plain_icon(icon), 40.0);
+        if green {
+            self.verified.borrow_mut().push((disc.clone().upcast(), image.clone(), icon.to_string()));
+        }
         image.add_css_class("icon");
         image.set_hexpand(true);
         image.set_halign(Align::Center);
@@ -288,13 +547,14 @@ impl Ctx {
     }
     fn pill(&self, icon: &str, name: &str, width: f64, green: bool) -> gtk::Button {
         let row = gtk::Box::new(Orientation::Horizontal, self.px(22.0));
-        row.append(&self.icon(icon, 22.0));
+        let image = self.icon(&plain_icon(icon), 22.0);
+        row.append(&image);
         row.append(&gtk::Label::new(Some(name)));
         let button = gtk::Button::new();
         button.set_child(Some(&row));
         button.add_css_class("pill");
         if green {
-            button.add_css_class("green");
+            self.verified.borrow_mut().push((button.clone().upcast(), image.clone(), icon.to_string()));
         }
         button.set_size_request(self.px(width), self.px(44.0));
         self.frosted(&button, 22.0, SMALL);
@@ -314,7 +574,7 @@ fn sparkline(ctx: &Ctx, rgb: (f64, f64, f64)) -> (gtk::DrawingArea, Rc<RefCell<V
         let data = data.borrow();
         let (w, h) = (w as f64, h as f64);
         // a faint floor, so the graph has a place before the first readings arrive
-        cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 0.28);
+        cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 0.45);
         cr.rectangle(0.0, h - 1.0, w, 1.0);
         let _ = cr.fill();
         if data.len() < 2 {
@@ -348,7 +608,7 @@ fn sparkline(ctx: &Ctx, rgb: (f64, f64, f64)) -> (gtk::DrawingArea, Rc<RefCell<V
         let _ = cr.fill();
         curve(cr);
         cr.set_source_rgba(rgb.0, rgb.1, rgb.2, 1.0);
-        cr.set_line_width(1.6);
+        cr.set_line_width(2.0);
         cr.set_line_cap(gtk::cairo::LineCap::Round);
         cr.set_line_join(gtk::cairo::LineJoin::Round);
         let _ = cr.stroke();
@@ -367,6 +627,25 @@ fn arkad(property: &str) -> Option<String> {
         .output()
         .ok()?;
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// The privacy daemon holds its name on the system bus. On a computer that is not running ArkaOS
+/// (or where the daemon is stopped) every row would only say "Unavailable".
+fn arkad_running() -> bool {
+    Command::new("timeout")
+        .args(["3", "busctl", "--system", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", "org.arka.arkad"])
+        .output()
+        .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "b true")
+}
+
+/// An ArkaOS (bootc) system. Elsewhere the update timer and the image signature policy do not apply.
+/// Whether the privacy service is installed here (it may still be stopped).
+fn arkad_installed() -> bool {
+    ["/usr/lib/systemd/system/arkad.service", "/etc/systemd/system/arkad.service"].iter().any(|unit| Path::new(unit).exists())
+}
+
+fn on_image() -> bool {
+    Path::new("/run/ostree-booted").exists()
 }
 
 /// Ask the privacy daemon and systemd what is configured. Slow, so it runs on its own thread.
@@ -525,6 +804,9 @@ struct Live {
     clock: gtk::Label,
     count: gtk::Label,
     privacy_rows: Vec<(gtk::Image, gtk::Label)>,
+    privacy_lines: Vec<gtk::Box>,
+    privacy_note: gtk::Label,
+    signature_row: gtk::Box,
     checked: gtk::Label,
     health: Vec<(gtk::Label, gtk::DrawingArea, Rc<RefCell<VecDeque<f64>>>)>,
     updates: gtk::Label,
@@ -552,14 +834,17 @@ fn build(app: &gtk::Application) {
     };
     let (accent_rgb, ok_rgb) = (cfg.color("accent"), cfg.color("ok"));
     let display = gtk::gdk::Display::default().expect("no display");
-    let width = display
+    let (width, height) = display
         .monitors()
         .item(0)
         .and_then(|m| m.downcast::<gtk::gdk::Monitor>().ok())
-        .map(|m| m.geometry().width())
-        .unwrap_or(1536);
-    let height = (width as f64 * 0.625).round() as i32;
-    let ctx = Rc::new(Ctx { k: width as f64 / DESIGN_WIDTH, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(Vec::new()) });
+        .map(|m| (m.geometry().width(), m.geometry().height()))
+        .filter(|(w, h)| *w > 0 && *h > 0)
+        .unwrap_or((1536, 960));
+    // the scale that fits the whole layout on this screen, whatever its shape
+    let k = (width as f64 / DESIGN_WIDTH).min(height as f64 / DESIGN_HEIGHT);
+    let (ox, oy) = ((width as f64 - DESIGN_WIDTH * k) / 2.0, (height as f64 - DESIGN_HEIGHT * k) / 2.0);
+    let ctx = Rc::new(Ctx { k, ox, oy, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(Vec::new()), verified: RefCell::new(Vec::new()) });
     let (k, cfg) = (ctx.k, &ctx.cfg);
 
     let provider = gtk::CssProvider::new();
@@ -581,18 +866,28 @@ fn build(app: &gtk::Application) {
     desk.set_exclusive_zone(-1);
     // the keyboard reaches the desktop once it is clicked, so Tab, Enter and Escape work on it
     desk.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::OnDemand);
-    // Any key on the desktop shows where the keyboard is (GTK does not always switch the ring on
-    // for a layer surface that got the keyboard without a click).
+    // Moving with the keyboard shows where the keyboard is (GTK does not always switch the ring on
+    // for a layer surface that got the keyboard without a click); a click hides the ring again.
     let keys = gtk::EventControllerKey::new();
     keys.set_propagation_phase(gtk::PropagationPhase::Capture);
     keys.connect_key_pressed({
         let desk = desk.clone();
-        move |_, _, _, _| {
-            desk.set_focus_visible(true);
+        move |_, key, _, _| {
+            use gtk::gdk::Key;
+            if matches!(key, Key::Tab | Key::ISO_Left_Tab | Key::Left | Key::Right | Key::Up | Key::Down) {
+                desk.set_focus_visible(true);
+            }
             glib::Propagation::Proceed
         }
     });
     desk.add_controller(keys);
+    let clicks = gtk::GestureClick::new();
+    clicks.set_propagation_phase(gtk::PropagationPhase::Capture);
+    clicks.connect_pressed({
+        let desk = desk.clone();
+        move |_, _, _, _| desk.set_focus_visible(false)
+    });
+    desk.add_controller(clicks);
     desk.set_default_size(width, height);
     let overlay = gtk::Overlay::new();
     // The glass: one layer above the wallpaper paints its softened copy where each glass
@@ -875,19 +1170,64 @@ fn build(app: &gtk::Application) {
     const PLACES: [(f64, f64); 8] =
         [(708.0, 110.0), (866.0, 176.0), (932.0, 334.0), (866.0, 492.0), (708.0, 558.0), (550.0, 492.0), (484.0, 334.0), (550.0, 176.0)];
     let mut nodes: Vec<gtk::Button> = Vec::new();
+    // the tip under the ring; the menu's "Tips" shows it again
+    let tip_slot: Rc<RefCell<Option<gtk::Box>>> = Rc::new(RefCell::new(None));
     if show_ring {
         for (i, ((name, icon, commands, highlight), (x, y))) in cfg.apps().into_iter().zip(PLACES).enumerate() {
             let node = ctx.node(&icon, &name, highlight, commands);
             node.add_css_class(&format!("n{}", i + 1));
+            let pick = gtk::GestureClick::new();
+            pick.set_button(3);
+            pick.connect_pressed({
+                let (overlay, name) = (overlay.clone(), name.clone());
+                move |gesture, _, _, _| {
+                    if let Some(node) = gesture.widget() {
+                        offer_apps(&node, &overlay, i + 1, &name);
+                    }
+                }
+            });
+            node.add_controller(pick);
+            node.set_tooltip_text(Some(&format!("{name}\nRight-click to put another app here")));
+            node.update_property(&[gtk::accessible::Property::Label(&name)]);
             ctx.put(&overlay, &node, x, y);
             nodes.push(node);
+        }
+        // The first time only: what the ring, the mark and the round button do.
+        let seen = panels::settings_dir().map(|dir| dir.join("tips-seen"));
+        {
+            let tip = gtk::Box::new(Orientation::Horizontal, ctx.px(16.0));
+            tip.add_css_class("chooser");
+            tip.add_css_class("tip");
+            let words = gtk::Label::new(Some(
+                "Click a circle to open its app, or right-click it to put another app there.\n\
+                 Click the logo in the middle to fold the ring away. The round button on the left opens the menu.",
+            ));
+            words.set_xalign(0.0);
+            tip.append(&words);
+            let ok = gtk::Button::with_label("Got it");
+            ok.add_css_class("link");
+            ok.set_valign(Align::Center);
+            ok.connect_clicked({
+                let (tip, seen) = (tip.clone(), seen.clone());
+                move |_| {
+                    if let Some(file) = &seen {
+                        let _ = file.parent().map(std::fs::create_dir_all);
+                        let _ = std::fs::write(file, "");
+                    }
+                    tip.set_visible(false);
+                }
+            });
+            tip.append(&ok);
+            tip.set_visible(seen.as_ref().is_some_and(|file| !file.exists()));
+            ctx.put_center(&overlay, &tip, 760.0);
+            *tip_slot.borrow_mut() = Some(tip);
         }
         if let Some(text) = caption("platform") {
             ctx.put_center(&overlay, &ctx.caps(text, &[], true, 40.0), 724.0);
         }
     }
     write_fuzzel_style(cfg);
-    let all_apps = Rc::new(cfg.commands("all_apps"));
+    write_lock_style(cfg);
     let privacy_app = Rc::new(cfg.commands("privacy"));
 
     // The menu on the left. Only the round button shows; a click on it opens the menu.
@@ -896,28 +1236,37 @@ fn build(app: &gtk::Application) {
     // the button grows into the menu. Drawn here because a style sheet cannot join two shapes.
     // Opening, the shape grows out of the round button with a little overshoot and the entries
     // fan out of it; shutting, it all draws back in, quicker.
+    // The menu's panel is drawn in its own box, not across the whole screen: it is redrawn every
+    // frame while it unfolds, and a full-screen software redraw made that take seconds.
+    const BODY_BOX: (f64, f64, f64, f64) = (36.0, 400.0, 414.0, 326.0);
     let body = gtk::DrawingArea::new();
     body.set_can_target(false);
+    body.set_content_width(ctx.px(BODY_BOX.2));
+    body.set_content_height(ctx.px(BODY_BOX.3));
     let body_share = Rc::new(Cell::new(0.0f64));
     body.set_draw_func({
         let ctx = ctx.clone();
         let share = body_share.clone();
         let (raised, panel, border) = (ctx.cfg.color("panel_raised"), ctx.cfg.color("panel"), ctx.cfg.color("border"));
         let strength = ctx.cfg.number("look.panel_opacity", 1.0);
-        move |_, cr, w, h| {
+        move |_, cr, _, _| {
             use std::f64::consts::{FRAC_PI_2, PI};
             let k = ctx.k;
             let p = share.get();
             if p <= 0.001 {
                 return;
             }
+            // draw in screen coordinates; the box only limits what is painted
+            cr.translate(-(BODY_BOX.0 * k + ctx.ox).round(), -(BODY_BOX.1 * k + ctx.oy).round());
+            let (w, h) = (width, height);
             // ease out with a slight overshoot, so the panel settles rather than stops
             let t = p - 1.0;
             let grow = 1.0 + 2.2 * t.powi(3) + 1.2 * t.powi(2);
             cr.push_group();
             // design pixels: the lobe (centre, radius), the body's box and corners, the fillet
-            let (cx, cy, r) = (116.0 * k, 551.0 * k, 62.0 * k);
-            let (x0, y0, x1, y1) = (152.0 * k, 422.0 * k, 420.0 * k, 704.0 * k);
+            let (dx, dy) = (ctx.ox, ctx.oy);
+            let (cx, cy, r) = (116.0 * k + dx, 551.0 * k + dy, 62.0 * k);
+            let (x0, y0, x1, y1) = (152.0 * k + dx, 422.0 * k + dy, 420.0 * k + dx, 704.0 * k + dy);
             let (tl, tr, br, bl) = (40.0 * k, 60.0 * k, 66.0 * k, 60.0 * k);
             let f = 26.0 * k;
             let fx = x0 - f;
@@ -964,7 +1313,7 @@ fn build(app: &gtk::Application) {
             let _ = cr.paint_with_alpha((p * 1.8).min(1.0));
         }
     });
-    overlay.add_overlay(&body);
+    ctx.put(&overlay, &body, BODY_BOX.0, BODY_BOX.1);
     // shut, only the round button is left: a clean circle
     let body_motion: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
     let move_body = {
@@ -974,7 +1323,7 @@ fn build(app: &gtk::Application) {
                 id.remove();
             }
             let (from, to) = (share.get(), if open { 1.0 } else { 0.0 });
-            let length = if open { 440.0 } else { 200.0 } * (to - from).abs();
+            let length = if open { 240.0 } else { 150.0 } * (to - from).abs();
             if !motion || length < 1.0 {
                 share.set(to);
                 body.queue_draw();
@@ -1016,12 +1365,14 @@ fn build(app: &gtk::Application) {
         ctx.put(&overlay, &open, 58.0, 633.0);
     }
 
-    let slots = [(190.0, 442.0, 180.0), (180.0, 490.0, 182.0), (184.0, 539.0, 180.0), (198.0, 588.0, 182.0), (216.0, 637.0, 184.0)];
+    let slots = [(190.0, 442.0, 196.0), (180.0, 490.0, 196.0), (184.0, 539.0, 196.0), (198.0, 588.0, 196.0), (216.0, 637.0, 196.0)];
     let main_pills: Vec<gtk::Button> = [
+        // what the ring does not already offer: every app, recent files, the desktop's own
+        // settings, the tips again, and the power choices
         ("squares-four-fill", "Applications", false),
-        ("folder-fill", "Places", false),
-        ("shield-green", "Privacy", true),
-        ("cube-fill", "System", false),
+        ("clock-counter-clockwise-bold", "Recent files", false),
+        ("sliders-horizontal-bold", "Quick settings", false),
+        ("question-bold", "Tips", false),
         ("power-bold", "Power", false),
     ]
     .iter()
@@ -1037,7 +1388,13 @@ fn build(app: &gtk::Application) {
         .iter()
         .zip(slots)
         .map(|(name, (x, y, w))| {
-            let icon = if *name == "Back" { "arrow-right-bold" } else { "power-bold" };
+            let icon = match *name {
+                "Lock" => "lock-bold",
+                "Log out" => "sign-out-bold",
+                "Restart" => "arrow-clockwise-bold",
+                "Back" => "arrow-left-bold",
+                _ => "power-bold",
+            };
             let pill = ctx.pill(icon, name, w, false);
             pill.set_visible(false);
             ctx.put(&overlay, &pill, x, y);
@@ -1075,16 +1432,47 @@ fn build(app: &gtk::Application) {
         })
     };
     set_menu(false);
-    for (pill, key) in main_pills.iter().zip(["all_apps", "places", "privacy", "system"]) {
-        let (set_menu, commands) = (set_menu.clone(), cfg.commands(key));
+    // The sheet (search, quick settings) is made with the top strip, further down.
+    let open_sheet: Rc<RefCell<Option<Rc<panels::Shell>>>> = Rc::new(RefCell::new(None));
+    for (pill, sheet) in main_pills.iter().zip(["search", "", "quick"]) {
+        let (set_menu, open_sheet, recent) = (set_menu.clone(), open_sheet.clone(), cfg.commands("recent"));
         pill.connect_clicked(move |_| {
             set_menu(false);
-            run(&commands);
+            match open_sheet.borrow().as_ref() {
+                Some(shell) if !sheet.is_empty() => shell.show_beside_menu(sheet),
+                _ => run(&recent),
+            }
         });
     }
+    main_pills[3].connect_clicked({
+        let (set_menu, tip_slot) = (set_menu.clone(), tip_slot.clone());
+        move |_| {
+            set_menu(false);
+            if let Some(tip) = tip_slot.borrow().as_ref() {
+                tip.set_visible(true);
+            }
+        }
+    });
+    // Restart, Shut down and Log out wait five seconds, counting on the pill, and "Back" reads
+    // "Cancel" meanwhile; a click on either, Escape or a click elsewhere stops them.
+    let pending: Rc<RefCell<Option<(glib::SourceId, gtk::Label, String)>>> = Rc::new(RefCell::new(None));
+    let back_label = power_pills[4].child().and_then(|row| row.last_child()).and_downcast::<gtk::Label>();
+    let cancel_pending = {
+        let (pending, back_label) = (pending.clone(), back_label.clone());
+        Rc::new(move || {
+            if let Some((id, label, text)) = pending.borrow_mut().take() {
+                id.remove();
+                label.set_text(&text);
+            }
+            if let Some(back) = &back_label {
+                back.set_text("Back");
+            }
+        })
+    };
     let swap = {
-        let (main, power, refrost) = (main_pills.clone(), power_pills.clone(), refrost.clone());
+        let (main, power, refrost, cancel_pending) = (main_pills.clone(), power_pills.clone(), refrost.clone(), cancel_pending.clone());
         move |show_power: bool| {
+            cancel_pending();
             main.iter().for_each(|p| p.set_visible(!show_power));
             power.iter().for_each(|p| p.set_visible(show_power));
             refrost();
@@ -1099,13 +1487,56 @@ fn build(app: &gtk::Application) {
         move |_| swap(false)
     });
     for (pill, key) in power_pills.iter().zip(["lock", "log_out", "restart", "shut_down"]) {
-        let (swap, set_menu) = (swap.clone(), set_menu.clone());
+        let (swap, set_menu, pending, cancel_pending, back_label) =
+            (swap.clone(), set_menu.clone(), pending.clone(), cancel_pending.clone(), back_label.clone());
         // these are run as written, not looked up: they are shell lines, not program names
-        let command = cfg.get(&format!("commands.{key}")).to_string();
-        pill.connect_clicked(move |_| {
-            swap(false);
-            set_menu(false);
-            let _ = Command::new("sh").arg("-c").arg(&command).spawn();
+        let command = match cfg.get(&format!("commands.{key}")) {
+            "${ARKAWM_LOCKER:-swaylock}" => LOCK.to_string(),
+            other => other.to_string(),
+        };
+        let doing = match key {
+            "restart" => "Restart",
+            "shut_down" => "Shut down",
+            _ => "Log out",
+        };
+        pill.connect_clicked(move |pill| {
+            if key == "lock" {
+                swap(false);
+                set_menu(false);
+                let _ = Command::new("sh").arg("-c").arg(&command).spawn();
+                return;
+            }
+            let this_one = pending.borrow().as_ref().is_some_and(|(_, label, _)| label.is_ancestor(pill));
+            cancel_pending();
+            if this_one {
+                return;
+            }
+            let Some(label) = pill.child().and_then(|row| row.last_child()).and_downcast::<gtk::Label>() else { return };
+            let original = label.text().to_string();
+            label.set_text(&format!("{doing} in 5"));
+            if let Some(back) = &back_label {
+                back.set_text("Cancel");
+            }
+            let left = Rc::new(Cell::new(5u32));
+            let id = glib::timeout_add_seconds_local(1, {
+                let (swap, set_menu, pending, label, original, command) =
+                    (swap.clone(), set_menu.clone(), pending.clone(), label.clone(), original.clone(), command.clone());
+                move || {
+                    let n = left.get() - 1;
+                    left.set(n);
+                    if n > 0 {
+                        label.set_text(&format!("{doing} in {n}"));
+                        return glib::ControlFlow::Continue;
+                    }
+                    pending.borrow_mut().take();
+                    label.set_text(&original);
+                    swap(false);
+                    set_menu(false);
+                    let _ = Command::new("sh").arg("-c").arg(&command).spawn();
+                    glib::ControlFlow::Break
+                }
+            });
+            *pending.borrow_mut() = Some((id, label, original));
         });
     }
     orb.connect_clicked({
@@ -1200,6 +1631,7 @@ fn build(app: &gtk::Application) {
     privacy_head.append(&count);
     privacy_head.append(&privacy_close);
     let mut privacy_rows = Vec::new();
+    let mut privacy_lines = Vec::new();
     for name in PRIVACY_NAMES {
         let row = gtk::Box::new(Orientation::Horizontal, ctx.px(14.0));
         row.add_css_class("row");
@@ -1214,7 +1646,20 @@ fn build(app: &gtk::Application) {
         row.append(&status);
         privacy_card.append(&row);
         privacy_rows.push((mark, status));
+        privacy_lines.push(row);
     }
+    let privacy_note = gtk::Label::new(Some(if arkad_installed() {
+        "The ArkaOS privacy service is installed but not running, so these settings cannot be checked. Start it with: sudo systemctl start arkad"
+    } else {
+        "The ArkaOS privacy service is not installed on this computer, so these settings cannot be checked here."
+    }
+    ));
+    privacy_note.add_css_class("dim");
+    privacy_note.set_wrap(true);
+    privacy_note.set_xalign(0.0);
+    privacy_note.set_max_width_chars(34);
+    privacy_note.set_visible(false);
+    privacy_card.append(&privacy_note);
     let checked_row = gtk::Box::new(Orientation::Horizontal, ctx.px(12.0));
     checked_row.set_margin_top(ctx.px(4.0));
     checked_row.append(&ctx.icon("arrows-clockwise-bold", 18.0));
@@ -1282,6 +1727,7 @@ fn build(app: &gtk::Application) {
         open.set_tooltip_text(Some("Open updates"));
         open.update_property(&[gtk::accessible::Property::Label("Open updates")]);
         open.connect_clicked(move |_| run(&updates_app));
+        open.set_visible(on_image());
         version_row.append(&open);
     }
     updates_card.append(&version_row);
@@ -1352,6 +1798,7 @@ fn build(app: &gtk::Application) {
 
     // Open windows in the middle; notifications, quick settings and clipboard history on the right.
     let shell = panels::Shell::new(app, ctx.clone());
+    *open_sheet.borrow_mut() = Some(shell.clone());
     brand.connect_clicked({
         let (shell, swap, set_menu) = (shell.clone(), swap.clone(), set_menu.clone());
         move |_| {
@@ -1417,10 +1864,8 @@ fn build(app: &gtk::Application) {
         button
     };
     let search = round("magnifying-glass-bold", "Search apps");
-    search.connect_clicked({
-        let all_apps = all_apps.clone();
-        move |_| run(&all_apps)
-    });
+    let me = shell.clone();
+    search.connect_clicked(move |_| me.toggle("search"));
     right.append(&search);
     let bell = round("bell-bold", "Notifications");
     let me = shell.clone();
@@ -1539,7 +1984,7 @@ fn build(app: &gtk::Application) {
     shell.start();
 
     // ───── Live values ─────
-    let live = Rc::new(Live { pill_dot, pill_text, date, clock, count, privacy_rows, checked, health, updates, signature });
+    let live = Rc::new(Live { pill_dot, pill_text, date, clock, count, privacy_rows, privacy_lines, privacy_note, signature_row, checked, health, updates, signature });
 
     let tick_clock = {
         let live = live.clone();
@@ -1557,9 +2002,11 @@ fn build(app: &gtk::Application) {
     });
 
     // Privacy settings are read on another thread every 30 seconds.
-    let (send, receive) = mpsc::channel::<Privacy>();
+    let (send, receive) = mpsc::channel::<(bool, Privacy)>();
     std::thread::spawn(move || loop {
-        if send.send(read_privacy()).is_err() {
+        let running = arkad_running();
+        let privacy = read_privacy();
+        if send.send((running, privacy)).is_err() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_secs(30));
@@ -1568,10 +2015,25 @@ fn build(app: &gtk::Application) {
     let mut last_cpu = cpu_times();
     let icons = ctx.clone();
     let mut checked_at: Option<std::time::Instant> = None;
+    let mut service_found = true;
+    let glass = frost.clone();
     let mut ticks = 0u32;
     let tick = move || {
-        while let Ok(privacy) = receive.try_recv() {
+        while let Ok((running, privacy)) = receive.try_recv() {
             checked_at = Some(std::time::Instant::now());
+            service_found = running;
+            // Without the service, six "Unavailable" rows read as six failures. One line says why.
+            let resized = live.privacy_note.is_visible() == running || live.signature_row.is_visible() != on_image();
+            for line in &live.privacy_lines {
+                line.set_visible(running);
+            }
+            live.privacy_note.set_visible(!running);
+            live.signature_row.set_visible(on_image());
+            if resized {
+                // The glass behind the cards follows their new height once they are laid out again.
+                let glass = glass.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(120), move || glass.queue_draw());
+            }
             let good = privacy.iter().filter(|v| **v == Some(true)).count();
             let known = privacy.iter().filter(|v| v.is_some()).count();
             for ((mark, status), value) in live.privacy_rows.iter().zip(privacy) {
@@ -1588,7 +2050,11 @@ fn build(app: &gtk::Application) {
                 mark.set_from_file(Some(icons.cfg.file(&format!("{icon}.svg"))));
             }
             // The count and the pill never claim more than was actually read.
-            if known == 0 {
+            if !running {
+                live.count.set_text("");
+                live.pill_text.set_text("Privacy service not running");
+                live.pill_dot.add_css_class("off");
+            } else if known == 0 {
                 live.count.set_text("");
                 live.pill_text.set_text("Status unavailable");
                 live.pill_dot.add_css_class("off");
@@ -1602,9 +2068,11 @@ fn build(app: &gtk::Application) {
                     live.pill_dot.add_css_class("off");
                 }
             }
+            icons.show_verified(running && good == 6);
             live.updates.set_text(match privacy[5] {
                 Some(true) => "Automatic updates on",
                 Some(false) => "Automatic updates off",
+                None if !on_image() => "ArkaOS updates do not apply here",
                 None => "Update status unavailable",
             });
             // what the policy file says, not a claim that this system was verified
@@ -1614,10 +2082,14 @@ fn build(app: &gtk::Application) {
                 None => "Unavailable",
             });
         }
+        // without the service nothing was checked, only looked for
+        let what = if service_found { "Last checked" } else { "Looked for the service" };
         live.checked.set_text(&match checked_at.map(|at| at.elapsed().as_secs()) {
             None => "Not checked yet".to_string(),
-            Some(s) if s < 60 => format!("Last checked: {s} seconds ago"),
-            Some(s) => format!("Last checked: {} min ago", s / 60),
+            // whole minutes: a number counting up every second is motion on a resting screen
+            Some(s) if s < 60 => format!("{what}: just now"),
+            Some(s) if s < 120 => format!("{what}: 1 min ago"),
+            Some(s) => format!("{what}: {} min ago", s / 60),
         });
 
         let cpu = cpu_times();
@@ -1682,7 +2154,23 @@ fn main() -> glib::ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_frame, scale_css, Grade};
+    use super::{next_frame, plain_icon, scale_css, Grade};
+
+    #[test]
+    fn green_icons_are_plain_until_the_privacy_settings_were_read() {
+        assert_eq!(plain_icon("shield-green"), "shield-fill");
+        assert_eq!(plain_icon("globe-bold"), "globe-bold");
+        assert_eq!(plain_icon("app:firefox"), "app:firefox");
+    }
+
+    #[test]
+    fn picked_apps_get_the_theme_glyph_for_their_kind() {
+        assert_eq!(super::glyph_for("Network;WebBrowser;"), Some("globe-bold"));
+        assert_eq!(super::glyph_for("Qt;KDE;System;TerminalEmulator;"), Some("terminal-bold"));
+        assert_eq!(super::glyph_for("Utility;TextEditor;"), Some("code-bold"));
+        assert_eq!(super::glyph_for("Network;Feed;"), None);
+        assert_eq!(super::glyph_for(""), None);
+    }
 
     #[test]
     fn frames_go_back_and_forth() {

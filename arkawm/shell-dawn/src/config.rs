@@ -99,6 +99,10 @@ impl Config {
         if let Some(on) = user.as_ref().and_then(|dir| std::fs::read_to_string(dir.join("breathe")).ok()) {
             values.insert("wallpaper.breathe".into(), on.trim().to_string());
         }
+        // Places on the ring changed from the desktop (a right-click on a circle) win over desk.conf.
+        if let Some(dir) = &user {
+            read_into(dir.join("ring"), &mut values);
+        }
         Self { values, theme, dirs }
     }
 

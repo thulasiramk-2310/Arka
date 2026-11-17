@@ -21,6 +21,10 @@ desk=$(command -v arka-desk || echo "$here/shell-legacy/target/debug/arka-desk")
 # The ArkaOS wheel (Super+Alt+C, Super+Alt+E) runs hidden for the whole session, when installed.
 wheel=$(command -v arka-wheel || true)
 [ -n "$wheel" ] && "$wheel" &
+# The privacy dots (which program uses the microphone, camera or screen). Their autostart entry
+# is for Plasma only, so ArkaWM starts them itself when they are installed.
+dots=$(command -v arka-privacy-dots || true)
+[ -n "$dots" ] && GSK_RENDERER=cairo "$dots" &
 if [ -x "$autostart" ]; then
     "$autostart" &
 elif [ -x "$desk" ]; then
