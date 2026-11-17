@@ -1,17 +1,19 @@
 #!/bin/sh
-# Writes greetd's settings for this boot to /run/arka-greetd/config.toml, before greetd starts.
+# Writes greetd's settings for this boot to /etc/greetd/arka.toml, before greetd starts. The file
+# sits in /etc/greetd because SELinux lets greetd read only its own folders, and this one belongs
+# to root, so the sign-in screen (which runs as the greetd user) cannot change it.
 # The sign-in screen is arka-lock --greeter inside cage. When first-boot setup turned on
 # automatic sign-in (it writes that for SDDM, the Plasma image's login screen), that account's
 # session starts straight away instead; signing out then shows the sign-in screen.
 set -eu
-out=/run/arka-greetd
-mkdir -p "$out"
+out=/etc/greetd
+new=$out/arka.toml.new
 # cairo: GTK's GL renderer draws black under cage on machines without working 3D (VMs).
 greeter='env GSK_RENDERER=cairo cage -s -d -- /usr/bin/arka-lock --greeter'
 {
     printf '[terminal]\nvt = 1\n\n'
     printf '[default_session]\ncommand = "%s"\nuser = "greetd"\n' "$greeter"
-} > "$out/config.toml.new"
+} > "$new"
 
 auto=/etc/sddm.conf.d/20-autologin.conf
 if [ -r "$auto" ]; then
@@ -25,9 +27,9 @@ if [ -r "$auto" ]; then
     # only a real account and a command that needs no quoting in TOML
     if [ -n "$user" ] && [ -n "$command" ] && getent passwd "$user" >/dev/null &&
         ! printf '%s%s' "$user" "$command" | grep -q '["\\]'; then
-        printf '\n[initial_session]\ncommand = "%s"\nuser = "%s"\n' "$command" "$user" >> "$out/config.toml.new"
+        printf '\n[initial_session]\ncommand = "%s"\nuser = "%s"\n' "$command" "$user" >> "$new"
     else
         echo "arka-greetd-config: automatic sign-in in $auto is not usable; showing the sign-in screen" >&2
     fi
 fi
-mv "$out/config.toml.new" "$out/config.toml"
+mv "$new" "$out/arka.toml"

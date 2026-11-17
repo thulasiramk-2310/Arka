@@ -4,13 +4,13 @@
 //! (ArkaWM or Plasma) at the bottom left. greetd checks the password with PAM and starts the
 //! session once this screen has gone (see greetd.rs).
 //!
-//! The account and session last used are remembered in /var/cache/arka-greet/state. Until then
+//! The account and session last used are remembered in /var/lib/greetd/arka-greet/state. Until then
 //! the ones first-boot setup wrote for the previous login screen are used.
 
 use super::*;
 use crate::greetd::{self, Failure};
 
-const STATE: &str = "/var/cache/arka-greet/state";
+const STATE: &str = "/var/lib/greetd/arka-greet/state";
 /// What first-boot setup writes for the previous login screen (SDDM).
 const SDDM_STATE: &str = "/var/lib/sddm/state.conf";
 const SESSIONS: &str = "/usr/share/wayland-sessions";

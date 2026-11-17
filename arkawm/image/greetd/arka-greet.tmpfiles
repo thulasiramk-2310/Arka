@@ -1,2 +1,4 @@
-# The sign-in screen remembers the account and session last used here.
-d /var/cache/arka-greet 0755 greetd greetd -
+# The sign-in screen remembers the account and session last used here. It is under greetd's
+# own folder because SELinux lets the sign-in screen write nowhere else.
+d /var/lib/greetd 0750 greetd greetd -
+d /var/lib/greetd/arka-greet 0700 greetd greetd -
