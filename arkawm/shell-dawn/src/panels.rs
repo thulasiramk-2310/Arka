@@ -1175,7 +1175,8 @@ impl Shell {
         self.panel.set_anchor(Edge::Right, !by_menu);
         self.panel.set_anchor(Edge::Left, by_menu);
         if by_menu {
-            self.panel.set_margin(Edge::Left, ctx.px(452.0) + ctx.ox.round() as i32);
+            // beside the menu, which keeps to the left edge (see `Ctx::screen_x`)
+            self.panel.set_margin(Edge::Left, ctx.px(452.0));
             self.panel.set_margin(Edge::Top, ctx.px(300.0) + ctx.oy.round() as i32);
         } else {
             self.panel.set_margin(Edge::Right, ctx.px(16.0));

@@ -1,0 +1,18 @@
+#!/bin/sh
+# The Classic theme's dock: Crystal Dock with ArkaOS's settings. Crystal Dock keeps a folder of
+# settings per desktop, named after XDG_CURRENT_DESKTOP, so ArkaWM's is new on every account.
+# Fill it from the Plasma desktop's dock settings (or the system's), so the dock does not open
+# its first-run window. Settings already there are never replaced.
+dir=${XDG_CONFIG_HOME:-$HOME/.config}/crystal-dock
+mine=$dir/${XDG_CURRENT_DESKTOP%%[:;]*}
+if [ ! -f "$mine/panel_1.conf" ]; then
+    for from in "$dir/KDE" "$dir/generic" /etc/skel/.config/crystal-dock/generic; do
+        if [ -f "$from/panel_1.conf" ]; then
+            mkdir -p "$mine" && cp "$from"/*.conf "$mine/"
+            break
+        fi
+    done
+fi
+# arka-dock-start brings older settings up to date, then runs the dock.
+command -v arka-dock-start >/dev/null && exec arka-dock-start
+exec crystal-dock

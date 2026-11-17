@@ -192,3 +192,7 @@ window.edgeline { background: alpha(black, 0.004); }
 .sheet .found row { padding: 0; margin-bottom: 4px; background: transparent; }
 .sheet .found button.item { font-size: 14px; padding: 8px 12px; }
 .sheet .group { font-size: 12px; font-weight: 600; color: mix(@text_dim,@text,0.25); margin-top: 6px; padding-top: 12px; border-top: 1px solid alpha(@border,0.45); }
+
+/* A double-click on the wallpaper puts the cards aside to show the whole picture (main.rs). */
+.aside { transition: opacity 260ms cubic-bezier(0.16,1,0.3,1), transform 320ms cubic-bezier(0.16,1,0.3,1); }
+.aside.cleared { opacity: 0; transform: translateX(24px); transition: opacity 180ms cubic-bezier(0.4,0,1,1), transform 220ms cubic-bezier(0.4,0,1,1); }

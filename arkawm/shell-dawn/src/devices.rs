@@ -10,6 +10,9 @@ fn run(seconds: u32, program: &str, args: &[&str]) -> Result<String, String> {
         .arg(program)
         .args(args)
         .env("LC_ALL", "C")
+        // pactl looks for a sound server on the X11 display when DISPLAY is set, which started the
+        // whole X server for nothing. None of these tools needs X11.
+        .env_remove("DISPLAY")
         .output()
         .map_err(|err| err.to_string())?;
     let text = String::from_utf8_lossy(&out.stdout).trim().to_string();

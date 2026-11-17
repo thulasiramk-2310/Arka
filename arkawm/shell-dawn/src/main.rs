@@ -20,6 +20,8 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 mod config;
 mod devices;
+mod dock;
+mod glass;
 mod network;
 mod panels;
 
@@ -44,6 +46,9 @@ fn plain_icon(icon: &str) -> String {
 /// The layout is drawn for a 16:10 screen. On another shape it is scaled to fit and centred,
 /// and the wallpaper still fills the whole screen.
 const DESIGN_HEIGHT: f64 = 960.0;
+/// Design x positions left of this belong to the left edge, right of `RIGHT_SIDE` to the right.
+const LEFT_SIDE: f64 = 300.0;
+const RIGHT_SIDE: f64 = 1100.0;
 
 /// Multiply every `px` length in the stylesheet by `k`, so the design scales with the screen.
 fn scale_css(css: &str, k: f64) -> String {
@@ -78,7 +83,7 @@ fn scale_css(css: &str, k: f64) -> String {
 fn put_away(widget: &gtk::Widget) -> bool {
     let mut at = Some(widget.clone());
     while let Some(part) = at {
-        if ["shut", "folded", "gone"].iter().any(|class| part.has_css_class(class)) {
+        if ["shut", "folded", "gone", "cleared"].iter().any(|class| part.has_css_class(class)) {
             return true;
         }
         at = part.parent();
@@ -190,6 +195,37 @@ fn ring_line(app: &gtk::gio::DesktopAppInfo) -> Option<String> {
     };
     let path = file.to_string_lossy().replace('\'', "'\\''");
     Some(format!("{name} | {icon} | gio launch '{path}'"))
+}
+
+/// Where the cards on the right sit, in design pixels: gap to the right edge, gap to the top, width.
+const CARDS: (f64, f64, f64) = (22.0, 77.0, 300.0);
+const CARDS_NARROWEST: f64 = 260.0;
+const CARDS_WIDEST: f64 = 560.0;
+
+/// The cards' place as the user left it, from ~/.config/arkawm/cards.
+fn load_cards() -> Option<(f64, f64, f64)> {
+    let text = std::fs::read_to_string(panels::settings_dir()?.join("cards")).ok()?;
+    let mut values = std::collections::HashMap::new();
+    config::parse(&text, &mut values);
+    let number = |key: &str| values.get(key).and_then(|v| v.trim().parse::<f64>().ok()).filter(|v| v.is_finite() && *v >= 0.0);
+    Some((number("cards.right")?, number("cards.top")?, number("cards.width")?.clamp(CARDS_NARROWEST, CARDS_WIDEST)))
+}
+
+/// Remember the cards' place (`None` forgets it, so they go back to where they started).
+fn save_cards(layout: Option<(f64, f64, f64)>) {
+    let Some(dir) = panels::settings_dir() else { return };
+    let file = dir.join("cards");
+    let result = match layout {
+        Some((right, top, wide)) => std::fs::create_dir_all(&dir).and_then(|_| {
+            std::fs::write(&file, format!(
+                "# Where the cards on the right sit, in design pixels. Delete this file to put them back.\n[cards]\nright = {right:.0}\ntop = {top:.0}\nwidth = {wide:.0}\n"
+            ))
+        }),
+        None => std::fs::remove_file(&file).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }),
+    };
+    if let Err(err) = result {
+        eprintln!("arka-desk: could not save where the cards are: {err}");
+    }
 }
 
 /// Save what this place on the ring holds (`None` puts back the original) and start again with it.
@@ -447,6 +483,10 @@ struct Ctx {
     /// Softened copies of the wallpaper, one per blur level, small; stretched when painted.
     /// Only these are blurred. The wallpaper itself is shown as it is.
     soft: RefCell<Vec<(f64, gtk::cairo::ImageSurface)>>,
+    /// The same copies as textures, for the glass layer (drawn by the GPU).
+    soft_textures: RefCell<Vec<(f64, gtk::gdk::Texture)>>,
+    /// Windows are up over the desktop: the living wallpaper holds still, unseen.
+    covered: Cell<bool>,
 }
 
 impl Ctx {
@@ -455,6 +495,16 @@ impl Ctx {
     }
     fn soft(&self, level: f64) -> Option<gtk::cairo::ImageSurface> {
         self.soft.borrow().iter().find(|(l, _)| *l == level).map(|(_, surface)| surface.clone())
+    }
+    fn soft_texture(&self, level: f64) -> Option<gtk::gdk::Texture> {
+        self.soft_textures.borrow().iter().find(|(l, _)| *l == level).map(|(_, texture)| texture.clone())
+    }
+    /// Where a design x lands on the screen. When the screen is wider than 16:10 the layout is
+    /// not just centred: what sits on the left keeps to the left edge and what sits on the right
+    /// keeps to the right edge, so nothing floats in from the sides (reported on a 16:9 laptop).
+    fn screen_x(&self, x: f64) -> f64 {
+        let shift = if x < LEFT_SIDE { 0.0 } else if x > RIGHT_SIDE { 2.0 * self.ox } else { self.ox };
+        x * self.k + shift
     }
     fn px(&self, v: f64) -> i32 {
         (v * self.k).round() as i32
@@ -495,7 +545,7 @@ impl Ctx {
     fn put(&self, overlay: &gtk::Overlay, widget: &impl IsA<gtk::Widget>, x: f64, y: f64) {
         widget.set_halign(Align::Start);
         widget.set_valign(Align::Start);
-        widget.set_margin_start(self.px(x) + self.ox.round() as i32);
+        widget.set_margin_start(self.screen_x(x).round() as i32);
         widget.set_margin_top(self.px(y) + self.oy.round() as i32);
         overlay.add_overlay(widget);
     }
@@ -766,8 +816,23 @@ fn graded(path: &Path, width: i32, cfg: &Config, k: f64) -> Option<gtk::gdk_pixb
     Some(pixbuf)
 }
 
-/// A small, soft copy of a wallpaper for painting behind glass. `blur` is in screen pixels.
-fn softened(pixbuf: &gtk::gdk_pixbuf::Pixbuf, blur: f64) -> Option<gtk::cairo::ImageSurface> {
+/// A small, soft copy of a wallpaper for painting behind glass, for cairo and as a texture.
+/// `blur` is in screen pixels.
+/// Running on battery: a battery is there and no charger is plugged in.
+fn on_battery() -> bool {
+    let mut battery = false;
+    for entry in std::fs::read_dir("/sys/class/power_supply").into_iter().flatten().flatten() {
+        let read = |name: &str| std::fs::read_to_string(entry.path().join(name)).unwrap_or_default();
+        match read("type").trim() {
+            "Mains" | "USB" if read("online").trim() == "1" => return false,
+            "Battery" => battery = true,
+            _ => {}
+        }
+    }
+    battery
+}
+
+fn softened(pixbuf: &gtk::gdk_pixbuf::Pixbuf, blur: f64) -> Option<(gtk::cairo::ImageSurface, gtk::gdk::Texture)> {
     use gtk::gdk::prelude::GdkCairoContextExt;
     // shrinking by about the blur radius and stretching back spreads each point that far
     let factor = blur.max(1.0);
@@ -778,7 +843,9 @@ fn softened(pixbuf: &gtk::gdk_pixbuf::Pixbuf, blur: f64) -> Option<gtk::cairo::I
     cr.set_source_pixbuf(&small, 0.0, 0.0);
     cr.paint().ok()?;
     drop(cr);
-    Some(surface)
+    #[allow(deprecated)]
+    let texture = gtk::gdk::Texture::for_pixbuf(&small);
+    Some((surface, texture))
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -835,6 +902,7 @@ fn layer_window(app: &gtk::Application, class: &str, layer: Layer) -> gtk::Appli
 
 fn build(app: &gtk::Application) {
     let cfg = Config::load();
+    dock::follow(cfg.get("dock.command"));
     let ring_rgb = {
         // the ring is the accent, lifted towards white so it reads as light
         let (r, g, b) = cfg.color("accent");
@@ -852,7 +920,7 @@ fn build(app: &gtk::Application) {
     // the scale that fits the whole layout on this screen, whatever its shape
     let k = (width as f64 / DESIGN_WIDTH).min(height as f64 / DESIGN_HEIGHT);
     let (ox, oy) = ((width as f64 - DESIGN_WIDTH * k) / 2.0, (height as f64 - DESIGN_HEIGHT * k) / 2.0);
-    let ctx = Rc::new(Ctx { k, ox, oy, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(Vec::new()), verified: RefCell::new(Vec::new()) });
+    let ctx = Rc::new(Ctx { k, ox, oy, cfg, frost: RefCell::new(Vec::new()), soft: RefCell::new(Vec::new()), soft_textures: RefCell::new(Vec::new()), verified: RefCell::new(Vec::new()), covered: Cell::new(false) });
     let (k, cfg) = (ctx.k, &ctx.cfg);
 
     let provider = gtk::CssProvider::new();
@@ -901,46 +969,35 @@ fn build(app: &gtk::Application) {
     // The glass: one layer above the wallpaper paints its softened copy where each glass
     // surface sits. (Only on the desktop; sheets and the strip sit over windows, and blurring
     // those needs the compositor.)
-    let frost = gtk::DrawingArea::new();
-    frost.set_can_target(false);
-    frost.add_css_class("frost");
+    let veil = cfg.number("look.frost", 0.10).clamp(0.0, 0.6) as f32;
     // Frosted glass is a little lighter than what is behind it: a pale veil over the softened
     // picture, only inside the glass (look.frost; 0 leaves the softened picture as it is).
-    let veil = cfg.number("look.frost", 0.10).clamp(0.0, 0.6);
-    frost.set_draw_func({
+    let frost = glass::Glass::new(Box::new({
         let ctx = ctx.clone();
-        move |area, cr, w, h| {
+        move |area, snapshot| {
+            let (w, h) = (area.width() as f32, area.height() as f32);
             for (widget, radius, level) in ctx.frost.borrow().iter() {
                 if !widget.is_mapped() || put_away(widget) {
                     continue;
                 }
-                let Some(surface) = ctx.soft(*level) else { continue };
-                let surface = &surface;
-                let scale = (w as f64 / surface.width() as f64).max(h as f64 / surface.height() as f64);
-                let (ox, oy) = ((w as f64 - surface.width() as f64 * scale) / 2.0, (h as f64 - surface.height() as f64 * scale) / 2.0);
-                let Some(b) = widget.compute_bounds(area) else { continue };
-                let (x, y, bw, bh) = (b.x() as f64, b.y() as f64, b.width() as f64, b.height() as f64);
-                let r = if *radius < 0.0 { bw.min(bh) / 2.0 } else { (radius * ctx.k).min(bw.min(bh) / 2.0) };
-                use std::f64::consts::{FRAC_PI_2, PI};
-                cr.new_sub_path();
-                cr.arc(x + bw - r, y + r, r, -FRAC_PI_2, 0.0);
-                cr.arc(x + bw - r, y + bh - r, r, 0.0, FRAC_PI_2);
-                cr.arc(x + r, y + bh - r, r, FRAC_PI_2, PI);
-                cr.arc(x + r, y + r, r, PI, PI + FRAC_PI_2);
-                cr.close_path();
-                let _ = cr.save();
-                cr.clip();
-                cr.translate(ox, oy);
-                cr.scale(scale, scale);
-                let _ = cr.set_source_surface(surface, 0.0, 0.0);
-                let _ = cr.paint();
-                cr.identity_matrix();
-                cr.set_source_rgba(0.86, 0.90, 0.97, veil);
-                let _ = cr.paint();
-                let _ = cr.restore();
+                let Some(texture) = ctx.soft_texture(*level) else { continue };
+                let Some(bounds) = widget.compute_bounds(area) else { continue };
+                // the softened picture covers the screen as the wallpaper does; only the part
+                // inside this surface's rounded outline is drawn
+                let scale = (w / texture.width() as f32).max(h / texture.height() as f32);
+                let (tw, th) = (texture.width() as f32 * scale, texture.height() as f32 * scale);
+                let cover = gtk::graphene::Rect::new((w - tw) / 2.0, (h - th) / 2.0, tw, th);
+                let short = bounds.width().min(bounds.height());
+                let r = if *radius < 0.0 { short / 2.0 } else { (*radius as f32 * ctx.k as f32).min(short / 2.0) };
+                snapshot.push_rounded_clip(&gtk::gsk::RoundedRect::from_rect(bounds, r));
+                snapshot.append_scaled_texture(&texture, gtk::gsk::ScalingFilter::Linear, &cover);
+                snapshot.append_color(&gtk::gdk::RGBA::new(0.86, 0.90, 0.97, veil), &bounds);
+                snapshot.pop();
             }
         }
-    });
+    }));
+    frost.set_can_target(false);
+    frost.add_css_class("frost");
     let glass_blur = cfg.number("look.blur", 8.0).clamp(0.0, 80.0) * k;
     let picture = {
         let (ctx, frost) = (ctx.clone(), frost.clone());
@@ -948,8 +1005,12 @@ fn build(app: &gtk::Application) {
             let picture = match graded(path, width, &ctx.cfg, ctx.k) {
                 Some(pixbuf) => {
                     if glass_blur > 0.0 {
-                        *ctx.soft.borrow_mut() =
-                            GLASS_LEVELS.iter().filter_map(|level| Some((*level, softened(&pixbuf, glass_blur * level)?))).collect();
+                        let copies: Vec<(f64, gtk::cairo::ImageSurface, gtk::gdk::Texture)> = GLASS_LEVELS
+                            .iter()
+                            .filter_map(|level| softened(&pixbuf, glass_blur * level).map(|(surface, texture)| (*level, surface, texture)))
+                            .collect();
+                        *ctx.soft.borrow_mut() = copies.iter().map(|(level, surface, _)| (*level, surface.clone())).collect();
+                        *ctx.soft_textures.borrow_mut() = copies.into_iter().map(|(level, _, texture)| (level, texture)).collect();
                         frost.queue_draw();
                     }
                     gtk::Picture::for_paintable(&gtk::gdk::Texture::for_pixbuf(&pixbuf))
@@ -975,15 +1036,20 @@ fn build(app: &gtk::Application) {
     if frames.len() > 1 && living {
         let stack = gtk::Stack::new();
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
-        stack.set_transition_duration(if motion { cfg.number("wallpaper.fade", 6000.0).clamp(0.0, 60000.0) as u32 } else { 0 });
+        stack.set_transition_duration(if motion { cfg.number("wallpaper.fade", 4000.0).clamp(0.0, 60000.0) as u32 } else { 0 });
         let mut pictures: Vec<Option<gtk::Picture>> = frames.iter().map(|_| None).collect();
         let first = picture(&frames[0]);
         stack.add_child(&first);
         pictures[0] = Some(first);
         overlay.set_child(Some(&stack));
         let (mut at, mut forward) = (0usize, true);
-        let (stack, picture) = (stack.clone(), picture.clone());
-        glib::timeout_add_seconds_local(cfg.number("wallpaper.every", 30.0).clamp(5.0, 86400.0) as u32, move || {
+        let (stack, picture, ctx) = (stack.clone(), picture.clone(), ctx.clone());
+        glib::timeout_add_seconds_local(cfg.number("wallpaper.every", 60.0).clamp(5.0, 86400.0) as u32, move || {
+            // A fade redraws the whole screen for seconds and each picture is decoded again: not
+            // while windows are open, and not on battery.
+            if ctx.covered.get() || on_battery() {
+                return glib::ControlFlow::Continue;
+            }
             let before = at;
             (at, forward) = next_frame(at, forward, frames.len());
             // keep only the picture fading out; the others would hold a full screen each
@@ -1228,7 +1294,8 @@ fn build(app: &gtk::Application) {
             tip.add_css_class("tip");
             let words = gtk::Label::new(Some(
                 "Click a circle to open its app, or right-click it to put another app there.\n\
-                 Click the logo in the middle to fold the ring away. The round button on the left opens the menu.",
+                 Click the logo in the middle to fold the ring away. The round button on the left opens the menu.\n\
+                 Double-click the wallpaper to put the apps and cards away, and again to bring them back.",
             ));
             words.set_xalign(0.0);
             tip.append(&words);
@@ -1285,14 +1352,14 @@ fn build(app: &gtk::Application) {
                 return;
             }
             // draw in screen coordinates; the box only limits what is painted
-            cr.translate(-(BODY_BOX.0 * k + ctx.ox).round(), -(BODY_BOX.1 * k + ctx.oy).round());
+            cr.translate(-ctx.screen_x(BODY_BOX.0).round(), -(BODY_BOX.1 * k + ctx.oy).round());
             let (w, h) = (width, height);
             // ease out with a slight overshoot, so the panel settles rather than stops
             let t = p - 1.0;
             let grow = 1.0 + 2.2 * t.powi(3) + 1.2 * t.powi(2);
             cr.push_group();
             // design pixels: the lobe (centre, radius), the body's box and corners, the fillet
-            let (dx, dy) = (ctx.ox, ctx.oy);
+            let (dx, dy) = (ctx.screen_x(0.0), ctx.oy);
             let (cx, cy, r) = (116.0 * k + dx, 551.0 * k + dy, 62.0 * k);
             let (x0, y0, x1, y1) = (152.0 * k + dx, 422.0 * k + dy, 420.0 * k + dx, 704.0 * k + dy);
             let (tl, tr, br, bl) = (40.0 * k, 60.0 * k, 66.0 * k, 60.0 * k);
@@ -1469,11 +1536,12 @@ fn build(app: &gtk::Application) {
     let open_sheet: Rc<RefCell<Option<Rc<panels::Shell>>>> = Rc::new(RefCell::new(None));
     for (pill, sheet) in main_pills.iter().zip(["search", "", "quick"]) {
         let (set_menu, open_sheet, recent) = (set_menu.clone(), open_sheet.clone(), cfg.commands("recent"));
-        pill.connect_clicked(move |_| {
-            set_menu(false);
-            match open_sheet.borrow().as_ref() {
-                Some(shell) if !sheet.is_empty() => shell.show_beside_menu(sheet),
-                _ => run(&recent),
+        pill.connect_clicked(move |_| match open_sheet.borrow().as_ref() {
+            // the panel opens beside the menu, so the menu stays open next to it
+            Some(shell) if !sheet.is_empty() => shell.show_beside_menu(sheet),
+            _ => {
+                set_menu(false);
+                run(&recent);
             }
         });
     }
@@ -1778,7 +1846,108 @@ fn build(app: &gtk::Application) {
     updates_card.append(&signature_row);
     aside.append(&updates_card);
     if cfg.on("show.cards") {
-        ctx.put(&overlay, &aside, 1214.0, 77.0);
+        // The cards keep to the right edge of the screen. They move when dragged anywhere but on a
+        // button, and get wider or narrower when dragged by their left edge; where they sit is remembered (see
+        // `load_cards`). A double-click on a title puts them back.
+        let layout = Rc::new(Cell::new(load_cards().unwrap_or(CARDS)));
+        let apply = {
+            let (aside, ctx) = (aside.clone(), ctx.clone());
+            Rc::new(move |(right, top, wide): (f64, f64, f64)| {
+                aside.set_size_request(ctx.px(wide), -1);
+                aside.set_margin_end(ctx.px(right));
+                aside.set_margin_top(ctx.px(top) + ctx.oy.round() as i32);
+            })
+        };
+        aside.set_halign(Align::End);
+        aside.set_valign(Align::Start);
+        aside.set_cursor_from_name(Some("grab"));
+        apply(layout.get());
+        overlay.add_overlay(&aside);
+        let heads: Rc<Vec<gtk::Widget>> = Rc::new(vec![privacy_head.clone().upcast(), health_head.clone().upcast(), updates_head.clone().upcast()]);
+        for head in heads.iter() {
+            head.set_tooltip_text(Some("Drag to move the cards, or drag their left edge to resize them. Double-click a title to put them back."));
+            let again = gtk::GestureClick::new();
+            again.connect_pressed({
+                let (layout, apply, frost) = (layout.clone(), apply.clone(), frost.clone());
+                move |_, presses, _, _| {
+                    if presses == 2 {
+                        layout.set(CARDS);
+                        apply(CARDS);
+                        save_cards(None);
+                        frost.queue_draw();
+                    }
+                }
+            });
+            head.add_controller(again);
+        }
+        // How close to the cards' left edge, in screen pixels, a press resizes them.
+        let grip = ctx.px(8.0) as f32;
+        let near_edge = {
+            let (aside, overlay) = (aside.clone(), overlay.clone());
+            move |x: f64, y: f64| {
+                aside.is_visible()
+                    && aside.compute_bounds(&overlay).is_some_and(|b| {
+                        b.width() > 0.0 && (x as f32 - b.x()).abs() <= grip && y as f32 >= b.y() && y as f32 <= b.y() + b.height()
+                    })
+            }
+        };
+        // 0: no drag, 1: moving, 2: resizing
+        let mode = Rc::new(Cell::new(0u8));
+        let from = Rc::new(Cell::new(CARDS));
+        let drag = gtk::GestureDrag::new();
+        drag.connect_drag_begin({
+            let (overlay, aside, mode, from, layout, near_edge) = (overlay.clone(), aside.clone(), mode.clone(), from.clone(), layout.clone(), near_edge.clone());
+            move |gesture, x, y| {
+                // on a card, but not on one of its buttons (close, open updates)
+                let on_card = overlay.pick(x, y, gtk::PickFlags::DEFAULT).is_some_and(|picked| {
+                    (picked == *aside.upcast_ref::<gtk::Widget>() || picked.is_ancestor(&aside))
+                        && picked.ancestor(gtk::Button::static_type()).is_none_or(|button| !button.is_ancestor(&aside))
+                });
+                mode.set(if near_edge(x, y) { 2 } else if on_card { 1 } else { 0 });
+                if mode.get() == 0 {
+                    gesture.set_state(gtk::EventSequenceState::Denied);
+                    return;
+                }
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+                from.set(layout.get());
+            }
+        });
+        drag.connect_drag_update({
+            let (mode, from, layout, apply, frost) = (mode.clone(), from.clone(), layout.clone(), apply.clone(), frost.clone());
+            let (screen_w, screen_h) = (width as f64 / k, height as f64 / k);
+            move |_, dx, dy| {
+                let (right, top, wide) = from.get();
+                let (dx, dy) = (dx / k, dy / k);
+                let next = match mode.get() {
+                    1 => ((right - dx).clamp(0.0, (screen_w - wide).max(0.0)), (top + dy).clamp(0.0, (screen_h - 120.0).max(0.0)), wide),
+                    2 => (right, top, (wide - dx).clamp(CARDS_NARROWEST, CARDS_WIDEST).min(screen_w - right)),
+                    _ => return,
+                };
+                layout.set(next);
+                apply(next);
+                frost.queue_draw();
+            }
+        });
+        drag.connect_drag_end({
+            let (mode, layout) = (mode.clone(), layout.clone());
+            move |_, _, _| {
+                if mode.replace(0) != 0 {
+                    save_cards(Some(layout.get()));
+                }
+            }
+        });
+        overlay.add_controller(drag);
+        // the pointer shows when the edge can be dragged
+        let hover = gtk::EventControllerMotion::new();
+        hover.connect_motion({
+            let (overlay, aside) = (overlay.clone(), aside.clone());
+            move |_, x, y| {
+                let edge = near_edge(x, y);
+                overlay.set_cursor_from_name(if edge { Some("ew-resize") } else { None });
+                aside.set_cursor_from_name(Some(if edge { "ew-resize" } else { "grab" }));
+            }
+        });
+        overlay.add_controller(hover);
     }
 
     if let Some(text) = text("quote_right").filter(|_| quotes) {
@@ -1841,7 +2010,7 @@ fn build(app: &gtk::Application) {
         }
     });
     mark.connect_clicked({
-        let (swap, set_menu, frost, ring) = (swap.clone(), set_menu.clone(), frost.clone(), ring.clone());
+        let (swap, set_menu, refrost, ring) = (swap.clone(), set_menu.clone(), refrost.clone(), ring.clone());
         let folded = Cell::new(false);
         let wind = wind.clone();
         move |mark| {
@@ -1868,15 +2037,8 @@ fn build(app: &gtk::Application) {
             let tip = if fold { "Show the apps" } else { "Hide the apps" };
             mark.set_tooltip_text(Some(tip));
             mark.update_property(&[gtk::accessible::Property::Label(tip)]);
-            // The glass is one picture the size of the screen: repaint it once, not while things
-            // move. Folding: at once, so no glass is left where the apps were. Unfolding: when the
-            // apps have landed (style.css: last delay 345 ms + 420 ms).
-            if fold {
-                frost.queue_draw();
-            } else {
-                let frost = frost.clone();
-                glib::timeout_add_local_once(std::time::Duration::from_millis(780), move || frost.queue_draw());
-            }
+            // The glass moves with the apps every frame until they have landed (the GPU draws it).
+            refrost();
         }
     });
     if cfg.on("show.tasks") {
@@ -2050,8 +2212,9 @@ fn build(app: &gtk::Application) {
     line.add_controller(line_hover);
     let window_count = Cell::new(0usize);
     shell.watch_windows({
-        let (tuck, windows_up, tuck_later, pointer_in) = (tuck.clone(), windows_up.clone(), tuck_later.clone(), pointer_in.clone());
+        let (tuck, windows_up, tuck_later, pointer_in, ctx) = (tuck.clone(), windows_up.clone(), tuck_later.clone(), pointer_in.clone(), ctx.clone());
         move |count, up| {
+            ctx.covered.set(up);
             // a new window: the app that was clicked has started
             if count > window_count.get() {
                 started();
@@ -2065,6 +2228,37 @@ fn build(app: &gtk::Application) {
             }
         }
     });
+    // Double-click the bare wallpaper: the apps and the cards step aside so the whole picture
+    // shows (on a small laptop screen they cover much of it). Again brings them back.
+    {
+        let clear = gtk::GestureClick::new();
+        clear.set_button(1);
+        let (base, mark, aside, ring, refrost) = (overlay.clone(), mark.clone(), aside.clone(), ring.clone(), refrost.clone());
+        let cleared = Cell::new(false);
+        clear.connect_pressed(move |gesture, presses, x, y| {
+            if presses != 2 {
+                return;
+            }
+            let (Some(picked), Some(picture)) = (base.pick(x, y, gtk::PickFlags::DEFAULT), base.child()) else { return };
+            if !(picked == picture || picked.is_ancestor(&picture) || picked == *base.upcast_ref::<gtk::Widget>()) {
+                return;
+            }
+            gesture.set_state(gtk::EventSequenceState::Claimed);
+            let on = !cleared.get();
+            cleared.set(on);
+            if show_ring && on != ring.has_css_class("folded") {
+                mark.emit_clicked();
+            }
+            if on {
+                aside.add_css_class("cleared");
+            } else {
+                aside.remove_css_class("cleared");
+            }
+            aside.set_can_target(!on);
+            refrost();
+        });
+        overlay.add_controller(clear);
+    }
     panels::serve_notifications(&shell);
     shell.start();
 
