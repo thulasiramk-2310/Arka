@@ -10,7 +10,12 @@
 //!
 //! `arka-lock` returns when the screen is unlocked. `arka-lock -f` returns as soon as the screen
 //! is locked (for swayidle's before-sleep), and keeps the lock screen running in the background.
+//!
+//! `arka-lock --greeter` is the sign-in screen instead: the same card, started by greetd before
+//! anyone has signed in (see greet.rs).
 
+mod greet;
+mod greetd;
 mod pam;
 
 use gtk::prelude::*;
@@ -26,6 +31,9 @@ use std::rc::Rc;
 const CHILD: &str = "ARKA_LOCK_REPORT";
 
 fn main() -> glib::ExitCode {
+    if std::env::args().skip(1).any(|a| a == "--greeter") {
+        return greet::main();
+    }
     let daemonize = std::env::args().skip(1).any(|a| a == "-f" || a == "--daemonize");
     if daemonize && std::env::var_os(CHILD).is_none() {
         return wait_for_lock();
@@ -263,6 +271,12 @@ fn now(format: &str) -> String {
 struct Form {
     /// The window the form is on: marked "leaving" for the short exit before unlocking.
     window: gtk::Window,
+    /// The round badge and the name under it (the sign-in screen changes them for another user).
+    avatar: gtk::Label,
+    name: gtk::Label,
+    /// The card's contents, bottom left battery: the sign-in screen adds and moves things here.
+    body: gtk::Box,
+    battery: gtk::Box,
     /// Paints the softened wallpaper behind the card.
     frost: gtk::DrawingArea,
     entry: gtk::PasswordEntry,
@@ -466,8 +480,23 @@ fn screen(
         column.append(&card);
         column.append(&low_room);
 
-        let form = Rc::new(Form { window: window.clone(), frost: frost.clone(), entry, go, field, note, layout, busy: Cell::new(false), armed: RefCell::default() });
-        overlay.add_overlay(&battery(look));
+        let battery = battery(look);
+        let form = Rc::new(Form {
+            window: window.clone(),
+            avatar,
+            name,
+            body,
+            battery: battery.clone(),
+            frost: frost.clone(),
+            entry,
+            go,
+            field,
+            note,
+            layout,
+            busy: Cell::new(false),
+            armed: RefCell::default(),
+        });
+        overlay.add_overlay(&battery);
         overlay.add_overlay(&power_row(look, &form));
         built = Some(form);
     }
@@ -566,7 +595,13 @@ fn wire(lock: &Lock, form: &Rc<Form>, person: &Rc<Person>) {
             });
         }
     };
-    let submit = Rc::new(submit);
+    wire_form(form, Rc::new(submit));
+}
+
+/// What the password box does apart from checking the password: Enter and the arrow button run
+/// `submit`, Esc clears, Caps Lock and the keyboard layout are shown, shortcuts typed out of habit
+/// are swallowed. Shared by the lock screen and the sign-in screen.
+fn wire_form(form: &Rc<Form>, submit: Rc<dyn Fn()>) {
     {
         let submit = submit.clone();
         form.entry.connect_activate(move |_| submit());
