@@ -21,3 +21,4 @@ features = ["backend_winit", "backend_drm", "backend_gbm", "backend_egl", "backe
 [dev-dependencies]
 smithay-client-toolkit = { version = "0.19.2", default-features = false, features = ["calloop"] }
 wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }

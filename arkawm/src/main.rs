@@ -15,6 +15,7 @@ mod state;
 mod titlebar;
 #[cfg(debug_assertions)]
 mod testkeys;
+mod toplevels;
 mod trust;
 mod udev;
 mod winit;
@@ -54,8 +55,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The link to the desktop shell (window list, show desktop, screenshots).
     ipc::start(&event_loop.handle(), &state.socket_name);
 
-    // X11 apps: started before any `-c` program so they inherit DISPLAY. Stopped when this is dropped.
-    let _xwayland = xwayland::start(&state.socket_name);
+    // X11 apps: DISPLAY is set before any `-c` program starts, so they inherit it; the X server itself
+    // starts with the first X11 app. Stopped when this is dropped.
+    let _xwayland = xwayland::start(&event_loop.handle(), &state.socket_name);
 
     // Programs to start inside ArkaWM: each `-c <command>` (run through sh).
     let mut args = std::env::args().skip(1);
@@ -84,6 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // After each round of events: on hardware, draw a frame if anything asked for one.
     event_loop.run(None, &mut state, move |state| {
         state.publish_windows();
+        state.sync_toplevels();
         crate::udev::draw_if_wanted(state)
     })?;
 

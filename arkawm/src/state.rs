@@ -58,6 +58,8 @@ pub struct ArkaWm {
     /// Where a dragged window will snap if released now.
     /// The link to the desktop shell.
     pub ipc: crate::ipc::Ipc,
+    /// Docks told about the open windows (Crystal Dock in the Classic theme).
+    pub toplevels: crate::toplevels::Toplevels,
     /// A screenshot to take with the next frame.
     pub capture: Option<crate::capture::Capture>,
     /// Night light: the screen's colours made warmer (asked for by the shell's quick settings).
@@ -161,6 +163,7 @@ impl ArkaWm {
         let idle_notifier_state = IdleNotifierState::new(&dh, event_loop.handle());
         let idle_inhibit_state = IdleInhibitManagerState::new::<Self>(&dh);
         let fractional_scale_state = FractionalScaleManagerState::new::<Self>(&dh);
+        crate::toplevels::create_global(&dh);
         // Typing in other scripts (Tamil, Hindi ...): the input-method program composes the text,
         // text-input hands it to the app, virtual-keyboard lets it send plain keys.
         smithay::wayland::text_input::TextInputManagerState::new::<Self>(&dh);
@@ -207,6 +210,7 @@ impl ArkaWm {
             mode: LayoutMode::Free,
             view_x: 0,
             ipc: Default::default(),
+            toplevels: Default::default(),
             capture: None,
             night: false,
             clip_owner: None,
