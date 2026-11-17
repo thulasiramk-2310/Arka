@@ -221,6 +221,30 @@ pub struct Shell {
     look: gtk::Button,
 }
 
+/// Fade a sheet or the toast out over 150 ms, then take it down. Showing it again in that time
+/// keeps it up (`show` drops the "leaving" mark). Straight away when animations are off.
+pub fn fade_out(window: &impl IsA<gtk::Window>) {
+    let window = window.clone().upcast::<gtk::Window>();
+    if !window.is_visible() || window.has_css_class("leaving") {
+        return;
+    }
+    if !gtk::Settings::default().is_none_or(|s| s.is_gtk_enable_animations()) {
+        window.set_visible(false);
+        return;
+    }
+    window.add_css_class("leaving");
+    glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
+        if window.has_css_class("leaving") {
+            window.set_visible(false);
+        }
+    });
+}
+
+/// Before a sheet or the toast is shown again: forget a fade that was under way.
+fn back_up(window: &impl IsA<gtk::Widget>) {
+    window.remove_css_class("leaving");
+}
+
 fn sheet_window(app: &gtk::Application, ctx: &Ctx, name: &str) -> gtk::ApplicationWindow {
     let window = gtk::ApplicationWindow::new(app);
     window.add_css_class("sheetwin");
@@ -552,6 +576,18 @@ impl Shell {
         search_page.append(&head("Apps"));
         let find = gtk::SearchEntry::new();
         find.set_placeholder_text(Some("Type to find an app"));
+        // The search box keeps Esc for itself: the first Esc clears what was typed, the next one
+        // (or the first, when nothing was typed) closes the sheet like Esc does everywhere else.
+        find.connect_stop_search({
+            let panel = panel.clone();
+            move |find| {
+                if find.text().is_empty() {
+                    fade_out(&panel);
+                } else {
+                    find.set_text("");
+                }
+            }
+        });
         search_page.append(&find);
         let found = gtk::ListBox::new();
         found.set_selection_mode(gtk::SelectionMode::None);
@@ -595,7 +631,7 @@ impl Shell {
                     }
                     Err(err) => eprintln!("arka-desk: {} did not start: {err}", app.display_name()),
                 }
-                panel.set_visible(false);
+                fade_out(&panel);
             });
             found.append(&button);
             // the row carries the app's id, for the order (the button carries the words searched)
@@ -878,7 +914,7 @@ impl Shell {
         let me = shell.clone();
         keys.connect_key_pressed(move |_, key, _, _| {
             if key == gtk::gdk::Key::Escape {
-                me.panel.set_visible(false);
+                fade_out(&me.panel);
                 return glib::Propagation::Stop;
             }
             glib::Propagation::Proceed
@@ -995,7 +1031,7 @@ impl Shell {
     }
 
     pub fn show_desktop(&self) {
-        self.panel.set_visible(false);
+        fade_out(&self.panel);
         if self.windows_up.get() {
             self.send("show-desktop\n");
         }
@@ -1109,7 +1145,7 @@ impl Shell {
     pub fn toggle(self: &Rc<Self>, name: &str) {
         let showing = self.panel.is_visible() && self.stack.visible_child_name().as_deref() == Some(name);
         if showing || self.stack.child_by_name(name).is_none() {
-            self.panel.set_visible(false);
+            fade_out(&self.panel);
             return;
         }
         self.show(name);
@@ -1119,6 +1155,7 @@ impl Shell {
     pub fn show(self: &Rc<Self>, name: &str) {
         self.place(false);
         self.toast.set_visible(false);
+        back_up(&self.panel);
         self.panel.present();
         self.go(name);
     }
@@ -1127,6 +1164,7 @@ impl Shell {
     pub fn show_beside_menu(self: &Rc<Self>, name: &str) {
         self.place(true);
         self.toast.set_visible(false);
+        back_up(&self.panel);
         self.panel.present();
         self.go(name);
     }
@@ -1408,6 +1446,7 @@ impl Shell {
         self.toast_body.set_visible(!body.is_empty());
         // fit the new text, smaller or larger than the last
         self.toast.set_default_size(1, 1);
+        back_up(&self.toast);
         self.toast.present();
         let turn = self.toast_turn.get() + 1;
         self.toast_turn.set(turn);
@@ -1415,7 +1454,7 @@ impl Shell {
         glib::timeout_add_local_once(std::time::Duration::from_millis(ms), move || {
             // a newer toast keeps the window up
             if me.toast_turn.get() == turn {
-                me.toast.set_visible(false);
+                fade_out(&me.toast);
             }
         });
     }
@@ -1487,7 +1526,7 @@ impl Shell {
                         let _ = stdin.write_all(text.as_bytes());
                     }
                 }
-                me.panel.set_visible(false);
+                fade_out(&me.panel);
             });
             self.clips.append(&button);
         }

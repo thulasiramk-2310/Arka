@@ -1026,15 +1026,35 @@ fn build(app: &gtk::Application) {
         });
     }
     overlay.add_overlay(&frost);
-    // entrance and menu animations move the glass; paint it again once they have settled
+    // Entrance and menu animations move the glass: paint it every frame until they have settled
+    // (900 ms covers the longest, the ring's apps), so it moves with its cards.
     let refrost = {
         let frost = frost.clone();
+        let until = Rc::new(Cell::new(0i64));
+        let running = Rc::new(Cell::new(false));
         Rc::new(move || {
             frost.queue_draw();
-            for ms in [120, 360, 800] {
-                let frost = frost.clone();
-                glib::timeout_add_local_once(std::time::Duration::from_millis(ms), move || frost.queue_draw());
+            let Some(clock) = frost.frame_clock() else {
+                for ms in [120, 360, 900] {
+                    let frost = frost.clone();
+                    glib::timeout_add_local_once(std::time::Duration::from_millis(ms), move || frost.queue_draw());
+                }
+                return;
+            };
+            until.set(clock.frame_time() + 900_000);
+            if running.replace(true) {
+                return;
             }
+            let (until, running) = (until.clone(), running.clone());
+            frost.add_tick_callback(move |frost, clock| {
+                frost.queue_draw();
+                if clock.frame_time() >= until.get() {
+                    running.set(false);
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
         })
     };
     refrost();
@@ -1323,7 +1343,7 @@ fn build(app: &gtk::Application) {
     });
     ctx.put(&overlay, &body, BODY_BOX.0, BODY_BOX.1);
     // shut, only the round button is left: a clean circle
-    let body_motion: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let body_motion: Rc<RefCell<Option<gtk::TickCallbackId>>> = Rc::new(RefCell::new(None));
     let move_body = {
         let (body, share, running) = (body.clone(), body_share.clone(), body_motion.clone());
         Rc::new(move |open: bool| {
@@ -1337,10 +1357,15 @@ fn build(app: &gtk::Application) {
                 body.queue_draw();
                 return;
             }
-            let since = std::time::Instant::now();
-            let (body2, share2, running2) = (body.clone(), share.clone(), running.clone());
-            let id = glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
-                let t = (since.elapsed().as_secs_f64() * 1000.0 / length).min(1.0);
+            // one step per screen refresh, timed by the frame clock (a 16 ms timer drifts against
+            // the display and stutters)
+            let started: Cell<Option<i64>> = Cell::new(None);
+            let (share2, running2) = (share.clone(), running.clone());
+            let id = body.add_tick_callback(move |body2, clock| {
+                let now = clock.frame_time();
+                let begin = *started.get().get_or_insert(now);
+                started.set(Some(begin));
+                let t = ((now - begin) as f64 / 1000.0 / length).min(1.0);
                 share2.set(from + (to - from) * t);
                 body2.queue_draw();
                 if t >= 1.0 {
@@ -1911,30 +1936,57 @@ fn build(app: &gtk::Application) {
     strip.set_child(Some(&bar));
     strip.present();
 
-    // Tucked away, the strip keeps a thin line at the top edge: the pointer touching it brings
-    // the strip down; leaving it (with nothing of the strip's open) sends it back up.
-    let strip_height = ctx.px(60.0);
+    // Tucked away, the strip is taken down and a thin line stays along the middle third of the top
+    // edge. The pointer resting on that line for a moment brings the strip back; leaving the strip
+    // (with nothing of it open) sends it up again. The corners hold nothing: that is where a
+    // window's tabs and close button are, and the strip must not drop over them on the way there.
+    let line = layer_window(app, "edgeline", Layer::Top);
+    line.set_anchor(Edge::Left, false);
+    line.set_anchor(Edge::Right, false);
+    line.set_exclusive_zone(0);
+    line.set_default_size(width / 3, 3);
+    // an empty window shrinks to nothing; this keeps the line 3 pixels high
+    let line_body = gtk::Box::new(Orientation::Horizontal, 0);
+    line_body.set_size_request(width / 3, 3);
+    line.set_child(Some(&line_body));
     let tucked = Rc::new(Cell::new(false));
     let pointer_in = Rc::new(Cell::new(false));
     let windows_up = Rc::new(Cell::new(false));
     let tuck = {
-        let (strip, bar, tucked) = (strip.clone(), bar.clone(), tucked.clone());
+        let (strip, bar, tucked, line) = (strip.clone(), bar.clone(), tucked.clone(), line.clone());
         Rc::new(move |away: bool| {
             if away == tucked.get() {
                 return;
             }
             tucked.set(away);
             if away {
+                // slide up and fade, then take the strip down and leave the line
                 bar.add_css_class("tucked");
-                let (strip, tucked) = (strip.clone(), tucked.clone());
-                glib::timeout_add_local_once(std::time::Duration::from_millis(if motion { 240 } else { 0 }), move || {
+                let (strip, tucked, line) = (strip.clone(), tucked.clone(), line.clone());
+                glib::timeout_add_local_once(std::time::Duration::from_millis(if motion { 260 } else { 0 }), move || {
                     if tucked.get() {
-                        strip.set_margin(Edge::Top, -(strip_height - 3));
+                        strip.set_visible(false);
+                        line.present();
                     }
                 });
             } else {
-                strip.set_margin(Edge::Top, 0);
-                bar.remove_css_class("tucked");
+                line.set_visible(false);
+                if strip.is_visible() || !motion {
+                    strip.present();
+                    bar.remove_css_class("tucked");
+                    return;
+                }
+                // put it back still tucked, and let it slide down once it is on screen
+                strip.present();
+                let (bar, frames) = (bar.clone(), Cell::new(0));
+                strip.add_tick_callback(move |_, _| {
+                    frames.set(frames.get() + 1);
+                    if frames.get() < 2 {
+                        return glib::ControlFlow::Continue;
+                    }
+                    bar.remove_css_class("tucked");
+                    glib::ControlFlow::Break
+                });
             }
         })
     };
@@ -1960,6 +2012,7 @@ fn build(app: &gtk::Application) {
         let (tuck, pointer_in) = (tuck.clone(), pointer_in.clone());
         move |_, _, _| {
             pointer_in.set(true);
+            // back on the strip while it slides away: it comes straight back
             tuck(false);
         }
     });
@@ -1971,6 +2024,30 @@ fn build(app: &gtk::Application) {
         }
     });
     strip.add_controller(hover);
+    // the line: only a pointer that stays on it for 0.6 s brings the strip down
+    let on_line = Rc::new(Cell::new(false));
+    let line_hover = gtk::EventControllerMotion::new();
+    line_hover.connect_enter({
+        let (tuck, tuck_later, on_line) = (tuck.clone(), tuck_later.clone(), on_line.clone());
+        let turn = Rc::new(Cell::new(0u32));
+        move |_, _, _| {
+            on_line.set(true);
+            turn.set(turn.get() + 1);
+            let (tuck, tuck_later, on_line, turn, mine) = (tuck.clone(), tuck_later.clone(), on_line.clone(), turn.clone(), turn.get());
+            glib::timeout_add_local_once(std::time::Duration::from_millis(600), move || {
+                if on_line.get() && turn.get() == mine {
+                    tuck(false);
+                    // if the pointer has moved off by the time the strip is down, it goes up again
+                    tuck_later();
+                }
+            });
+        }
+    });
+    line_hover.connect_leave({
+        let on_line = on_line.clone();
+        move |_| on_line.set(false)
+    });
+    line.add_controller(line_hover);
     let window_count = Cell::new(0usize);
     shell.watch_windows({
         let (tuck, windows_up, tuck_later, pointer_in) = (tuck.clone(), windows_up.clone(), tuck_later.clone(), pointer_in.clone());

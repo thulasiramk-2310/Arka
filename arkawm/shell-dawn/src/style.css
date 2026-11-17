@@ -80,6 +80,9 @@ tooltip label { font-size: 12px; color: @text; }
 window.sheetwin { background: transparent; }
 @keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0px); } }
 .sheet { border-radius: 16px; padding: 16px; background: linear-gradient(160deg, mix(@panel_raised,@text,0.12), mix(@panel,@text,0.05)); border: 1px solid alpha(@border,0.5); box-shadow: 0 18px 40px alpha(@background,0.5), inset 0 1px 0 alpha(@text,0.08); animation: drop 240ms cubic-bezier(0.16,1,0.3,1); }
+/* closing: a quicker lift and fade, eased in, so it leaves rather than blinks out (panels.rs fade_out) */
+@keyframes lift { from { opacity: 1; transform: translateY(0px); } to { opacity: 0; transform: translateY(-6px); } }
+window.sheetwin.leaving .sheet { animation: lift 140ms cubic-bezier(0.4,0,1,1) forwards; }
 .sheet .title { font-size: 15px; font-weight: 600; }
 .sheet .row { font-size: 13px; }
 .sheet .dim { font-size: 12px; color: mix(@text_dim,@text,0.25); }
@@ -164,6 +167,8 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 /* The strip slides up out of the way while a window is up, and back down at the top edge. */
 .bar { transition: transform 260ms cubic-bezier(0.16,1,0.3,1), opacity 220ms cubic-bezier(0.16,1,0.3,1); }
 .bar.tucked { transform: translateY(-64px); opacity: 0; transition-timing-function: cubic-bezier(0.5,0,0.75,0); }
+/* the line that brings the tucked strip back: not quite clear, since a fully clear window gets no pointer */
+window.edgeline { background: alpha(black, 0.004); }
 .brandbutton { border-radius: 14px; padding: 2px 10px 2px 2px; transition: background-color 200ms; }
 .brandbutton:hover { background: alpha(@text,0.08); }
 .brandbutton:focus-visible { box-shadow: 0 0 0 2px @text; }
