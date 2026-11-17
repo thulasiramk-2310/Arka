@@ -153,7 +153,7 @@ fn page_general() -> gtk4::Widget {
 
     let al_row = adw::ActionRow::new();
     al_row.set_title("Login screen and automatic sign-in");
-    al_row.set_subtitle("Opens Plasma's login screen settings. Changing them asks for an administrator password.");
+    al_row.set_subtitle("Opens the login screen settings in KDE System Settings. Changing them asks for an administrator password.");
     al_row.set_activatable(true);
     al_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_sddm").spawn(); });
     group.add(&al_row);
@@ -162,6 +162,8 @@ fn page_general() -> gtk4::Widget {
     lock_row.set_subtitle("Opens Plasma's screen locking settings");
     lock_row.set_activatable(true);
     lock_row.connect_activated(|_| { let _ = Command::new("systemsettings").arg("kcm_screenlocker").spawn(); });
+    // ArkaWM locks with its own locker, not Plasma's.
+    lock_row.set_visible(on_plasma());
     group.add(&lock_row);
 
     let about_group = adw::PreferencesGroup::new();
@@ -482,6 +484,18 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
     dock_row.add_suffix(&dock_box);
     dock_group.add(&dock_row);
 
+    // Wallpaper, night light and the dock are set through Plasma, KWin and Crystal Dock. On
+    // another desktop (ArkaWM) those rows would change nothing, so they are left out.
+    let plasma = on_plasma();
+    for only_plasma in [&night_group, &dock_group, &group] {
+        only_plasma.set_visible(plasma);
+    }
+    if !plasma {
+        let elsewhere = adw::PreferencesGroup::new();
+        elsewhere.set_title("Wallpaper");
+        elsewhere.set_description(Some("This desktop draws its own wallpaper. Pick it, and the desktop theme, in quick settings: the sliders button in the top bar."));
+        b.append(&elsewhere);
+    }
     b.append(&theme_group);
     b.append(&motion_group);
     b.append(&night_group);
@@ -492,6 +506,11 @@ fn page_appearance(window: &adw::ApplicationWindow) -> gtk4::Widget {
 
 const NIGHT_SUBTITLE: &str =
     "From 8 pm to 6 am the screen turns warmer and easier on the eyes. Uses no location.";
+
+/// Plasma is the running desktop. Rows that drive KWin, Plasma or Crystal Dock only work there.
+fn on_plasma() -> bool {
+    std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktop| desktop.split(':').any(|name| name == "KDE"))
+}
 
 fn kread(file: &str, group: &str, key: &str) -> String {
     Command::new("kreadconfig6")
