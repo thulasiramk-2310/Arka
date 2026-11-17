@@ -28,6 +28,9 @@ COPY shell-dawn/assets /usr/share/arka-desk
 COPY session/arkawm-session session/arkawm-startup session/arka-classic-dock /usr/libexec/arkawm/
 COPY image/arkawm.desktop /usr/share/wayland-sessions/arkawm.desktop
 COPY session/arkawm-portals.conf /usr/share/xdg-desktop-portal/arkawm-portals.conf
+COPY session/arkawm-session.target /usr/lib/systemd/user/arkawm-session.target
+# The session target starts Plasma's password prompt service; fail the build if it is gone.
+RUN test -f /usr/lib/systemd/user/plasma-polkit-agent.service
 # Crystal Dock is the Plasma desktop's dock: in ArkaWM's app list it read as a strange extra app
 # (reported on hardware). The Classic theme starts it itself. Fails the build if it is not found.
 RUN set -e; found=; for f in /usr/share/applications/*rystal*ock*.desktop; do \

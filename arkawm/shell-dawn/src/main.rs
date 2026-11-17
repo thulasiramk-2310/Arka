@@ -24,6 +24,7 @@ mod dock;
 mod glass;
 mod network;
 mod panels;
+mod x11;
 
 use config::Config;
 
@@ -432,7 +433,7 @@ fn try_next(mut ready: VecDeque<String>, button: Option<gtk::Widget>, mut all: V
         Some(style) if program == "fuzzel" && !command.contains("--config") => format!("{command} --config '{style}'"),
         _ => command.clone(),
     };
-    let Ok(child) = Command::new("sh").arg("-c").arg(&line).spawn() else {
+    let Ok(child) = x11::shell(&line).spawn() else {
         return try_next(ready, button, all);
     };
     let since = std::time::Instant::now();
@@ -1604,7 +1605,7 @@ fn build(app: &gtk::Application) {
             if key == "lock" {
                 swap(false);
                 set_menu(false);
-                let _ = Command::new("sh").arg("-c").arg(&command).spawn();
+                let _ = x11::shell(&command).spawn();
                 return;
             }
             let this_one = pending.borrow().as_ref().is_some_and(|(_, label, _)| label.is_ancestor(pill));
@@ -1633,7 +1634,7 @@ fn build(app: &gtk::Application) {
                     label.set_text(&original);
                     swap(false);
                     set_menu(false);
-                    let _ = Command::new("sh").arg("-c").arg(&command).spawn();
+                    let _ = x11::shell(&command).spawn();
                     glib::ControlFlow::Break
                 }
             });
@@ -2249,12 +2250,15 @@ fn build(app: &gtk::Application) {
             if show_ring && on != ring.has_css_class("folded") {
                 mark.emit_clicked();
             }
-            if on {
-                aside.add_css_class("cleared");
-            } else {
-                aside.remove_css_class("cleared");
+            // the logo in the middle steps aside too: the whole picture, nothing on top
+            for part in [aside.upcast_ref::<gtk::Widget>(), mark.upcast_ref()] {
+                if on {
+                    part.add_css_class("cleared");
+                } else {
+                    part.remove_css_class("cleared");
+                }
+                part.set_can_target(!on);
             }
-            aside.set_can_target(!on);
             refrost();
         });
         overlay.add_controller(clear);
@@ -2417,6 +2421,7 @@ fn build(app: &gtk::Application) {
 }
 
 fn main() -> glib::ExitCode {
+    x11::hide();
     if std::env::args().any(|arg| arg == "--print-config") {
         print!("{}", config::DEFAULTS);
         return glib::ExitCode::SUCCESS;

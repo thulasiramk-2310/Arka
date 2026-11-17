@@ -37,7 +37,7 @@ pub fn follow(command: &str) {
     if command.is_empty() {
         return;
     }
-    match Command::new("sh").args(["-c", &format!("exec {command}")]).stdin(Stdio::null()).spawn() {
+    match crate::x11::shell(&format!("exec {command}")).stdin(Stdio::null()).spawn() {
         Ok(child) => {
             let _ = std::fs::write(&file, format!("{} {command}\n", child.id()));
         }

@@ -1,0 +1,12 @@
+# The ArkaWM desktop session as a systemd user target (installed in /usr/lib/systemd/user/).
+# arkawm-startup starts it once the screen is up. It brings up graphical-session.target, which
+# the portal service waits for: without it apps got no file dialogs and no light or dark look.
+# It also starts the password prompt for administrator actions (KDE's agent, as on Plasma),
+# which systemd starts again if it crashes: without one, joining Wi-Fi was refused silently.
+[Unit]
+Description=ArkaWM desktop session
+Documentation=man:systemd.special(7)
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target
+Wants=plasma-polkit-agent.service

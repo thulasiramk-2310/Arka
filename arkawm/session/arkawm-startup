@@ -4,12 +4,16 @@
 
 # Services started on demand (portals, notifications) need to know about this session. Skipped
 # when another desktop of the same user is already running, so that one is left alone.
-vars="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE"
+# QT_QPA_PLATFORMTHEME too: KDE's portal is a Qt program, and without it the portal told apps
+# "light, blue accent" (Qt's own defaults) whatever look was chosen.
+vars="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE QT_QPA_PLATFORMTHEME XCURSOR_THEME XCURSOR_SIZE"
 if ! systemctl --user show-environment 2>/dev/null | grep -q '^WAYLAND_DISPLAY='; then
     systemctl --user import-environment $vars 2>/dev/null
     dbus-update-activation-environment $vars 2>/dev/null
-    # forget them again when ArkaWM ends
-    trap 'systemctl --user unset-environment $vars 2>/dev/null' EXIT
+    # The portal service starts only inside a graphical session (see arkawm-session.target).
+    systemctl --user start arkawm-session.target 2>/dev/null
+    # stop the session's services and forget the variables again when ArkaWM ends
+    trap 'systemctl --user stop arkawm-session.target 2>/dev/null; systemctl --user unset-environment $vars 2>/dev/null' EXIT
 fi
 
 # GTK apps take their icons, pointer and light or dark look from these settings. Plasma copies
@@ -27,15 +31,9 @@ if command -v gsettings >/dev/null; then
     gsettings set org.gnome.desktop.interface color-scheme "$look" 2>/dev/null
 fi
 
-# The password prompt for actions that need an administrator: joining a new Wi-Fi network,
-# installing updates, changing system settings. Plasma starts KDE's own; without one those
-# actions were refused without asking (Wi-Fi could not connect in ArkaWM, reported on hardware).
-for agent in /usr/libexec/kf6/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1; do
-    if [ -x "$agent" ]; then
-        "$agent" &
-        break
-    fi
-done
+# The password prompt for administrator actions (joining Wi-Fi, updates, system settings) is
+# started by arkawm-session.target above. Only inside another desktop, where that is skipped,
+# the desktop's own prompt is used.
 
 # The user's own start-up programs if there are any. Otherwise the ArkaOS desktop (arka-desk:
 # wallpaper, app ring, menu, status cards, top strip), or failing that a terminal so the screen

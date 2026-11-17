@@ -98,7 +98,7 @@ fn read_quick() -> Quick {
 }
 
 fn spawn(command: &str) {
-    let _ = Command::new("sh").arg("-c").arg(command).spawn();
+    let _ = crate::x11::shell(command).spawn();
 }
 
 enum Event {
@@ -623,6 +623,7 @@ impl Shell {
             let (counts, found2, row_id) = (counts.clone(), found.clone(), id.clone());
             button.connect_clicked(move |button| {
                 let context = button.display().app_launch_context();
+                crate::x11::give_back(&context);
                 match app.launch(&[], Some(&context)) {
                     Ok(()) => {
                         *counts.borrow_mut().entry(row_id.clone()).or_insert(0) += 1;
@@ -1647,7 +1648,10 @@ pub fn start_again() {
     stop_watcher();
     if let Ok(me) = std::env::current_exe() {
         // the choice in the file wins over a theme forced for testing
-        if Command::new(me).env_remove("ARKA_THEME").spawn().is_ok() {
+        let mut again = Command::new(me);
+        again.env_remove("ARKA_THEME");
+        crate::x11::give_back_to(&mut again);
+        if again.spawn().is_ok() {
             std::process::exit(0);
         }
     }
