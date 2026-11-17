@@ -1,0 +1,122 @@
+name: ArkaWM stick image
+
+# The published ArkaOS image with ArkaWM added as a second choice on the login screen
+# (arkawm/image/Containerfile), published as the separate tag :arkawm and signed with the ArkaOS
+# key, then installed into a raw disk image for a USB stick and kept for 3 days. The :latest tag
+# is never touched. Runs on pushes to the arkawm branch that change ArkaWM, or by hand.
+
+on:
+  push:
+    branches: [arkawm]
+    paths:
+      - "arkawm/**"
+      - ".github/workflows/arkawm-stick.yml"
+  workflow_dispatch:
+    inputs:
+      size:
+        description: "Disk image size (the stick must be at least this big)"
+        default: 20G
+
+concurrency:
+  group: arkawm-stick
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/thulasiramk-2310/arka
+  TAG: arkawm
+  SIZE: ${{ inputs.size || '20G' }}
+
+jobs:
+  stick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Refuse to publish without the signing key
+        env:
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          if [ -z "$SIGNING_SECRET" ]; then
+            echo "::error::SIGNING_SECRET is not set; an unsigned image would be rejected by ArkaOS"
+            exit 1
+          fi
+
+      - name: Make room
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/containers /var/lib/containers
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Check the base image is signed by the ArkaOS key
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "$TOKEN"
+          cosign verify --key cosign.pub "$IMAGE:latest" > /dev/null
+          echo "Signature OK for $IMAGE:latest"
+
+      - name: Build
+        run: |
+          sudo podman build --pull=newer -f arkawm/image/Containerfile \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            -t localhost/arka:arkawm arkawm
+
+      - name: Push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman push --digestfile digest localhost/arka:arkawm "docker://$IMAGE:$TAG"
+          echo "DIGEST=$(sudo cat digest)" >> "$GITHUB_ENV"
+
+      - name: Sign and verify
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+        run: |
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
+          cosign verify --key cosign.pub "$IMAGE@$DIGEST" > /dev/null
+          echo "Published and signed: $IMAGE:$TAG ($DIGEST)"
+
+      - name: Install into a disk image
+        run: |
+          # No serial console: a forced console=ttyS0 crash-looped agetty on the Nokia.
+          # The installed system takes its updates from the signed :arkawm tag.
+          sudo truncate -s "$SIZE" /mnt/arka-stick.raw
+          sudo podman run --rm --privileged --pid=host --security-opt label=disable \
+            -v /var/lib/containers:/var/lib/containers -v /dev:/dev -v /mnt:/output \
+            localhost/arka:arkawm \
+            bootc install to-disk --via-loopback --generic-image \
+              --target-imgref "$IMAGE:$TAG" --filesystem xfs /output/arka-stick.raw
+          sudo du -sh --apparent-size /mnt/arka-stick.raw
+          sudo du -sh /mnt/arka-stick.raw
+
+      - name: Compress
+        run: |
+          sudo apt-get install -y zstd >/dev/null
+          sudo zstd -T0 -10 -q /mnt/arka-stick.raw -o /mnt/arka-stick.raw.zst
+          sudo rm /mnt/arka-stick.raw
+          cd /mnt && sudo sha256sum arka-stick.raw.zst | sudo tee arka-stick.raw.zst.sha256
+          ls -lh /mnt/arka-stick.raw.zst
+
+      - name: Keep it
+        uses: actions/upload-artifact@v4
+        with:
+          name: arka-stick-arkawm
+          path: |
+            /mnt/arka-stick.raw.zst
+            /mnt/arka-stick.raw.zst.sha256
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

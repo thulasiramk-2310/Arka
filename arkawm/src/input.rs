@@ -33,7 +33,12 @@ impl ArkaWm {
             serial,
             time,
             |state, modifiers, handle| {
-                match shortcut(modifiers, handle.modified_sym()) {
+                // The user's own shortcuts first, then ArkaWM's.
+                if pressed {
+                    state.user_keys.refresh();
+                }
+                let found = state.user_keys.find(modifiers, handle.modified_sym()).map(Action::Custom);
+                match found.or_else(|| shortcut(modifiers, handle.modified_sym())) {
                 // Locked: every key goes to the lock screen, no shortcut works.
                 // Ctrl+Alt+F1..F12 switches console, locked or not: it is the way back out.
                 _ if (Keysym::XF86_Switch_VT_1.raw()..=Keysym::XF86_Switch_VT_12.raw()).contains(&handle.modified_sym().raw()) => {
@@ -325,6 +330,10 @@ pub enum Action {
     CycleWidth,
     ToggleLayout,
     Lock,
+    /// The system monitor (Task Manager on Windows).
+    Monitor,
+    /// A shortcut from the user's own file: its place in that list.
+    Custom(usize),
     Console(i32),
     Quit,
 }
@@ -363,6 +372,14 @@ fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
             _ => {}
         }
     }
+    // Ctrl+Alt+T opens a terminal (Ubuntu, KDE); Ctrl+Shift+Esc the system monitor (Windows).
+    if modifiers.ctrl && !modifiers.logo {
+        return match (modifiers.alt, modifiers.shift, sym) {
+            (true, false, Keysym::t | Keysym::T) => Some(Action::Terminal),
+            (false, true, Keysym::Escape) => Some(Action::Monitor),
+            _ => None,
+        };
+    }
     // The Windows key, as on Windows.
     if modifiers.logo && !modifiers.ctrl && !modifiers.alt {
         return Some(match (modifiers.shift, sym) {
@@ -370,6 +387,8 @@ fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
             (false, Keysym::e) => Action::Files,
             (false, Keysym::i) => Action::Settings,
             (false, Keysym::l) => Action::Lock,
+            (false, Keysym::s) => Action::Panel("search"),
+            (false, Keysym::Return) => Action::Terminal,
             (false, Keysym::Left) => Action::SnapLeft,
             (false, Keysym::Right) => Action::SnapRight,
             (false, Keysym::Up) => Action::Maximize,
@@ -406,8 +425,9 @@ fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
 }
 
 /// The locker: with the lock style the desktop shell writes from its theme, unless the user has a
-/// swaylock config of their own or chose another locker with ARKAWM_LOCKER.
-const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -z "$ARKAWM_LOCKER" ] && [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec ${ARKAWM_LOCKER:-swaylock}; fi"#;
+/// swaylock config of their own or chose another locker with ARKAWM_LOCKER. arka-lock, the ArkaWM
+/// lock screen, comes first when it is installed.
+const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -n "$ARKAWM_LOCKER" ]; then exec $ARKAWM_LOCKER; elif command -v arka-lock >/dev/null; then exec arka-lock; elif [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec swaylock; fi"#;
 
 impl ArkaWm {
     fn run(&mut self, action: Action) {
@@ -419,6 +439,15 @@ impl ArkaWm {
             Action::Close => self.close_focused(),
             Action::Console(number) => self.switch_console(number),
             Action::Lock => crate::state::spawn(LOCK),
+            Action::Monitor => crate::state::spawn(
+                "${ARKAWM_MONITOR:-$(command -v plasma-systemmonitor || command -v gnome-system-monitor || echo 'konsole -e top')}",
+            ),
+            Action::Custom(index) => {
+                if let Some(command) = self.user_keys.command(index) {
+                    tracing::info!("your shortcut: {command}");
+                    crate::state::spawn(command);
+                }
+            }
             Action::SnapLeft => self.snap_focused(Snap::Left),
             Action::SnapRight => self.snap_focused(Snap::Right),
             Action::Fullscreen => self.toggle_fullscreen_focused(),

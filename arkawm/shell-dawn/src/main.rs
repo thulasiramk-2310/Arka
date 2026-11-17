@@ -115,9 +115,9 @@ fn write_fuzzel_style(cfg: &config::Config) {
     }
 }
 
-/// The lock screen in the desktop's look: the wallpaper behind it and the theme's colours on the
-/// ring that shows typing. swaylock reads it through `LOCK`, unless the user has a swaylock
-/// config of their own or set ARKAWM_LOCKER.
+/// The lock screen in the desktop's look: the wallpaper, font and the theme's colours, for arka-lock
+/// and for swaylock (used through `LOCK` when arka-lock is not installed and the user has no
+/// swaylock config of their own or set ARKAWM_LOCKER).
 fn write_lock_style(cfg: &config::Config) {
     let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") else { return };
     let hex = |key: &str, alpha: &str| format!("{}{alpha}", cfg.get(&format!("colors.{key}")).trim_start_matches('#'));
@@ -140,10 +140,18 @@ fn write_lock_style(cfg: &config::Config) {
         style.push_str(&format!("image={}\nscaling=fill\n", picture.display()));
     }
     let _ = std::fs::write(format!("{dir}/arka-desk-swaylock.conf"), style);
+    // arka-lock, the ArkaWM lock screen, takes the same picture, font and colours.
+    let icons = cfg.file("power-bold.svg");
+    let icons = icons.parent().map(|dir| dir.display().to_string()).unwrap_or_default();
+    let mut look = format!("font = {font}\nwallpaper = {}\nicons = {icons}\n", picture.display());
+    for key in ["background", "panel", "border", "text", "text_dim", "accent", "warn"] {
+        look.push_str(&format!("{key} = {}\n", cfg.get(&format!("colors.{key}"))));
+    }
+    let _ = std::fs::write(format!("{dir}/arka-desk-lock.conf"), look);
 }
 
 /// How the Lock button starts the locker: with the desktop's lock style when nothing else was chosen.
-const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -z "$ARKAWM_LOCKER" ] && [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec ${ARKAWM_LOCKER:-swaylock}; fi"#;
+const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -n "$ARKAWM_LOCKER" ]; then exec $ARKAWM_LOCKER; elif command -v arka-lock >/dev/null; then exec arka-lock; elif [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec swaylock; fi"#;
 
 /// The theme's glyph for an app of this kind, so a picked app looks like the rest of the ring.
 fn glyph_for(categories: &str) -> Option<&'static str> {

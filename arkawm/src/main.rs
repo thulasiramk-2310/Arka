@@ -5,6 +5,7 @@ mod handlers;
 mod cursor;
 mod grabs;
 mod input;
+mod keys;
 mod layout;
 mod capture;
 mod ipc;

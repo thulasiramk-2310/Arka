@@ -1,0 +1,36 @@
+# A test image for a USB stick: the published ArkaOS image with ArkaWM added. First-boot setup
+# is the same as on the KDE image and ends in ArkaWM; Plasma ("ArkaOS Desktop") stays a choice
+# on the login screen.
+#   podman build -f image/Containerfile -t localhost/arkaos:arkawm .     (from arkawm/)
+ARG BASE=ghcr.io/thulasiramk-2310/arka:latest
+
+FROM docker.io/library/fedora:44 AS build
+RUN dnf install -y -q rust cargo gcc pkgconf-pkg-config gtk4-devel gtk4-layer-shell-devel \
+      libseat-devel libinput-devel systemd-devel mesa-libgbm-devel libdrm-devel \
+      libxkbcommon-devel wayland-devel mesa-libEGL-devel pam-devel
+COPY . /src
+WORKDIR /src
+RUN cargo build --locked --release
+RUN cd shell-dawn && cargo build --locked --release
+RUN cd lock && cargo build --locked --release
+
+FROM ${BASE}
+# What ArkaWM and its shell start: the locker, idle timer, clipboard tools, X11 apps, the font.
+RUN dnf install -y -q gtk4-layer-shell libseat swaylock swayidle wl-clipboard \
+      xwayland-satellite rsms-inter-fonts && dnf clean all
+COPY --from=build /src/target/release/arkawm /usr/bin/arkawm
+COPY --from=build /src/shell-dawn/target/release/arka-desk /usr/bin/arka-desk
+COPY --from=build /src/lock/target/release/arka-lock /usr/bin/arka-lock
+# The lock screen checks passwords with the same rules as the login prompt.
+COPY image/arka-lock.pam /etc/pam.d/arka-lock
+COPY image/shortcuts.example /usr/share/doc/arkawm/shortcuts.example
+COPY shell-dawn/assets /usr/share/arka-desk
+COPY session/arkawm-session session/arkawm-startup /usr/libexec/arkawm/
+COPY image/arkawm.desktop /usr/share/wayland-sessions/arkawm.desktop
+# Setup hands the new account to ArkaWM instead of Plasma (automatic sign-in and the login
+# screen's remembered session). Fails the build if the setup script stops naming Plasma there.
+RUN grep -q 'plasma.desktop' /usr/libexec/arkaos-oobe-apply && \
+    sed -i 's|Session=plasma.desktop|Session=arkawm.desktop|; s|wayland-sessions/plasma.desktop|wayland-sessions/arkawm.desktop|' \
+      /usr/libexec/arkaos-oobe-apply && \
+    ! grep -q 'plasma.desktop' /usr/libexec/arkaos-oobe-apply
+RUN bootc container lint

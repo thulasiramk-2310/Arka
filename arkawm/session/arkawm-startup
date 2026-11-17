@@ -25,6 +25,18 @@ wheel=$(command -v arka-wheel || true)
 # is for Plasma only, so ArkaWM starts them itself when they are installed.
 dots=$(command -v arka-privacy-dots || true)
 [ -n "$dots" ] && GSK_RENDERER=cairo "$dots" &
+# Lock after 5 minutes without input and before the computer sleeps, as on the Plasma desktop.
+# A swayidle config of the user's own replaces this.
+idle=$(command -v swayidle || true)
+if [ -n "$idle" ]; then
+    if [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/swayidle/config" ]; then
+        "$idle" -w &
+    else
+        lock="arka-lock -f"
+        command -v arka-lock >/dev/null || lock="swaylock -f"
+        "$idle" -w timeout 300 "$lock" before-sleep "$lock" &
+    fi
+fi
 if [ -x "$autostart" ]; then
     "$autostart" &
 elif [ -x "$desk" ]; then

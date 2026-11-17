@@ -65,6 +65,8 @@ pub struct ArkaWm {
     /// The program whose copied text is on the clipboard. When it closes, the clipboard is
     /// cleared, so clipboard tools (the shell keeps a copy) hear that it went empty.
     pub clip_owner: Option<ClientId>,
+    /// Shortcuts from ~/.config/arkawm/shortcuts.
+    pub user_keys: crate::keys::UserKeys,
     /// A part of the screen is being picked for a screenshot.
     pub region: Option<crate::capture::Region>,
     pub region_buffers: [SolidColorBuffer; 4],
@@ -205,6 +207,7 @@ impl ArkaWm {
             capture: None,
             night: false,
             clip_owner: None,
+            user_keys: crate::keys::UserKeys::new(),
             region: None,
             region_buffers: Default::default(),
             next_window_id: 1,

@@ -1,0 +1,19 @@
+# Your own ArkaWM shortcuts. Copy this file to ~/.config/arkawm/shortcuts and edit it.
+# One shortcut per line: keys = command. A saved change works on the next key press.
+#
+# Keys: Super (the Windows key), Ctrl, Alt, Shift, joined with +, then one key by its xkb
+# name: a letter, a digit, Return, space, F1..F12, Print, slash, ... A letter needs Super,
+# Ctrl or Alt, so it can still be typed. A shortcut here wins over ArkaWM's own on the same keys.
+#
+# ArkaWM's own shortcuts:
+#   Super+L lock          Super+S search apps     Super+Enter / Ctrl+Alt+T terminal
+#   Super+E files         Super+I settings        Ctrl+Shift+Esc system monitor
+#   Super+D desktop       Super+V clipboard       Super+A quick settings   Super+N notifications
+#   Super+Left/Right snap Super+Up maximise       Super+Down restore or minimise
+#   Alt+Tab switch window Alt+F4 close            Print screenshot   Shift+Print / Super+Shift+S part
+#   Super+Alt+C format wheel   Super+Alt+E edit wheel   Alt+Shift+E end the session
+#
+# Examples (remove the # to use one):
+# Super+B = firefox
+# Super+K = kate
+# Ctrl+Alt+N = kate ~/notes.txt

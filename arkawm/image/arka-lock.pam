@@ -1,0 +1,3 @@
+#%PAM-1.0
+# arka-lock, the ArkaWM lock screen: the same password rules as signing in.
+auth include login
