@@ -113,6 +113,9 @@ pub struct ArkaWm {
     pub locked: bool,
     /// The lock screen's own surface, once the locker has made one.
     pub lock_surface: Option<LockSurface>,
+    /// Panels just opened above the windows that have not drawn yet; one that wants the keyboard
+    /// gets it once it is on screen (see `handle_layer_commit`).
+    pub fresh_layers: Vec<WlSurface>,
     /// The locker is told "locked" only after a frame without any window has been drawn.
     pub lock_pending: Option<SessionLocker>,
     /// Surfaces asking that the screen not go idle (a playing video).
@@ -243,6 +246,7 @@ impl ArkaWm {
             scale: scale_from(std::env::var("ARKAWM_SCALE").ok().as_deref()),
             fractional_scale_state,
             locked: false,
+            fresh_layers: Vec::new(),
             lock_surface: None,
             lock_pending: None,
             idle_inhibitors: Vec::new(),
@@ -321,13 +325,16 @@ impl ArkaWm {
                 .map(|(s, p)| (s, (p + output_geo.loc).to_f64()));
         }
 
+        // Every layer surface of a level in turn, top first: one that takes no pointer at this spot
+        // (outside its input region, or not drawn yet) lets the ones under it have it.
         let layer_hit = |kinds: [Layer; 2]| {
             kinds.iter().find_map(|&kind| {
-                let layer = layers.layer_under(kind, local)?;
-                let layer_loc = layers.layer_geometry(layer)?.loc;
-                layer
-                    .surface_under(local - layer_loc.to_f64(), WindowSurfaceType::ALL)
-                    .map(|(s, p)| (s, (p + layer_loc + output_geo.loc).to_f64()))
+                layers.layers_on(kind).rev().find_map(|layer| {
+                    let layer_loc = layers.layer_geometry(layer)?.loc;
+                    layer
+                        .surface_under(local - layer_loc.to_f64(), WindowSurfaceType::ALL)
+                        .map(|(s, p)| (s, (p + layer_loc + output_geo.loc).to_f64()))
+                })
             })
         };
 
