@@ -53,6 +53,22 @@ smithay::delegate_cursor_shape!(ArkaWm);
 
 impl SelectionHandler for ArkaWm {
     type SelectionUserData = ();
+
+    /// Remember which program copied: a program can only copy while it has the keyboard.
+    fn new_selection(
+        &mut self,
+        ty: smithay::wayland::selection::SelectionTarget,
+        source: Option<smithay::wayland::selection::SelectionSource>,
+        _seat: smithay::input::Seat<Self>,
+    ) {
+        if ty == smithay::wayland::selection::SelectionTarget::Clipboard {
+            use smithay::reexports::wayland_server::Resource;
+            self.clip_owner = source
+                .and_then(|_| self.seat.get_keyboard()?.current_focus())
+                .and_then(|surface| surface.client())
+                .map(|client| client.id());
+        }
+    }
 }
 
 impl smithay::wayland::selection::wlr_data_control::DataControlHandler for ArkaWm {

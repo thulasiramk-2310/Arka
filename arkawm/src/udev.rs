@@ -41,11 +41,38 @@ use crate::ArkaWm;
 type Surface = GbmBufferedSurface<GbmAllocator<DrmDeviceFd>, ()>;
 
 /// Everything ArkaWM holds while it owns the screen.
+/// Night light: how much of each colour is kept, about a 4000 K white (Redshift's table).
+const WARM: (f64, f64, f64) = (1.0, 0.8128, 0.6339);
+
+impl Udev {
+    /// Make the screen warmer, or put its colours back, through the display pipe's gamma table.
+    pub fn set_warmth(&self, on: bool) {
+        let fd = self.drm.device_fd();
+        let size = match fd.get_crtc(self.crtc) {
+            Ok(info) => info.gamma_length() as usize,
+            Err(err) => return tracing::warn!("night light: screen not readable: {err}"),
+        };
+        if size < 2 {
+            return tracing::warn!("night light: this screen has no gamma table");
+        }
+        let (r, g, b) = if on { WARM } else { (1.0, 1.0, 1.0) };
+        let ramp = |gain: f64| -> Vec<u16> {
+            (0..size).map(|i| (i as f64 / (size - 1) as f64 * gain * 65535.0).round() as u16).collect()
+        };
+        match fd.set_gamma(self.crtc, &ramp(r), &ramp(g), &ramp(b)) {
+            Ok(()) => tracing::info!("night light {}", if on { "on" } else { "off" }),
+            Err(err) => tracing::warn!("night light could not be set: {err}"),
+        }
+    }
+}
+
 pub struct Udev {
     pub renderer: GlesRenderer,
     // the surface is dropped before the device it belongs to
     surface: Surface,
     drm: DrmDevice,
+    /// The display pipe driving the screen, for its gamma table (night light).
+    crtc: crtc::Handle,
     output: Output,
     tracker: OutputDamageTracker,
     /// A frame is on its way to the screen; the next one waits for the screen's refresh.
@@ -181,6 +208,8 @@ pub fn init_udev(event_loop: &mut EventLoop<'static, ArkaWm>, state: &mut ArkaWm
                     tracing::warn!("screen did not come back: {err}");
                 }
                 udev.surface.reset_buffers();
+                // the other console may have left its own colours on the screen
+                udev.set_warmth(state.night);
                 udev.active = true;
                 udev.waiting = false;
                 state.redraw_wanted = true;
@@ -219,7 +248,7 @@ pub fn init_udev(event_loop: &mut EventLoop<'static, ArkaWm>, state: &mut ArkaWm
     let tracker = OutputDamageTracker::from_output(&output);
     let refresh = Duration::from_secs_f64(1.0 / mode.vrefresh().max(30) as f64);
     let handle = event_loop.handle();
-    state.udev = Some(Box::new(Udev { renderer, drm, surface, output, tracker, waiting: false, active: true, shown: 0, unchanged: 0, refresh, handle, session }));
+    state.udev = Some(Box::new(Udev { renderer, drm, crtc, surface, output, tracker, waiting: false, active: true, shown: 0, unchanged: 0, refresh, handle, session }));
     std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
     crate::state::center_pointer(state);
     state.redraw_wanted = true;

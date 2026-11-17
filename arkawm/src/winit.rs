@@ -20,7 +20,21 @@ pub fn init_winit(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let display_handle = &state.display_handle.clone();
 
-    let (mut backend, winit) = winit::init::<GlesRenderer>()?;
+    // ARKAWM_WINDOW_SIZE=1920x1080 opens the window at that size (logical pixels), to try the
+    // desktop on screens of other shapes.
+    let asked = std::env::var("ARKAWM_WINDOW_SIZE").ok().and_then(|size| {
+        let (w, h) = size.split_once('x')?;
+        Some((w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?))
+    });
+    let (mut backend, winit) = match asked {
+        Some((w, h)) => winit::init_from_attributes::<GlesRenderer>(
+            smithay::reexports::winit::window::Window::default_attributes()
+                .with_inner_size(smithay::reexports::winit::dpi::LogicalSize::new(w as f64, h as f64))
+                .with_title("ArkaWM")
+                .with_visible(true),
+        )?,
+        None => winit::init::<GlesRenderer>()?,
+    };
     backend.window().set_title("ArkaWM");
 
     // GPU buffer sharing (linux-dmabuf), so apps that draw with the GPU

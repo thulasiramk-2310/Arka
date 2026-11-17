@@ -60,6 +60,11 @@ pub struct ArkaWm {
     pub ipc: crate::ipc::Ipc,
     /// A screenshot to take with the next frame.
     pub capture: Option<crate::capture::Capture>,
+    /// Night light: the screen's colours made warmer (asked for by the shell's quick settings).
+    pub night: bool,
+    /// The program whose copied text is on the clipboard. When it closes, the clipboard is
+    /// cleared, so clipboard tools (the shell keeps a copy) hear that it went empty.
+    pub clip_owner: Option<ClientId>,
     /// A part of the screen is being picked for a screenshot.
     pub region: Option<crate::capture::Region>,
     pub region_buffers: [SolidColorBuffer; 4],
@@ -198,6 +203,8 @@ impl ArkaWm {
             view_x: 0,
             ipc: Default::default(),
             capture: None,
+            night: false,
+            clip_owner: None,
             region: None,
             region_buffers: Default::default(),
             next_window_id: 1,
@@ -285,6 +292,7 @@ impl ArkaWm {
                     // Safety: we don't drop the display
                     unsafe {
                         display.get_mut().dispatch_clients(state).unwrap();
+                        state.forget_gone_clients();
                     }
                     state.redraw_wanted = true;
                     Ok(PostAction::Continue)
@@ -428,6 +436,25 @@ pub fn spawn(command: &str) {
     }
 }
 
+/// Programs that disconnected since the event loop last looked.
+static GONE: std::sync::Mutex<Vec<ClientId>> = std::sync::Mutex::new(Vec::new());
+
+impl ArkaWm {
+    /// Smithay leaves the clipboard pointing at a program that has closed, and clipboard tools are
+    /// not told. Clear it instead, so they hear it went empty.
+    pub fn forget_gone_clients(&mut self) {
+        let gone: Vec<ClientId> = std::mem::take(&mut *GONE.lock().unwrap());
+        if gone.is_empty() {
+            return;
+        }
+        if self.clip_owner.as_ref().is_some_and(|owner| gone.contains(owner)) {
+            self.clip_owner = None;
+            tracing::debug!("the program that copied closed: clipboard cleared");
+            smithay::wayland::selection::data_device::clear_data_device_selection(&self.display_handle, &self.seat);
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
@@ -437,7 +464,8 @@ pub struct ClientState {
 
 impl ClientData for ClientState {
     fn initialized(&self, _client_id: ClientId) {}
-    fn disconnected(&self, _client_id: ClientId, reason: DisconnectReason) {
+    fn disconnected(&self, client_id: ClientId, reason: DisconnectReason) {
+        GONE.lock().unwrap().push(client_id);
         tracing::debug!("a program disconnected: {reason:?}");
     }
 }

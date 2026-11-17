@@ -58,6 +58,8 @@ pub enum Command {
     ShowDesktop,
     Screenshot,
     Region,
+    /// Night light on or off.
+    Night(bool),
 }
 
 pub fn parse(line: &str) -> Option<Command> {
@@ -72,6 +74,11 @@ pub fn parse(line: &str) -> Option<Command> {
         "show-desktop" => Command::ShowDesktop,
         "screenshot" => Command::Screenshot,
         "region" => Command::Region,
+        "night" => match words.next()? {
+            "on" => Command::Night(true),
+            "off" => Command::Night(false),
+            _ => return None,
+        },
         _ => return None,
     })
 }
@@ -165,6 +172,13 @@ impl ArkaWm {
             Command::ShowDesktop => self.toggle_show_desktop(),
             Command::Screenshot => self.capture = Some(crate::capture::Capture { crop: None }),
             Command::Region => self.region = Some(crate::capture::Region::default()),
+            Command::Night(on) => {
+                self.night = on;
+                match self.udev.as_ref() {
+                    Some(udev) => udev.set_warmth(on),
+                    None => tracing::info!("night light needs ArkaWM on the real screen"),
+                }
+            }
         }
     }
 

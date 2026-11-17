@@ -2,7 +2,8 @@
 //!
 //! `ARKAWM_TEST_KEYS="3000 29+57 35 37 36 28"` waits 3000 ms, then presses each group in turn
 //! (numbers are Linux key codes; `29+57` is Ctrl+Space held together), 150 ms apart. `m640,400`
-//! moves the pointer there, `left` and `right` click, `shot:/tmp/a.ppm` saves the screen, `d56`/`u56` hold a key down and let it go. Unlike a
+//! moves the pointer there, `left` and `right` click, `shot:/tmp/a.ppm` saves the screen, `d56`/`u56` hold a key down and let it go,
+//! and `w1500` waits 1500 ms before the next step (a bare number later in the script is a key). Unlike a
 //! virtual keyboard, these keys go through shortcuts, menus and the input method, exactly like the
 //! real keyboard. Only compiled into debug builds.
 
@@ -40,11 +41,16 @@ pub enum Step {
     Key(u32, bool),
     /// Save the screen to a PPM file: `shot:/tmp/a.ppm`.
     Shot(String),
+    /// Wait this long before the next step: `w1500`.
+    Wait(u64),
 }
 
 fn parse_step(word: &str) -> Option<Step> {
     if let Some(path) = word.strip_prefix("shot:") {
         return Some(Step::Shot(path.to_string()));
+    }
+    if let Some(ms) = word.strip_prefix('w').and_then(|ms| ms.parse().ok()) {
+        return Some(Step::Wait(ms));
     }
     if let Some(point) = word.strip_prefix('m') {
         let (x, y) = point.split_once(',')?;
@@ -77,7 +83,11 @@ pub fn install(handle: &LoopHandle<'static, ArkaWm>) {
         tracing::info!("test step {step:?}");
         state.redraw_wanted = true;
         let time = state.start_time.elapsed().as_millis() as u32;
+        if let Step::Wait(ms) = step {
+            return TimeoutAction::ToDuration(Duration::from_millis(ms));
+        }
         match step {
+            Step::Wait(_) => {}
             Step::Keys(group) => {
                 // evdev codes are 8 below XKB key codes
                 for &code in &group {
@@ -116,6 +126,7 @@ mod tests {
         assert_eq!(parse("10 m640,400 right left"), Some((10, vec![Move(640.0, 400.0), Click(0x111), Click(0x110)])));
         assert_eq!(parse("10 m640"), None);
         assert_eq!(parse("500"), Some((500, vec![])));
+        assert_eq!(parse("10 w1500 left"), Some((10, vec![Wait(1500), Click(0x110)])));
         assert_eq!(parse(""), None);
         assert_eq!(parse("soon 35"), None);
         assert_eq!(parse("100 a+b"), None);

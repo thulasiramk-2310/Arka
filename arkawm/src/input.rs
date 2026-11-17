@@ -405,6 +405,10 @@ fn shortcut(modifiers: &ModifiersState, sym: Keysym) -> Option<Action> {
     Some(action)
 }
 
+/// The locker: with the lock style the desktop shell writes from its theme, unless the user has a
+/// swaylock config of their own or chose another locker with ARKAWM_LOCKER.
+const LOCK: &str = r#"style="$XDG_RUNTIME_DIR/arka-desk-swaylock.conf"; if [ -z "$ARKAWM_LOCKER" ] && [ -f "$style" ] && [ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/swaylock/config" ] && [ ! -e "$HOME/.swaylock/config" ]; then exec swaylock -C "$style"; else exec ${ARKAWM_LOCKER:-swaylock}; fi"#;
+
 impl ArkaWm {
     fn run(&mut self, action: Action) {
         self.redraw_wanted = true;
@@ -414,7 +418,7 @@ impl ArkaWm {
             Action::Terminal => crate::state::spawn("${ARKAWM_TERMINAL:-konsole}"),
             Action::Close => self.close_focused(),
             Action::Console(number) => self.switch_console(number),
-            Action::Lock => crate::state::spawn("${ARKAWM_LOCKER:-swaylock}"),
+            Action::Lock => crate::state::spawn(LOCK),
             Action::SnapLeft => self.snap_focused(Snap::Left),
             Action::SnapRight => self.snap_focused(Snap::Right),
             Action::Fullscreen => self.toggle_fullscreen_focused(),
