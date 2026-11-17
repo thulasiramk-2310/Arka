@@ -1,0 +1,2 @@
+# The sign-in screen remembers the account and session last used here.
+d /var/cache/arka-greet 0755 greetd greetd -

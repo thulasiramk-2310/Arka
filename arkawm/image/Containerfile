@@ -25,12 +25,30 @@ COPY --from=build /src/lock/target/release/arka-lock /usr/bin/arka-lock
 COPY image/arka-lock.pam /etc/pam.d/arka-lock
 COPY image/shortcuts.example /usr/share/doc/arkawm/shortcuts.example
 COPY shell-dawn/assets /usr/share/arka-desk
-COPY session/arkawm-session session/arkawm-startup /usr/libexec/arkawm/
+COPY session/arkawm-session session/arkawm-startup session/arka-classic-dock /usr/libexec/arkawm/
 COPY image/arkawm.desktop /usr/share/wayland-sessions/arkawm.desktop
+COPY session/arkawm-portals.conf /usr/share/xdg-desktop-portal/arkawm-portals.conf
+# Crystal Dock is the Plasma desktop's dock: in ArkaWM's app list it read as a strange extra app
+# (reported on hardware). The Classic theme starts it itself. Fails the build if it is not found.
+RUN set -e; found=; for f in /usr/share/applications/*rystal*ock*.desktop; do \
+      [ -f "$f" ] || continue; found=1; \
+      if grep -q '^NotShowIn=' "$f"; then sed -i 's/^NotShowIn=/NotShowIn=ArkaWM;/' "$f"; \
+      else sed -i '/^\[Desktop Entry\]/a NotShowIn=ArkaWM;' "$f"; fi; \
+    done; [ -n "$found" ]
 # Setup hands the new account to ArkaWM instead of Plasma (automatic sign-in and the login
 # screen's remembered session). Fails the build if the setup script stops naming Plasma there.
 RUN grep -q 'plasma.desktop' /usr/libexec/arkaos-oobe-apply && \
     sed -i 's|Session=plasma.desktop|Session=arkawm.desktop|; s|wayland-sessions/plasma.desktop|wayland-sessions/arkawm.desktop|' \
       /usr/libexec/arkaos-oobe-apply && \
     ! grep -q 'plasma.desktop' /usr/libexec/arkaos-oobe-apply
+# ArkaOS's own sign-in screen instead of SDDM: greetd runs arka-lock --greeter inside cage.
+# greetd only starts on the graphical target, which setup switches to after the account exists,
+# so it never meets setup's own sign-in on tty1. Setup's automatic sign-in (written for SDDM)
+# is read at each boot by arka-greetd-config.
+RUN dnf install -y -q greetd greetd-selinux && dnf clean all
+COPY image/greetd/arka-greetd-config /usr/libexec/arkawm/arka-greetd-config
+COPY image/greetd/greetd-arka.conf /usr/lib/systemd/system/greetd.service.d/arka.conf
+COPY image/greetd/arka-greet.tmpfiles /usr/lib/tmpfiles.d/arka-greet.conf
+RUN command -v cage && systemctl disable sddm.service && systemctl enable --force greetd.service && \
+    [ "$(readlink -f /etc/systemd/system/display-manager.service)" = /usr/lib/systemd/system/greetd.service ]
 RUN bootc container lint
