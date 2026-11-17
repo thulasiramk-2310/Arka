@@ -371,10 +371,11 @@ fn slot(cr: &gtk4::cairo::Context, outer: f64, inner: f64, a0: f64, a1: f64) {
 
 /// Builds the practice window. `on_stage` is told 1 to 4 whenever the tutorial moves on,
 /// so the step list beside it can follow. The returned closure puts it back at the start.
-pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>) -> (gtk4::DrawingArea, Rc<dyn Fn()>) {
+/// `k` is the screen scale: the window is drawn `k` times its design size.
+pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>, k: f64) -> (gtk4::DrawingArea, Rc<dyn Fn()>) {
     let area = gtk4::DrawingArea::new();
-    area.set_content_width(W as i32);
-    area.set_content_height(H as i32);
+    area.set_content_width((W * k).round() as i32);
+    area.set_content_height((H * k).round() as i32);
     area.set_halign(gtk4::Align::Start);
     area.set_focusable(true);
     area.update_property(&[gtk4::accessible::Property::Label("Practice window for the format wheel")]);
@@ -382,7 +383,7 @@ pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>) -> (gtk4::Drawin
 
     let offset = {
         let area = area.clone();
-        move || ((area.width() as f64 - W) / 2.0).max(0.0)
+        move || ((area.width() as f64 - W * k) / 2.0).max(0.0)
     };
     let set_stage = {
         let (st, area, on_stage) = (st.clone(), area.clone(), on_stage.clone());
@@ -401,7 +402,10 @@ pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>) -> (gtk4::Drawin
 
     {
         let (st, dark) = (st.clone(), dark.clone());
-        area.set_draw_func(move |_, cr, w, h| draw(cr, w as f64, h as f64, &st.borrow(), dark.get()));
+        area.set_draw_func(move |_, cr, w, h| {
+            cr.scale(k, k);
+            draw(cr, w as f64 / k, h as f64 / k, &st.borrow(), dark.get())
+        });
     }
     // redraw while something moves: the breathing outline, or an entrance
     {
@@ -423,7 +427,7 @@ pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>) -> (gtk4::Drawin
         click.set_button(0);
         click.connect_pressed(move |g, _, x, y| {
             if let Some(a) = g.widget() { a.grab_focus(); }
-            let (x, y) = (x - offset(), y);
+            let (x, y) = ((x - offset()) / k, y / k);
             let stage = st.borrow().stage;
             match stage {
                 Stage::Click if in_rect(x, y, tile_rect(0)) => set_stage(Stage::Menu, None),
@@ -448,7 +452,7 @@ pub fn build(dark: Rc<Cell<bool>>, on_stage: Rc<dyn Fn(Stage)>) -> (gtk4::Drawin
         let (st, area2, offset) = (st.clone(), area.clone(), offset.clone());
         let motion = gtk4::EventControllerMotion::new();
         motion.connect_motion(move |_, x, y| {
-            let (x, y) = (x - offset(), y);
+            let (x, y) = ((x - offset()) / k, y / k);
             let mut b = st.borrow_mut();
             let hover = match b.stage {
                 Stage::Menu => menu_items().into_iter().find(|(top, hh, i)| MENU[*i] != "-" && x >= MENU_X && x <= MENU_X + MENU_W && y >= *top && y <= top + hh).map(|m| m.2),

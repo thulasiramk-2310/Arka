@@ -35,6 +35,44 @@ mod tutorial;
 
 const APP_ID: &str = "org.arka.oobe";
 
+thread_local! {
+    /// How much bigger than the 1280x800 design every size is drawn on this screen, set once at
+    /// start by `scale_for`. 1.0 on small screens, about 1.3 on a 1920x1080 laptop.
+    static SCALE: Cell<f64> = const { Cell::new(1.0) };
+}
+
+/// A design size in pixels, scaled to this screen.
+fn sp(px: i32) -> i32 {
+    SCALE.with(|s| (px as f64 * s.get()).round() as i32)
+}
+
+/// The scale for a screen of `w` x `h` logical pixels. The setup was drawn for 1280x800; on a
+/// bigger screen it grows with whichever side has less room, up to 1.5x, in steps of 0.05.
+fn scale_for(w: i32, h: i32) -> f64 {
+    let s = (w as f64 / 1280.0).min(h as f64 / 820.0).clamp(1.0, 1.5);
+    (s * 20.0).round() / 20.0
+}
+
+/// Every `NNpx` size of 3px or more in a style sheet, multiplied by `s`. Hairlines stay as they are.
+fn scale_css(css: &str, s: f64) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(i) = rest.find("px") {
+        let head = &rest[..i];
+        let start = head.len() - head.bytes().rev().take_while(|b| b.is_ascii_digit() || *b == b'.').count();
+        let num = &head[start..];
+        out.push_str(&head[..start]);
+        match num.parse::<f64>() {
+            Ok(v) if v >= 3.0 => out.push_str(&format!("{}", (v * s).round())),
+            _ => out.push_str(num),
+        }
+        out.push_str("px");
+        rest = &rest[i + 2..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn main() {
     let app = adw::Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
@@ -244,8 +282,8 @@ window, stack, .oobe-root, .oobe-page {{ background-color: {bg}; color: {fg}; }}
 .oobe-hint {{ font-size: 15px; color: {faint}; }}
 .oobe-mono {{ font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-size: 12px; color: {faint}; }}
 
-.oobe-brand {{ font-size: 14px; font-weight: 600; color: {fg}; }}
-.oobe-step {{ font-size: 13px; color: {muted}; }}
+.oobe-brand {{ font-size: 17px; font-weight: 600; color: {fg}; }}
+.oobe-step {{ font-size: 15px; color: {muted}; }}
 
 .oobe-title {{ font-family: 'Noto Serif', serif; font-size: 44px; font-weight: 500; color: {fg}; }}
 .oobe-sub {{ font-size: 17px; color: {muted}; }}
@@ -318,6 +356,7 @@ checkbutton.oobe-tool check {{
 }}
 checkbutton.oobe-tool check:checked {{ background-color: {fg}; border-color: {fg}; }}
 entry.oobe-field.small {{ font-size: 18px; min-height: 44px; }}
+entry.oobe-field image, passwordentry.oobe-field image {{ -gtk-icon-size: 18px; }}
 .oobe-choice-sub {{ font-size: 15px; color: {muted}; }}
 
 .oobe-dot {{ min-width: 9px; min-height: 9px; border-radius: 5px; background-color: {line}; }}
@@ -346,28 +385,28 @@ fn label(text: &str, class: &str) -> gtk4::Label {
     l
 }
 
-/// A setup page: title, subtitle, then `body`, in a centred column at most
-/// 640px wide. It scrolls when the screen is short or text is enlarged, so
-/// nothing ever ends up out of reach.
+/// A setup page: title, subtitle, then `body`, in a column at most 640px wide
+/// (scaled to the screen), centred on the screen both ways. It scrolls when the
+/// screen is short or text is enlarged, so nothing ever ends up out of reach.
 fn page(title: &gtk4::Label, sub: &gtk4::Label, body: &impl IsA<gtk4::Widget>) -> gtk4::ScrolledWindow {
     let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     col.add_css_class("oobe-page");
-    sub.set_margin_top(14);
-    body.as_ref().set_margin_top(40);
+    sub.set_margin_top(sp(14));
+    body.as_ref().set_margin_top(sp(40));
     col.append(title);
     col.append(sub);
     col.append(body);
     let clamp = adw::Clamp::builder()
-        .maximum_size(640)
-        .tightening_threshold(520)
+        .maximum_size(sp(640))
+        .tightening_threshold(sp(520))
         .child(&col)
-        // Anchored to the top, not centred: a short page used to sit lower than a tall one, so the
-        // heading jumped from step to step. Now every heading starts at the same height.
-        .valign(gtk4::Align::Start)
-        .margin_start(24)
-        .margin_end(24)
-        .margin_top(80)
-        .margin_bottom(24)
+        // Centred in the space between the header and the buttons. On a big screen a column
+        // anchored to the top left most of the screen empty below it (reported on a 1080p laptop).
+        .valign(gtk4::Align::Center)
+        .margin_start(sp(24))
+        .margin_end(sp(24))
+        .margin_top(sp(24))
+        .margin_bottom(sp(24))
         .build();
     gtk4::ScrolledWindow::builder()
         .hscrollbar_policy(gtk4::PolicyType::Never)
@@ -479,6 +518,21 @@ fn build_ui(app: &adw::Application) {
     // anyone can pick a look, so they must not glare. Choosing Light is one tap.
     let dark = Rc::new(Cell::new(std::env::var("ARKA_OOBE_THEME").as_deref() != Ok("light")));
 
+    // Size everything for this screen before any widget is made. A preview with ARKA_OOBE_SIZE
+    // is sized for that window instead.
+    let screen = std::env::var("ARKA_OOBE_SIZE").ok().and_then(|v| {
+        let (w, h) = v.split_once('x')?;
+        Some((w.parse().ok()?, h.parse().ok()?))
+    }).or_else(|| {
+        let monitors = gtk4::gdk::Display::default()?.monitors();
+        let monitor = monitors.item(0)?.downcast::<gtk4::gdk::Monitor>().ok()?;
+        let g = monitor.geometry();
+        Some((g.width(), g.height()))
+    });
+    if let Some((w, h)) = screen {
+        SCALE.with(|s| s.set(scale_for(w, h)));
+    }
+
     let provider = gtk4::CssProvider::new();
     gtk4::style_context_add_provider_for_display(
         &gtk4::gdk::Display::default().expect("display"),
@@ -494,7 +548,7 @@ fn build_ui(app: &adw::Application) {
             } else {
                 adw::ColorScheme::ForceLight
             });
-            provider.load_from_data(&css(d));
+            provider.load_from_data(&scale_css(&css(d), SCALE.with(Cell::get)));
         })
     };
     set_look(dark.get());
@@ -525,7 +579,7 @@ fn build_ui(app: &adw::Application) {
     let hint = gtk4::Label::new(Some("Press any key or click to begin"));
     hint.add_css_class("oobe-hint");
     hint.add_css_class("oobe-fade");
-    let hello_box = gtk4::Box::new(gtk4::Orientation::Vertical, 40);
+    let hello_box = gtk4::Box::new(gtk4::Orientation::Vertical, sp(40));
     hello_box.set_valign(gtk4::Align::Center);
     hello_box.set_halign(gtk4::Align::Center);
     hello_box.append(&hello_row);
@@ -533,7 +587,7 @@ fn build_ui(app: &adw::Application) {
     hello_box.set_vexpand(true);
     let stack_note = gtk4::Label::new(Some("rust · gtk4 · bootc"));
     stack_note.add_css_class("oobe-mono");
-    stack_note.set_margin_bottom(32);
+    stack_note.set_margin_bottom(sp(32));
     let hello_page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     hello_page.append(&hello_box);
     hello_page.append(&stack_note);
@@ -544,7 +598,7 @@ fn build_ui(app: &adw::Application) {
     let bye_sub = gtk4::Label::new(Some("Restarting into your desktop…"));
     bye_sub.add_css_class("oobe-hint");
     bye_sub.add_css_class("oobe-fade");
-    let bye_box = gtk4::Box::new(gtk4::Orientation::Vertical, 40);
+    let bye_box = gtk4::Box::new(gtk4::Orientation::Vertical, sp(40));
     bye_box.set_valign(gtk4::Align::Center);
     bye_box.set_halign(gtk4::Align::Center);
     bye_box.append(&bye_row);
@@ -555,10 +609,10 @@ fn build_ui(app: &adw::Application) {
     let frame = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     frame.add_css_class("oobe-page");
 
-    let top = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    top.set_margin_top(36);
-    top.set_margin_start(44);
-    top.set_margin_end(44);
+    let top = gtk4::Box::new(gtk4::Orientation::Horizontal, sp(10));
+    top.set_margin_top(sp(36));
+    top.set_margin_start(sp(44));
+    top.set_margin_end(sp(44));
     // The ArkaOS logo, green or blue to follow the accent (logo.png and logo-blue.png are the same
     // artwork as the start button). If the pictures cannot be decoded, the old drawn outline
     // triangle stands in for them.
@@ -567,7 +621,7 @@ fn build_ui(app: &adw::Application) {
     let blue_logo = load_logo(include_bytes!("logo-blue.png"));
     let mark_img: Option<gtk4::Image> = green_logo.as_ref().map(|tex| {
         let img = gtk4::Image::from_paintable(Some(tex));
-        img.set_pixel_size(26);
+        img.set_pixel_size(sp(34));
         img.set_valign(gtk4::Align::Center);
         img
     });
@@ -575,7 +629,7 @@ fn build_ui(app: &adw::Application) {
         Some(img) => img.clone().upcast(),
         None => {
             let area = gtk4::DrawingArea::new();
-            area.set_size_request(18, 18);
+            area.set_size_request(sp(24), sp(24));
             area.set_valign(gtk4::Align::Center);
             area.set_draw_func(|_, cr, w, h| {
                 let (w, h) = (w as f64, h as f64);
@@ -611,12 +665,12 @@ fn build_ui(app: &adw::Application) {
     // look
     let tile = |name: &str, d: bool| -> gtk4::ToggleButton {
         let area = gtk4::DrawingArea::new();
-        area.set_size_request(280, 170);
+        area.set_size_request(sp(280), sp(170));
         area.set_draw_func(move |_, cr, w, h| draw_mock(cr, w as f64, h as f64, d));
         let n = label(name, "oobe-tile-name");
-        n.set_margin_top(12);
-        n.set_margin_start(4);
-        n.set_margin_bottom(4);
+        n.set_margin_top(sp(12));
+        n.set_margin_start(sp(4));
+        n.set_margin_bottom(sp(4));
         let col = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         col.append(&area);
         col.append(&n);
@@ -633,7 +687,7 @@ fn build_ui(app: &adw::Application) {
         let (set_look, ridge_area) = (set_look.clone(), ridge.area.clone());
         t.connect_toggled(move |b| if b.is_active() { set_look(d); ridge_area.queue_draw(); });
     }
-    let look_body = gtk4::Box::new(gtk4::Orientation::Horizontal, 20);
+    let look_body = gtk4::Box::new(gtk4::Orientation::Horizontal, sp(20));
     // Keyboard: the arrow keys pick a look, like a radio group, so arrow + Enter
     // chooses what is highlighted. Selection follows the arrow keys only, not
     // focus: when the page first appears GTK puts focus on the first tile
@@ -672,7 +726,7 @@ fn build_ui(app: &adw::Application) {
     let name_entry = gtk4::Entry::new();
     name_entry.add_css_class("oobe-field");
     name_entry.set_placeholder_text(Some("username"));
-    let name_body = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    let name_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(14));
     name_body.append(&name_entry);
     name_body.append(&label("Lowercase letters and numbers, like alex or ram.", "oobe-note"));
     pages.add_named(
@@ -690,7 +744,7 @@ fn build_ui(app: &adw::Application) {
     conf_entry.add_css_class("oobe-field");
     conf_entry.set_placeholder_text(Some("Confirm password"));
     conf_entry.set_show_peek_icon(true);
-    let pass_body = gtk4::Box::new(gtk4::Orientation::Vertical, 18);
+    let pass_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(18));
     pass_body.append(&pass_entry);
     pass_body.append(&conf_entry);
     pass_body.append(&label("At least 8 characters.", "oobe-note"));
@@ -705,8 +759,8 @@ fn build_ui(app: &adw::Application) {
     let host_keep = gtk4::CheckButton::new();
     host_keep.add_css_class("oobe-choice");
     {
-        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-        col.set_margin_start(10);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(4));
+        col.set_margin_start(sp(10));
         col.append(&label("Use \u{201c}arka\u{201d}", "oobe-choice-title"));
         col.append(&label("Every ArkaOS computer has this name, so yours doesn't carry your name onto a network.", "oobe-choice-sub"));
         host_keep.set_child(Some(&col));
@@ -714,8 +768,8 @@ fn build_ui(app: &adw::Application) {
     let host_own = gtk4::CheckButton::new();
     host_own.add_css_class("oobe-choice");
     {
-        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-        col.set_margin_start(10);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(4));
+        col.set_margin_start(sp(10));
         col.append(&label("Choose my own", "oobe-choice-title"));
         col.append(&label("Other devices on a network you join can see this name.", "oobe-choice-sub"));
         host_own.set_child(Some(&col));
@@ -755,7 +809,7 @@ fn build_ui(app: &adw::Application) {
         name_entry.connect_changed(move |_| r());
     }
     host_refresh();
-    let host_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let host_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(6));
     host_body.append(&host_keep);
     host_body.append(&host_own);
     host_body.append(&host_entry);
@@ -772,7 +826,7 @@ fn build_ui(app: &adw::Application) {
     // because it is drawn before anyone has signed in. The logo in this header follows the choice.
     let swatch = |rgb: (f64, f64, f64)| {
         let area = gtk4::DrawingArea::new();
-        area.set_size_request(26, 26);
+        area.set_size_request(sp(26), sp(26));
         area.set_valign(gtk4::Align::Center);
         area.set_draw_func(move |_, cr, w, h| {
             cr.set_source_rgb(rgb.0, rgb.1, rgb.2);
@@ -782,10 +836,10 @@ fn build_ui(app: &adw::Application) {
         area
     };
     let accent_choice = |title: &str, sub: &str, rgb: (f64, f64, f64)| -> gtk4::CheckButton {
-        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 14);
-        row.set_margin_start(10);
+        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, sp(14));
+        row.set_margin_start(sp(10));
         row.append(&swatch(rgb));
-        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(4));
         col.append(&label(title, "oobe-choice-title"));
         col.append(&label(sub, "oobe-choice-sub"));
         row.append(&col);
@@ -817,7 +871,7 @@ fn build_ui(app: &adw::Application) {
     if preview.is_some() && std::env::var("ARKA_OOBE_ACCENT").as_deref() == Ok("blue") {
         accent_blue.set_active(true);
     }
-    let accent_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let accent_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(6));
     accent_body.append(&accent_green);
     accent_body.append(&accent_blue);
     pages.add_named(
@@ -872,7 +926,7 @@ fn build_ui(app: &adw::Application) {
         });
     }
     zone_refresh();
-    let zone_body = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    let zone_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(14));
     zone_body.append(&zone_drop);
     zone_body.append(&zone_clock);
     zone_body.append(&label("Type to search, for example Berlin or Kolkata. You can change it later in Settings.", "oobe-note"));
@@ -884,8 +938,8 @@ fn build_ui(app: &adw::Application) {
 
     // sign-in choice
     let choice = |title: &str, sub: &str| -> gtk4::CheckButton {
-        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-        col.set_margin_start(10);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(4));
+        col.set_margin_start(sp(10));
         col.append(&label(title, "oobe-choice-title"));
         col.append(&label(sub, "oobe-choice-sub"));
         let b = gtk4::CheckButton::new();
@@ -902,15 +956,15 @@ fn build_ui(app: &adw::Application) {
     for c in [&ask, &auto] {
         c.connect_has_focus_notify(|b| if b.has_focus() { b.set_active(true) });
     }
-    let sign_body = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let sign_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(6));
     sign_body.append(&ask);
     sign_body.append(&auto);
 
     // Advanced options: version control, for people who write code. Folded
     // away by default; nothing is set up unless a tool is ticked.
     let tool = |title: &str, sub: &str| -> gtk4::CheckButton {
-        let col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
-        col.set_margin_start(10);
+        let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(2));
+        col.set_margin_start(sp(10));
         col.append(&label(title, "oobe-choice-title"));
         col.append(&label(sub, "oobe-choice-sub"));
         let b = gtk4::CheckButton::new();
@@ -939,8 +993,8 @@ fn build_ui(app: &adw::Application) {
             m.set_sensitive(on);
         });
     }
-    let adv_body = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    adv_body.set_margin_top(10);
+    let adv_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(8));
+    adv_body.set_margin_top(sp(10));
     adv_body.append(&label("Version control, for writing code. Optional.", "oobe-note"));
     adv_body.append(&vara_cb);
     adv_body.append(&git_cb);
@@ -949,7 +1003,7 @@ fn build_ui(app: &adw::Application) {
     adv_body.append(&label("Saved only on this computer, in VARA's and Git's own settings.", "oobe-note"));
     let adv = gtk4::Expander::new(Some("Advanced options"));
     adv.add_css_class("oobe-adv");
-    adv.set_margin_top(22);
+    adv.set_margin_top(sp(22));
     adv.set_child(Some(&adv_body));
     sign_body.append(&adv);
     pages.add_named(
@@ -959,13 +1013,13 @@ fn build_ui(app: &adw::Application) {
     );
 
     // live privacy check
-    let priv_rows = gtk4::Box::new(gtk4::Orientation::Vertical, 22);
+    let priv_rows = gtk4::Box::new(gtk4::Orientation::Vertical, sp(22));
     let priv_note = label("Checking…", "oobe-note");
-    priv_note.set_margin_top(30);
+    priv_note.set_margin_top(sp(30));
     let recheck = gtk4::Button::with_label("Check again");
     recheck.add_css_class("oobe-back");
     recheck.set_halign(gtk4::Align::Start);
-    recheck.set_margin_top(10);
+    recheck.set_margin_top(sp(10));
     recheck.set_visible(false);
     let priv_body = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     priv_body.append(&priv_rows);
@@ -1005,17 +1059,17 @@ fn build_ui(app: &adw::Application) {
             retry.set_visible(n > labels.len());
         })
     };
-    let (tut_area, tut_reset) = tutorial::build(dark.clone(), on_stage.clone());
+    let (tut_area, tut_reset) = tutorial::build(dark.clone(), on_stage.clone(), SCALE.with(Cell::get));
     on_stage(tutorial::Stage::Click);
     {
         let r = tut_reset.clone();
         tut_retry.connect_clicked(move |_| r());
     }
-    let tut_steps = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let tut_steps = gtk4::Box::new(gtk4::Orientation::Vertical, sp(6));
     for l in &tut_labels {
         tut_steps.append(l);
     }
-    let tut_body = gtk4::Box::new(gtk4::Orientation::Vertical, 16);
+    let tut_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(16));
     tut_body.append(&tut_steps);
     tut_body.append(&tut_area);
     tut_body.append(&tut_retry);
@@ -1028,9 +1082,9 @@ fn build_ui(app: &adw::Application) {
 
     // working
     let spinner = gtk4::Spinner::new();
-    spinner.set_size_request(28, 28);
+    spinner.set_size_request(sp(28), sp(28));
     spinner.set_halign(gtk4::Align::Start);
-    let work_body = gtk4::Box::new(gtk4::Orientation::Vertical, 18);
+    let work_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(18));
     work_body.append(&spinner);
     pages.add_named(
         &page(&label("Setting things up", "oobe-title"),
@@ -1046,10 +1100,10 @@ fn build_ui(app: &adw::Application) {
     back.add_css_class("oobe-back");
     let next = gtk4::Button::with_label("Continue");
     next.add_css_class("oobe-primary");
-    let bottom = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    bottom.set_margin_bottom(6);
-    bottom.set_margin_start(44);
-    bottom.set_margin_end(44);
+    let bottom = gtk4::Box::new(gtk4::Orientation::Horizontal, sp(12));
+    bottom.set_margin_bottom(sp(6));
+    bottom.set_margin_start(sp(44));
+    bottom.set_margin_end(sp(44));
     let bspace = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     bspace.set_hexpand(true);
     bottom.append(&err);
@@ -1088,17 +1142,17 @@ fn build_ui(app: &adw::Application) {
                 ("Firewall", "Rejects connections other computers try to open to this one."),
             ];
             for ((t, s), st) in items.into_iter().zip(states) {
-                let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 16);
+                let row = gtk4::Box::new(gtk4::Orientation::Horizontal, sp(16));
                 let dot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
                 dot.add_css_class("oobe-dot");
                 dot.set_valign(gtk4::Align::Start);
-                dot.set_margin_top(8);
+                dot.set_margin_top(sp(8));
                 match st {
                     Row::Configured => dot.add_css_class("ok"),
                     Row::Attention => dot.add_css_class("warn"),
                     _ => {}
                 }
-                let col = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+                let col = gtk4::Box::new(gtk4::Orientation::Vertical, sp(3));
                 col.set_hexpand(true);
                 col.append(&label(t, "oobe-row-title"));
                 col.append(&label(s, "oobe-row-sub"));
@@ -1118,7 +1172,7 @@ fn build_ui(app: &adw::Application) {
                     _ => state.add_css_class("off"),
                 }
                 state.set_valign(gtk4::Align::Start);
-                state.set_margin_top(2);
+                state.set_margin_top(sp(2));
                 row.append(&dot);
                 row.append(&col);
                 row.append(&state);
@@ -1554,5 +1608,27 @@ mod zone_tests {
             let t = super::local_time_in("Europe/Berlin").expect("a time");
             assert!(t.contains(':'), "{t}");
         }
+    }
+}
+
+#[cfg(test)]
+mod scale_tests {
+    use super::{scale_css, scale_for};
+
+    #[test]
+    fn scale_follows_the_smaller_side() {
+        assert_eq!(scale_for(1280, 800), 1.0);
+        assert_eq!(scale_for(1024, 768), 1.0);
+        assert_eq!(scale_for(1920, 1080), 1.3);
+        assert_eq!(scale_for(3840, 2160), 1.5);
+    }
+
+    #[test]
+    fn css_sizes_grow_but_hairlines_stay() {
+        let css = ".a { font-size: 14px; border-bottom: 1.5px solid #fff; padding: 0 30px; margin: -10px; }";
+        assert_eq!(
+            scale_css(css, 1.5),
+            ".a { font-size: 21px; border-bottom: 1.5px solid #fff; padding: 0 45px; margin: -15px; }"
+        );
     }
 }
