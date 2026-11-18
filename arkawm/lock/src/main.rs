@@ -31,6 +31,9 @@ use std::rc::Rc;
 const CHILD: &str = "ARKA_LOCK_REPORT";
 
 fn main() -> glib::ExitCode {
+    // GTK's graphics setup opens the X11 display when it is set, and on ArkaWM that starts
+    // Xwayland at the first idle lock. The lock screen starts no X11 programs; it needs none.
+    std::env::remove_var("DISPLAY");
     if std::env::args().skip(1).any(|a| a == "--greeter") {
         return greet::main();
     }
