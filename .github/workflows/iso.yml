@@ -1,0 +1,77 @@
+name: Installer ISO
+
+# Builds the installer ISO (Anaconda, installer/config.toml) from the published, signed ArkaOS image
+# and keeps it for a few days as a downloadable artifact. The build needs about 25 GB, which a small
+# laptop drive does not have. Runs by hand, or on a push to the iso-test branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to put on the ISO (latest, or a sha-xxxxxxx tag)"
+        default: latest
+  push:
+    branches: [iso-test]
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  IMAGE: ghcr.io/thulasiramk-2310/arka
+  TAG: ${{ inputs.tag || 'latest' }}
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Make room
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/containers /var/lib/containers /mnt/iso
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Check the image is signed by the ArkaOS key
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "$TOKEN"
+          cosign verify --key cosign.pub "$IMAGE:$TAG" > /dev/null
+          echo "Signature OK for $IMAGE:$TAG"
+
+      - name: Pull the image
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman pull "$IMAGE:$TAG"
+
+      - name: Build the ISO
+        run: |
+          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            -v "$PWD/installer/config.toml":/config.toml:ro \
+            -v /mnt/iso:/output \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type anaconda-iso --rootfs xfs "$IMAGE:$TAG"
+          cd /mnt/iso/bootiso && sudo sha256sum install.iso | sudo tee install.iso.sha256
+          ls -lh /mnt/iso/bootiso
+
+      - name: Keep it
+        uses: actions/upload-artifact@v4
+        with:
+          name: arka-installer-iso
+          path: |
+            /mnt/iso/bootiso/install.iso
+            /mnt/iso/bootiso/install.iso.sha256
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

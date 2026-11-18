@@ -21,6 +21,13 @@
 # The installed system then takes its updates from the signed public image
 # instead of the ISO's embedded copy.
 #
+# Windows in the boot menu (dual boot, UNTESTED): GRUB reads /boot/grub2/custom.cfg after
+# ArkaOS's own entries, and bootupd never writes that file, so the entry should outlast
+# updates. GRUB looks for Windows' boot manager on every disk at each start and only shows
+# the entry when it finds one, so nothing is detected at install time and a Windows put on
+# later still shows up. No os-prober: it is not in the image and Fedora's bootc GRUB
+# config does not run it.
+#
 # No account is created here: the Users module is turned off and ArkaOS setup
 # (arka-oobe) creates the account on first boot, as on the disk images.
 [customizations.installer.kickstart]
@@ -33,6 +40,20 @@ autopart --type=plain --fstype=xfs --nohome --encrypted
 %post
 awk '$1 ~ /^#/ || $2 != "/"' /etc/fstab > /etc/fstab.arkaos && mv /etc/fstab.arkaos /etc/fstab
 bootc switch --mutate-in-place --transport registry ghcr.io/thulasiramk-2310/arka:latest
+if [ -d /boot/grub2 ] && [ ! -e /boot/grub2/custom.cfg ]; then
+cat > /boot/grub2/custom.cfg <<'EOF'
+# Added by the ArkaOS installer: Windows, when its boot manager is on any disk.
+insmod part_gpt
+insmod fat
+insmod chain
+if search --no-floppy --file --set=windows /EFI/Microsoft/Boot/bootmgfw.efi; then
+  menuentry 'Windows' --class windows --class os {
+    set root=$windows
+    chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+  }
+fi
+EOF
+fi
 %end
 """
 
