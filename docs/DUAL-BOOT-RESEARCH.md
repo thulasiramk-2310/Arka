@@ -40,7 +40,8 @@ Installer:
 - Recommend a separate drive when there is one. Keep dual boot labelled untested until the test matrix passes.
 
 Decisions:
-- Add Windows as a fixed chainload entry in `user.cfg` (the Kinoite way) instead of os-prober. Check that it survives
+- Add Windows as a fixed chainload entry (the Kinoite way) instead of os-prober; on ArkaOS in `custom.cfg`
+  (see the bootupd section below). Check that it survives
   `bootc upgrade` and a rollback.
 - Find out what bootupd does to a shared ESP before shipping. Fedora's own change page warns that it overwrites
   files in `/boot/efi`.
@@ -55,6 +56,42 @@ Tests, in a VM (OVMF + swtpm) and then on real hardware:
 - After `bootc upgrade` and a rollback: the Windows entry is still there.
 - LUKS unlock still works after booting Windows.
 - Real hardware: count the BitLocker recovery prompts on a TPM laptop that came with device encryption.
+
+## What bootupd does to a shared ESP (read from its source, 2026-11-18)
+
+From coreos/bootupd main at c9808ed, by reading the code; nothing here was run.
+
+- Install copies its whole payload onto the ESP: `EFI/fedora/*` and the fallback `EFI/BOOT/BOOTX64.EFI`
+  (`Efi::install` in `src/efi.rs`). So it replaces another system's fallback loader. It never names
+  `EFI/Microsoft`, so Windows Boot Manager's own files are left alone.
+- An update only changes files in the tree recorded in `/boot/bootupd-state.json` and only deletes files that
+  were in that record (`Efi::run_update`, `src/filetree.rs`). Other systems' folders are never deleted.
+- Firmware boot entries (`efibootmgr`) are written only at install, and only with `--update-firmware`; an update
+  writes none. Whether Anaconda passes that flag is not checked yet.
+- `bootupctl update` does not rewrite `grub.cfg`. The static GRUB config reads `user.cfg` before the ArkaOS
+  entries (meant for a GRUB password) and `custom.cfg` after them (`src/grub2/configs.d/41_custom.cfg`), and
+  bootupd writes neither. So the Windows entry goes in `custom.cfg`, not `user.cfg`. That hook exists only when
+  the static configs are installed; whether Fedora's bootc install uses them is to be checked on an installed
+  system.
+- bootupd has no os-prober and no Windows entry of its own.
+
+The installer (`installer/config.toml`, `%post`) now writes a `custom.cfg` that searches every disk for
+`/EFI/Microsoft/Boot/bootmgfw.efi` at each start and shows "Windows" only when it is found.
+
+## VM results, 2026-11-18 (QEMU + OVMF, a Windows-shaped disk, no real Windows)
+
+- `bootc install to-filesystem` does install the static GRUB configs; the `custom.cfg` Windows entry shows in
+  the menu, and only on a disk that has `bootmgfw.efi`.
+- bootc writes a firmware entry at install, named after the image's `/etc/system-release`, and first deletes
+  every entry with that name. With Fedora's file the name is "Fedora", so it would remove a real Fedora's entry.
+  The Containerfile now writes "ArkaOS release 44"; until that image is built, the installer refuses when an
+  entry with the image's name already exists.
+- bootc leaves `/boot` and the root filesystem read-only after install; the installer mounts them again on
+  their own to add `custom.cfg` and the install log.
+- `arka-install` (systemd-repart + bootc): three installs (two next to the Windows layout, one on an empty disk).
+  Windows' four partitions were byte-for-byte unchanged, `bootmgfw.efi` kept its hash, LUKS unlock and the
+  desktop worked, and `bootc upgrade --check` saw the published image. A fresh install uses 11 to 12 GB.
+- Not tested: real Windows 11, BitLocker on a TPM, Secure Boot, real hardware. Dual boot stays untested.
 
 ## Sources
 
