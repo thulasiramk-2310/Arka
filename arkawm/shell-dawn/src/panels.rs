@@ -85,7 +85,7 @@ fn output_of(command: &str) -> Option<String> {
 fn read_quick() -> Quick {
     Quick {
         volume: output_of("wpctl get-volume @DEFAULT_AUDIO_SINK@").and_then(|t| parse_volume(&t)),
-        brightness: output_of("brightnessctl -m").and_then(|t| parse_brightness(&t)),
+        brightness: output_of("brightnessctl -m --class=backlight").and_then(|t| parse_brightness(&t)),
         wifi: output_of("nmcli radio wifi").map(|t| t == "enabled"),
         bluetooth: output_of("rfkill -n -o SOFT list bluetooth").and_then(|t| match t.lines().next()? {
             "unblocked" => Some(true),
@@ -143,7 +143,7 @@ fn level(what: &str) -> Option<String> {
             let text = output_of("wpctl get-volume @DEFAULT_AUDIO_SOURCE@")?;
             Some(if text.contains("MUTED") { "Microphone muted".into() } else { "Microphone on".into() })
         }
-        "brightness" => Some(format!("Brightness {}%", parse_brightness(&output_of("brightnessctl -m")?)?)),
+        "brightness" => Some(format!("Brightness {}%", parse_brightness(&output_of("brightnessctl -m --class=backlight")?)?)),
         "wifi" => Some(if output_of("nmcli radio wifi")? == "enabled" { "Wi-Fi on".into() } else { "Wi-Fi off".into() }),
         _ => None,
     }
@@ -871,7 +871,7 @@ impl Shell {
         let me = shell.clone();
         shell.brightness.connect_value_changed(move |scale| {
             if !me.applying.get() {
-                spawn(&format!("brightnessctl -q set {:.0}%", scale.value()));
+                spawn(&format!("brightnessctl -q --class=backlight set {:.0}%", scale.value()));
             }
         });
         let me = shell.clone();
@@ -1131,6 +1131,10 @@ impl Shell {
                     if let Some(value) = value {
                         scale.set_value(value);
                     }
+                }
+                // a desktop monitor (or a VM) has no backlight to set: no slider stuck at 0
+                if let Some(row) = self.brightness.parent() {
+                    row.set_visible(quick.brightness.is_some());
                 }
                 for (switch, value) in [(&self.wifi, quick.wifi), (&self.bluetooth, quick.bluetooth), (&self.hotspot, quick.hotspot)] {
                     switch.set_sensitive(value.is_some());

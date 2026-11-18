@@ -85,8 +85,8 @@ impl ArkaWm {
             "mute" => ("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", Some("volume")),
             "mic-mute" => ("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", Some("mic")),
             // never all the way to black
-            "brightness-up" => ("brightnessctl -q set 5%+", Some("brightness")),
-            "brightness-down" => ("brightnessctl -q --min-value=2% set 5%-", Some("brightness")),
+            "brightness-up" => ("brightnessctl -q --class=backlight set 5%+", Some("brightness")),
+            "brightness-down" => ("brightnessctl -q --class=backlight --min-value=2% set 5%-", Some("brightness")),
             "wifi" => ("if [ \"$(nmcli radio wifi)\" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi", Some("wifi")),
             "play" => ("playerctl play-pause", None),
             "next" => ("playerctl next", None),
