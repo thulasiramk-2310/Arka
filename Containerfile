@@ -354,6 +354,12 @@ RUN sed -i \
       /usr/lib/os-release && \
     echo "0.1.0-dp1" > /usr/lib/arkaos-release
 
+# bootupd names the firmware boot entry after /etc/system-release and, before adding it,
+# deletes every entry with that name. With Fedora's file the entry was "Fedora", so
+# installing ArkaOS would have removed a real Fedora install's entry on the same computer.
+RUN rm -f /etc/system-release && \
+    printf 'ArkaOS release %s\n' "$(. /usr/lib/os-release && echo "$VERSION_ID")" > /etc/system-release
+
 # ArkaOS has its own welcome; KDE's Konqi tour would fight the identity.
 # kded6's kded_plasma_welcome module launches it whenever plasma-welcomerc
 # lacks [General] LastSeenVersion (verified via strings on the .so), so remove
