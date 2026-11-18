@@ -116,8 +116,9 @@ switch slider { min-width: 18px; min-height: 18px; margin: 2px; border-radius: 9
 .menuitem.m5.shut { transform: translate(-192px, -108px) scale(0.35); }
 
 /* The mark in the middle brings back the desktop; it answers the pointer quietly. */
-.mark { border-radius: 24px; transition: transform 260ms cubic-bezier(0.16,1,0.3,1), opacity 220ms cubic-bezier(0.16,1,0.3,1); }
-.mark.cleared { opacity: 0; transition: opacity 160ms cubic-bezier(0.4,0,1,1); }
+.mark { border-radius: 24px; transition: transform 260ms cubic-bezier(0.16,1,0.3,1); }
+.centre { transition: opacity 220ms cubic-bezier(0.16,1,0.3,1); }
+.centre.cleared { opacity: 0; transition: opacity 160ms cubic-bezier(0.4,0,1,1); }
 .mark .crystal { transition: -gtk-icon-shadow 260ms cubic-bezier(0.16,1,0.3,1); }
 .mark:hover .crystal { -gtk-icon-shadow: 0 0 30px glow(0.5), 0 10px 24px alpha(@background,0.5); }
 .mark:active { transform: scale(0.97); }

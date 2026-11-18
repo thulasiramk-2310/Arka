@@ -1241,6 +1241,7 @@ fn build(app: &gtk::Application) {
     }
 
     let centre = gtk::Box::new(Orientation::Vertical, 0);
+    centre.add_css_class("centre");
     centre.set_size_request(ctx.px(400.0), -1);
     centre.add_css_class("centre");
     // The mark is a control: it folds the apps into it and brings them back (see below).
@@ -2250,8 +2251,9 @@ fn build(app: &gtk::Application) {
             if show_ring && on != ring.has_css_class("folded") {
                 mark.emit_clicked();
             }
-            // the logo in the middle steps aside too: the whole picture, nothing on top
-            for part in [aside.upcast_ref::<gtk::Widget>(), mark.upcast_ref()] {
+            // the logo and its name in the middle step aside too: the whole picture, nothing on top
+            let centre = mark.parent().unwrap_or_else(|| mark.clone().upcast());
+            for part in [aside.upcast_ref::<gtk::Widget>(), &centre] {
                 if on {
                     part.add_css_class("cleared");
                 } else {
