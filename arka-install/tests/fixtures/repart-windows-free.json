@@ -1,0 +1,8 @@
+[
+ {"type":"linux-generic","label":"arka-boot","uuid":"b71cfc6d-4ffb-4f82-b502-daa5338f79f5","partno":4,"file":"/var/tmp/spike/repart/10-boot.conf","node":"/dev/vdb5","offset":26060259328,"old_size":0,"raw_size":2147483648,"old_padding":0,"raw_padding":0,"activity":"create"},
+ {"type":"root-x86-64","label":"arka-root","uuid":"95b59385-2ac9-4193-81ea-7fa9667cad6b","partno":5,"file":"/var/tmp/spike/repart/20-root.conf","node":"/dev/vdb6","offset":28207742976,"old_size":0,"raw_size":35141976064,"old_padding":0,"raw_padding":0,"activity":"create"},
+ {"type":"esp","label":"EFI System Partition","uuid":"e7a7929d-7a82-442c-9a74-2fbfd7b827fa","partno":0,"file":null,"node":"/dev/vdb1","offset":1048576,"old_size":272629760,"raw_size":272629760,"old_padding":0,"raw_padding":0,"activity":"unchanged"},
+ {"type":"e3c9e316-0b5c-4db8-817d-f92df00215ae","label":"Microsoft reserved","uuid":"7ca04dea-1fd1-47fa-8f95-b8686601d466","partno":1,"file":null,"node":"/dev/vdb2","offset":273678336,"old_size":16777216,"raw_size":16777216,"old_padding":0,"raw_padding":0,"activity":"unchanged"},
+ {"type":"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7","label":"Basic data partition","uuid":"1ababf0c-415a-40b2-9386-9b57ecb5da95","partno":2,"file":null,"node":"/dev/vdb3","offset":290455552,"old_size":25769803776,"raw_size":25769803776,"old_padding":37289459712,"raw_padding":0,"activity":"unchanged"},
+ {"type":"de94bba4-06d1-4d40-a16a-bfd50179d6ac","label":"Windows recovery","uuid":"5d3f4976-1241-47ef-b6db-1b64cd50f301","partno":3,"file":null,"node":"/dev/vdb4","offset":63349719040,"old_size":1074773504,"raw_size":1074773504,"old_padding":0,"raw_padding":0,"activity":"unchanged"}
+]

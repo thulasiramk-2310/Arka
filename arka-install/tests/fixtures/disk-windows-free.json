@@ -1,0 +1,12 @@
+{
+ "path":"/dev/vdb","model":null,"serial":null,"size_bytes":64424509440,"transport":"virtio","removable":false,"table":"gpt",
+ "partitions":[
+  {"node":"/dev/vdb1","start":2048,"size":532480,"type":"C12A7328-F81F-11D2-BA4B-00A0C93EC93B","uuid":"E7A7929D-7A82-442C-9A74-2FBFD7B827FA","name":"EFI System Partition","fs":"vfat","fs_label":"SYSTEM"},
+  {"node":"/dev/vdb2","start":534528,"size":32768,"type":"E3C9E316-0B5C-4DB8-817D-F92DF00215AE","uuid":"7CA04DEA-1FD1-47FA-8F95-B8686601D466","name":"Microsoft reserved","fs":null,"fs_label":null},
+  {"node":"/dev/vdb3","start":567296,"size":50331648,"type":"EBD0A0A2-B9E5-4433-87C0-68B6B72699C7","uuid":"1ABABF0C-415A-40B2-9386-9B57ECB5DA95","name":"Basic data partition","fs":null,"fs_label":null},
+  {"node":"/dev/vdb4","start":123729920,"size":2099167,"type":"DE94BBA4-06D1-4D40-A16A-BFD50179D6AC","uuid":"5D3F4976-1241-47EF-B6DB-1B64CD50F301","name":"Windows recovery","fs":null,"fs_label":null}
+ ],
+ "gaps":[{"offset":26060259328,"size":37289459712}],
+ "esp":{"node":"/dev/vdb1","has_windows_boot":true,"free_bytes":272000000,"size_bytes":272629760,"microsoft_files":{"EFI/Microsoft/Boot/bootmgfw.efi":"503baa31ea50da98f1a769c460f678f29b0378998a210cc25344de58c7c529b0"},"other_systems":[]},
+ "has_windows":true,"bitlocker":[],"other_linux":[],"in_use":false,"fingerprint":"x"
+}
