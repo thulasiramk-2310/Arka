@@ -62,6 +62,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "arka-install-ui"
+version = "0.1.0"
+dependencies = [
+ "gtk4",
+ "libadwaita",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arka-oobe"
 version = "0.1.0"
 dependencies = [
