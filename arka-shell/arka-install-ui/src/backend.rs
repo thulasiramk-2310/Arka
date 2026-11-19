@@ -12,8 +12,19 @@ use std::process::{Command, Stdio};
 
 pub const BACKEND: &str = "/usr/libexec/arka-install";
 pub const LOG: &str = "/run/arka-install/install.log";
-/// The image the live system carries, which bootc installs from.
+/// The image bootc installs from: on the live ISO, the OCI directory it carries (the
+/// registry's layers as they are, so the first update downloads only what is new);
+/// elsewhere, the published image in podman's storage.
+pub const LIVE_IMAGE: &str = "/usr/lib/arka-install/image";
 pub const DEFAULT_IMAGE: &str = "ghcr.io/thulasiramk-2310/arka:latest";
+
+pub fn default_image() -> String {
+    if std::path::Path::new(LIVE_IMAGE).join("index.json").exists() {
+        format!("oci:{LIVE_IMAGE}")
+    } else {
+        DEFAULT_IMAGE.into()
+    }
+}
 
 const GIB: u64 = 1 << 30;
 const MIB: u64 = 1 << 20;

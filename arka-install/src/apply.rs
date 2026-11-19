@@ -192,22 +192,31 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
     }
     kargs.push(format!("rd.vconsole.keymap={}", p.keymap));
     kargs.push(format!("vconsole.keymap={}", p.keymap));
-    let mut args: Vec<String> = [
-        "run", "--rm", "--privileged", "--pid=host", "--security-opt", "label=type:unconfined_t",
-        "-v", "/dev:/dev", "-v", "/var/lib/containers:/var/lib/containers", "-v", &vol, &p.image,
-        "bootc", "install", "to-filesystem", "--skip-fetch-check", "--bootloader", "grub",
-        "--target-imgref", &p.target_imgref,
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    for k in &kargs {
-        args.push("--karg".into());
-        args.push(k.clone());
+    let common = ["install", "to-filesystem", "--skip-fetch-check", "--bootloader", "grub", "--target-imgref", &p.target_imgref];
+    let karg_args = kargs.iter().flat_map(|k| ["--karg".to_string(), k.clone()]);
+    if p.image.starts_with("oci:") {
+        // The live ISO: the image is an OCI directory on the ISO and this system is that
+        // image, so bootc runs here and reads the layers from the directory.
+        let mut args: Vec<String> = common.iter().map(|s| s.to_string()).collect();
+        args.splice(2..2, ["--source-imgref".to_string(), p.image.clone()]);
+        args.extend(karg_args);
+        args.push(TARGET.into());
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        run::stream("bootc", &refs)?;
+    } else {
+        let mut args: Vec<String> = [
+            "run", "--rm", "--privileged", "--pid=host", "--security-opt", "label=type:unconfined_t",
+            "-v", "/dev:/dev", "-v", "/var/lib/containers:/var/lib/containers", "-v", &vol, &p.image, "bootc",
+        ]
+        .iter()
+        .chain(common.iter())
+        .map(|s| s.to_string())
+        .collect();
+        args.extend(karg_args);
+        args.push("/target".into());
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        run::stream("podman", &refs)?;
     }
-    args.push("/target".into());
-    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run::stream("podman", &refs)?;
 
     step("verify");
     let now = run::stdout("sfdisk", &["--json", &p.disk.path]).and_then(|s| disk::parse_sfdisk(&s))?;

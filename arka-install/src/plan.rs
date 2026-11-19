@@ -231,8 +231,17 @@ pub fn dry_run(disk: &str, empty_arg: &str) -> Result<Vec<Row>, String> {
 }
 
 /// The name bootupd uses for the firmware entry: /etc/system-release without " release ...".
+/// For an `oci:DIR` image (how the live ISO carries it, with the registry's layers as they
+/// are) the ISO build saves the image's /etc/system-release as DIR.system-release, because
+/// reading one file out of the layers would mean unpacking all of them.
 pub fn entry_label(image: &str) -> Result<String, String> {
-    let s = run::stdout("podman", &["run", "--rm", "--net=none", "--entrypoint", "cat", image, "/etc/system-release"])?;
+    let s = match image.strip_prefix("oci:") {
+        Some(dir) => {
+            let f = format!("{}.system-release", dir.trim_end_matches('/'));
+            std::fs::read_to_string(&f).map_err(|e| format!("could not read {f}: {e}"))?
+        }
+        None => run::stdout("podman", &["run", "--rm", "--net=none", "--entrypoint", "cat", image, "/etc/system-release"])?,
+    };
     let s = s.trim();
     Ok(s.split(" release").next().unwrap_or(s).trim().to_string())
 }

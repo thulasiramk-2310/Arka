@@ -402,7 +402,7 @@ impl App {
         frame.append(&ridge.area);
         window.set_content(Some(&frame));
 
-        let image = std::env::var("ARKA_INSTALL_IMAGE").unwrap_or_else(|_| backend::DEFAULT_IMAGE.into());
+        let image = std::env::var("ARKA_INSTALL_IMAGE").unwrap_or_else(|_| backend::default_image());
         let a = Rc::new(App {
             window: window.clone(),
             pages,
