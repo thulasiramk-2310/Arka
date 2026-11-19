@@ -1,0 +1,74 @@
+name: Live ISO
+
+# Builds the ArkaOS live ISO: a USB stick that starts Arka Install, which puts ArkaOS
+# on a disk (next to Windows, on an empty disk, or over a whole disk). The ISO carries
+# the image it installs, so installing needs no network.
+#
+# On test/* branches the image is built from the branch (it is not published) and the
+# ISO is kept as a downloadable artifact for a few days. Not yet run on master.
+
+on:
+  push:
+    branches: ["test/**"]
+    paths-ignore:
+      - "docs/**"
+      - "website/**"
+      - "assets/**"
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: live-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Make room (image ~11 GB, live image, ISO ~10 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/share/swift /usr/local/share/boost
+          sudo mkdir -p /mnt/containers /var/lib/containers /mnt/out "$HOME/iso-work"
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - name: Build the ArkaOS image from this branch
+        run: sudo podman build --pull=newer -t localhost/arka:build .
+
+      - name: Save it as an OCI directory and read its release name
+        run: |
+          ctx=$HOME/live-ctx
+          mkdir -p "$ctx"
+          cp installer/live/Containerfile installer/live/dracut-live.conf \
+             installer/live/live-profile installer/live/49-arka-install-live.rules "$ctx/"
+          sudo skopeo copy containers-storage:localhost/arka:build "oci:$ctx/image"
+          sudo podman run --rm --net=none --entrypoint cat localhost/arka:build /etc/system-release \
+            | sudo tee "$ctx/image.system-release"
+          sudo du -sh "$ctx/image"
+
+      - name: Build the live system
+        run: |
+          sudo podman build --build-arg BASE=localhost/arka:build -t localhost/arka:live "$HOME/live-ctx"
+          sudo rm -rf "$HOME/live-ctx"
+          df -h / /mnt
+
+      - name: Make the ISO
+        run: |
+          sudo podman run --rm --privileged --security-opt label=disable \
+            --mount type=image,source=localhost/arka:live,destination=/rootfs \
+            -v "$PWD/installer/live/build-iso.sh:/build-iso.sh:ro" \
+            -v /mnt/out:/output -v "$HOME/iso-work:/work" \
+            quay.io/fedora/fedora:44 bash /build-iso.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arkaos-live-iso
+          path: /mnt/out/
+          retention-days: 3
+          compression-level: 0

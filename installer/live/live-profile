@@ -1,0 +1,17 @@
+# ArkaOS live ISO: tty1 runs Arka Install full screen. If it closes it starts again;
+# if cage cannot start three times in a row, this falls through to a plain shell.
+if [ "$(tty)" = /dev/tty1 ]; then
+  printf "\033[2J\033[H\033[?25l"
+  export GSK_RENDERER=cairo GDK_BACKEND=wayland
+  fails=0
+  while [ "$fails" -lt 3 ]; do
+    if cage -- /usr/bin/arka-install-ui >>"$HOME/arka-install-ui.log" 2>&1; then
+      fails=0
+    else
+      fails=$((fails + 1))
+    fi
+    sleep 1
+  done
+  printf "\033[?25h"
+  echo "Arka Install could not start. Its log is $HOME/arka-install-ui.log"
+fi

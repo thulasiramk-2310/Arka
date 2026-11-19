@@ -1,0 +1,7 @@
+// Live ISO only: the setup account runs Arka Install's backend without a password.
+// Installed systems do not have this file; there the backend needs an administrator.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.arkaos.install" && subject.user == "arkasetup") {
+        return polkit.Result.YES;
+    }
+});

@@ -1,0 +1,33 @@
+# The ArkaOS live ISO's system: the ArkaOS image, plus what booting from a USB stick
+# needs, plus the image itself as an OCI directory for Arka Install to put on the disk.
+# Built by .github/workflows/live-iso.yml; build-iso.sh turns it into the ISO.
+ARG BASE=ghcr.io/thulasiramk-2310/arka:latest
+FROM ${BASE}
+
+# An initramfs that can start from the squashfs on the ISO (dracut's dmsquash-live).
+RUN dnf install -y --setopt=install_weak_deps=False dracut-live && dnf clean all
+COPY dracut-live.conf /usr/lib/dracut/dracut.conf.d/40-arka-live.conf
+RUN kver=$(ls /usr/lib/modules) && \
+    DRACUT_NO_XATTR=1 dracut --force --no-hostonly --reproducible \
+      "/usr/lib/modules/$kver/initramfs.img" "$kver"
+
+# tty1 runs Arka Install full screen, through the same autologin + cage path that runs
+# setup on first boot. Its backend gets root through pkexec; on the live system only,
+# the setup account may run it without a password (there is no password to give).
+COPY live-profile /usr/share/arkaos/arkasetup/.bash_profile
+RUN install -m 644 -o arkasetup -g arkasetup /usr/share/arkaos/arkasetup/.bash_profile \
+      /var/home/arkasetup/.bash_profile
+COPY 49-arka-install-live.rules /etc/polkit-1/rules.d/49-arka-install-live.rules
+
+# Units that belong to an installed system. On a live stick they would act on this
+# computer's real disks (the bootloader updater writes the EFI partition) or fail.
+RUN systemctl mask bootloader-update.service bootc-fetch-apply-updates.timer \
+      arka-grub-theme.service arka-bootc-status.timer arka-bootc-status.path \
+      arkaos-firstboot.service \
+      $(rpm -ql greenboot | grep -E '^/usr/lib/systemd/system/[^/]+\.(service|timer)$' | xargs -n1 basename)
+
+# The image Arka Install installs, as an OCI directory (the registry's layers as they
+# are, so an installed system's first update downloads only what is new), and its
+# /etc/system-release, which names the firmware boot entry.
+COPY image/ /usr/lib/arka-install/image/
+COPY image.system-release /usr/lib/arka-install/image.system-release
