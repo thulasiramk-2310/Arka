@@ -66,6 +66,27 @@ jobs:
             -v /mnt/out:/output -v "$HOME/iso-work:/work" \
             quay.io/fedora/fedora:44 bash /build-iso.sh
 
+      - name: Test the ISO in a VM (install next to a fake Windows, Secure Boot on)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 qemu-utils gdisk mtools dosfstools socat
+          sudo modprobe vhost_vsock
+          mkdir -p "$HOME/ovmf"
+          sudo podman run --rm quay.io/fedora/fedora:44 bash -c \
+            'dnf install -y -q edk2-ovmf >/dev/null && tar -C /usr/share/edk2/ovmf -c OVMF_CODE_4M.secboot.qcow2 OVMF_VARS_4M.secboot.qcow2' \
+            | tar -x -C "$HOME/ovmf"
+          sudo OVMF_CODE="$HOME/ovmf/OVMF_CODE_4M.secboot.qcow2" OVMF_VARS="$HOME/ovmf/OVMF_VARS_4M.secboot.qcow2" \
+            bash tests/live-iso/run.sh /mnt/out/arkaos-live.iso /mnt/test-out
+
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-iso-test
+          path: /mnt/test-out/
+          retention-days: 7
+
       - uses: actions/upload-artifact@v4
         with:
           name: arkaos-live-iso
