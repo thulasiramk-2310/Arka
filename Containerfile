@@ -15,6 +15,12 @@ COPY arka-pulse/ /arka-pulse/
 RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
       --features dbus --manifest-path /arka-pulse/Cargo.toml
 
+# arka-install: the installer backend (disk probe, repart plan, bootc apply), static musl.
+# Its screens (arka-install-ui) are built with the other GTK apps below.
+COPY arka-install/ /arka-install/
+RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
+      --manifest-path /arka-install/Cargo.toml
+
 # Stage 2: build the arka-shell GTK4 apps (glibc required, not musl)
 FROM docker.io/fedora:${FEDORA_VERSION} AS shell-builder
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q gtk4-devel gtk4-layer-shell-devel libadwaita-devel rust cargo gcc pkgconf-pkg-config
@@ -103,6 +109,7 @@ COPY systemd/greenboot-set-rollback-trigger.service.d/10-arkaos-stop-at-shutdown
 COPY arka-apply-look /usr/libexec/arka-apply-look
 COPY convert/arka-convert /usr/bin/arka-convert
 COPY apps/arka-install /usr/bin/arka
+COPY arka-install/org.arkaos.install.policy /usr/share/polkit-1/actions/org.arkaos.install.policy
 COPY apps/apps.json /usr/share/arkaos/apps.json
 COPY convert/arka-convert-image.desktop /usr/share/kio/servicemenus/arka-convert-image.desktop
 COPY convert/arka-convert-pdf.desktop /usr/share/kio/servicemenus/arka-convert-pdf.desktop
@@ -153,6 +160,8 @@ COPY --from=shell-builder /build/target/release/arka-sound      /usr/bin/arka-so
 COPY --from=shell-builder /build/target/release/arka-bluetooth  /usr/bin/arka-bluetooth
 COPY --from=shell-builder /build/target/release/arka-privacy-tray /usr/bin/arka-privacy-tray
 COPY --from=shell-builder /build/target/release/arka-oobe /usr/bin/arka-oobe
+COPY --from=builder /arka-install/target/x86_64-unknown-linux-musl/release/arka-install /usr/libexec/arka-install
+COPY --from=shell-builder /build/target/release/arka-install-ui /usr/bin/arka-install-ui
 COPY --from=shell-builder /build/target/release/arka-privacy-dots /usr/bin/arka-privacy-dots
 COPY --from=wheel-builder /build/out/arka-wheel /usr/bin/arka-wheel
 COPY --from=wheel-builder /build-edit/out/arka-edit /usr/bin/arka-edit
@@ -708,5 +717,6 @@ RUN chmod 755 /usr/bin/arkad /usr/bin/arka-pulsed /usr/bin/arka-oobe \
       /usr/bin/arka-dashboard /usr/bin/arka-wifi /usr/bin/arka-update \
       /usr/bin/arka-hotkeys /usr/bin/arka-capsule /usr/bin/arka-perms \
       /usr/bin/arka-settings-gtk /usr/bin/arka-welcome /usr/bin/arka-sound \
-      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray /usr/bin/arka-privacy-dots && \
+      /usr/bin/arka-bluetooth /usr/bin/arka-privacy-tray /usr/bin/arka-privacy-dots \
+      /usr/libexec/arka-install /usr/bin/arka-install-ui && \
     bootc container lint
