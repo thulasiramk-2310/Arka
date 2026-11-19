@@ -136,7 +136,7 @@ pub fn parse<T: for<'de> Deserialize<'de>>(stdout: &str, ok: bool) -> Said<T> {
 
 /// pkexec exits 126 when the password dialog is dismissed or the password is wrong, and 127
 /// when this user may not run the installer at all.
-const NOT_ALLOWED: &str = "Installing needs an administrator password. It was not given, so nothing was read or written.";
+const NOT_ALLOWED: &str = "Installing needs an administrator password. It was not given, so nothing was read or written. Go back and continue to be asked again.";
 
 fn denied(code: Option<i32>) -> bool {
     std::env::var("ARKA_INSTALL_BACKEND").map(|v| v.trim().is_empty()).unwrap_or(true) && !is_root() && matches!(code, Some(126 | 127))
