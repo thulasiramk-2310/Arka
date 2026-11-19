@@ -183,6 +183,33 @@ fn mount_all(root_dev: &str, boot: &str, esp: &str, c: &mut Cleanup) -> Result<(
     Ok(())
 }
 
+/// Closes the encrypted volume. Right after an unmount something (udev, a file manager) can
+/// hold the device for a moment, and on the live system it did: "still in use". Retry for a
+/// few seconds; if it still will not close, say what holds it and ask for a deferred close
+/// (the kernel closes it when the last user lets go). The install itself is already done and
+/// checked, and the next steps use other partitions, so this must not fail it.
+fn close_luks(c: &mut Cleanup) {
+    if !c.opened_luks {
+        return;
+    }
+    for _ in 0..15 {
+        let _ = run::capture("udevadm", &["settle", "--timeout=3"]);
+        if run::capture("cryptsetup", &["close", LUKS_NAME]).map(|o| o.ok).unwrap_or(false) {
+            c.opened_luks = false;
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    let holders = run::capture("sh", &["-c", &format!("dmsetup info {LUKS_NAME}; ls -l /sys/block/dm-*/holders 2>&1; findmnt -R -S /dev/mapper/{LUKS_NAME}; grep {LUKS_NAME} /proc/*/mountinfo 2>/dev/null | head -5")])
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+    log(&format!("the encrypted volume would not close after 15 tries; what holds it:\n{holders}"));
+    if run::capture("cryptsetup", &["close", "--deferred", LUKS_NAME]).map(|o| o.ok).unwrap_or(false) {
+        log("asked for a deferred close");
+        c.opened_luks = false;
+    }
+}
+
 fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid: Option<&str>, c: &mut Cleanup) -> Result<Outcome, String> {
     step("install");
     let vol = format!("{TARGET}:/target");
@@ -266,14 +293,14 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
         }
     }
     if !copied {
-        log("could not copy the install log into the installed system");
+        log(&format!(
+            "could not copy the install log into the installed system (deploy dir readable: {})",
+            std::path::Path::new(&format!("{TARGET}/ostree/deploy")).is_dir()
+        ));
     }
     run::stdout("umount", &[TARGET])?;
     c.mounted_target = false;
-    if c.opened_luks {
-        run::stdout("cryptsetup", &["close", LUKS_NAME])?;
-        c.opened_luks = false;
-    }
+    close_luks(c);
 
     step("boot-menu");
     // bootc leaves /boot read-only; mount it on its own to add the Windows entry.
