@@ -42,11 +42,12 @@ wait_ssh() { # TRIES
   for _ in $(seq "$1"); do S true 2>/dev/null && return 0; sleep 10; done; return 1
 }
 stop_vm() {
+  [ -f "$W/pid" ] || return 0
   S 'systemctl poweroff' 2>/dev/null || true
   for _ in $(seq 30); do kill -0 "$(cat "$W/pid")" 2>/dev/null || return 0; sleep 2; done
   python3 "$H/qmp.py" "$W/qmp" quit || true; sleep 2
 }
-fail() { log "FAIL: $*"; shot fail; stop_vm; exit 1; }
+fail() { log "FAIL: $*"; shot fail; stop_vm; chmod -R a+rX "$OUT"; exit 1; }
 
 log "boot the live ISO (Secure Boot on)"
 vm live -drive file="$ISO",media=cdrom,readonly=on,if=none,id=cd0 -device ide-cd,drive=cd0,bootindex=0
@@ -57,13 +58,13 @@ sleep 20; shot live-1-installer
 S 'mokutil --sb-state; cat /proc/cmdline; findmnt /; systemctl --failed --no-legend' > "$OUT/live-system.txt" 2>&1 || true
 
 log "probe"
-S 'arka-install probe' > "$OUT/probe.json" || fail "probe"
+S '/usr/libexec/arka-install probe' > "$OUT/probe.json" || fail "probe"
 log "plan next to Windows, encrypted"
-S 'mkdir -p /run/arka-install && arka-install plan --disk /dev/vda --mode free --image oci:/usr/lib/arka-install/image --keymap us --out /run/arka-install/plan.json' \
+S 'mkdir -p /run/arka-install && /usr/libexec/arka-install plan --disk /dev/vda --mode free --image oci:/usr/lib/arka-install/image --keymap us --out /run/arka-install/plan.json' \
   > "$OUT/plan.json" || fail "plan: $(tail -c 600 "$OUT/plan.json")"
 log "apply"
 rc=0
-printf '%s\n' "$PASS" | S 'arka-install apply --plan /run/arka-install/plan.json' > "$OUT/apply.out" 2> "$OUT/apply.err" || rc=$?
+printf '%s\n' "$PASS" | S '/usr/libexec/arka-install apply --plan /run/arka-install/plan.json' > "$OUT/apply.out" 2> "$OUT/apply.err" || rc=$?
 S 'cat /run/arka-install/install.log' > "$OUT/install.log" 2>&1 || true
 S 'efibootmgr' > "$OUT/efibootmgr-live.txt" 2>&1 || true
 shot live-2-after-apply
@@ -91,4 +92,5 @@ S 'bootc status; echo; cat /proc/cmdline; echo; findmnt /sysroot; echo; efibootm
 grep -q "Booted image" "$OUT/installed-system.txt" || fail "bootc status did not report a booted image"
 grep -q "Windows" "$OUT/installed-system.txt" || fail "no Windows entry in custom.cfg"
 stop_vm
+chmod -R a+rX "$OUT"
 log "PASS"
