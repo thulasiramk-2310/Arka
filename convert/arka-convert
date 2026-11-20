@@ -4,6 +4,8 @@
     arka-convert FORMAT FILE...        convert each FILE to FORMAT (pictures: png, jpg, webp,
                                        avif, tiff, bmp, pdf)
     arka-convert --targets FILE        list the formats FILE can become
+    arka-convert --unreadable FILE     name the codec a sound or video FILE needs that Fedora leaves
+                                       out (so it can't be read), or print nothing
     arka-convert --find-private PICTURE  suggest boxes over email addresses, card and phone numbers
                                        and IBANs that OCR reads in a picture (JSON; nothing changed)
     arka-convert text FILE...          save the words in a picture or PDF as a .txt (OCR when the
@@ -60,16 +62,26 @@ import sys
 import tempfile
 import time
 
-IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"}
+# ico and icns are Windows and Mac icons: read as a picture, the biggest size the icon holds.
+IMAGE = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif", "ico", "icns"}
 # Pillow on Fedora reads no AVIF, so ffmpeg (dav1d) turns one into a PNG first, and writes AVIF too.
 FFMPEG_IMAGE = {"avif"}
-AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"}
-VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"}
+# Mac sound (AIFF, CAF, iPhone ringtones) and Windows Media sound and video are read too. Some of
+# them need a codec Fedora leaves out (WMA Pro, WMV9): no_decoder() names it when that happens.
+AUDIO = {"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac", "aif", "aiff", "aifc", "caf", "wma", "m4r"}
+VIDEO = {"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv", "wmv"}
 # Word, Excel and PowerPoint files, and their open-format twins. LibreOffice turns them into PDFs.
 OFFICE = {"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"}
 # Plain text, and the text kinds Dolphin counts as plain text (it shows "Convert to" for them too).
 # LibreOffice opens each as plain text, so it can become Word, PDF or ODT with its words as they are.
 TEXT = {"txt", "text", "log", "md", "markdown", "rst", "csv", "tsv", "json", "xml", "yaml", "yml", "ini", "conf", "cfg"}
+# Apple's Pages, Numbers and Keynote files, and the Microsoft Office format each becomes. LibreOffice
+# reads them (libetonyek). A Mac can also keep one as a folder (a package): only the one-file kind is read.
+IWORK = {"pages": "docx", "numbers": "xlsx", "key": "pptx"}
+# Windows drawings (EMF, WMF), as Office and clip art use them. LibreOffice draws them.
+DRAWING = {"emf", "wmf"}
+# XPS, Windows' own page format, which Macs and Linux don't open. xpstopdf (libgxps) turns it into a PDF.
+XPS = {"xps", "oxps"}
 # Pictures that "smaller" can shrink. Animated and old formats are left alone.
 SMALLER_IMAGE = {"png", "jpg", "jpeg", "webp"}
 
@@ -82,6 +94,9 @@ TARGETS = {
     "office": ["pdf", "zip"],
     "text": ["docx", "pdf", "odt", "zip"],
     "archive": ["extract", "zip"],
+    "iwork": ["docx", "xlsx", "pptx", "pdf", "zip"],   # targets_for() keeps the one that fits the file
+    "drawing": ["png", "pdf", "zip"],
+    "xps": ["pdf", "zip"],
 }
 
 # "clean" (mat2) removes hidden details such as location, camera, author and
@@ -94,7 +109,8 @@ NAMES = {"png": "PNG", "jpg": "JPEG", "webp": "WebP", "avif": "AVIF", "tiff": "T
          "m4a": "AAC (m4a)", "mp4": "MP4", "mkv": "MKV", "webm": "WebM",
          "smaller-pdf": "a smaller PDF", "smaller-image": "a smaller picture",
          "smaller-audio": "a smaller MP3", "smaller-video": "a smaller MP4",
-         "docx": "Word (layout may differ)", "odt": "ODT (LibreOffice)", "zip": "a ZIP file", "text": "text (read by OCR, may have mistakes)",
+         "docx": "Word (layout may differ)", "xlsx": "Excel (layout may differ)",
+         "pptx": "PowerPoint (layout may differ)", "odt": "ODT (LibreOffice)", "zip": "a ZIP file", "text": "text (read by OCR, may have mistakes)",
          "clean": "a copy without hidden details"}
 
 # ffmpeg output options for each target. -vn drops any cover art or video.
@@ -164,15 +180,62 @@ def kind_of(path):
         return "office"
     if ext in TEXT:
         return "text"
+    if ext in IWORK:
+        # A .key file is also what TLS and SSH keys are called: only a ZIP is taken for Keynote.
+        return "iwork" if not Path(path).exists() or is_zip(path) else None
+    if ext in DRAWING:
+        return "drawing"
+    if ext in XPS:
+        return "xps"
     if archive_stem(path):
         return "archive"
     return None
+
+
+def is_zip(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"PK\x03\x04"
+    except OSError:
+        return False
+
+
+# What Fedora's ffmpeg names a codec it has no decoder for, and the name people know it by.
+CODEC_NAMES = {"hevc": "HEVC (H.265)", "vc1": "Windows Media Video 9 (VC-1)",
+               "wmv3": "Windows Media Video 9", "wmapro": "WMA Pro", "wmalossless": "WMA Lossless",
+               "eac3": "Dolby Digital Plus", "dts": "DTS", "msmpeg4v3": "DivX 3", "aac_latm": "AAC LATM"}
+
+
+def missing_codec(errors):
+    """The name of the codec an ffmpeg error says it has no decoder for, or None."""
+    m = re.search(r"no decoder found for: (\w+)", errors)
+    return CODEC_NAMES.get(m.group(1), m.group(1).upper()) if m else None
+
+
+def no_decoder(errors):
+    """The plain reason for an ffmpeg error that is a missing decoder, or None for any other error."""
+    name = missing_codec(errors)
+    return f"it uses {name}, which ArkaOS can't read: Fedora leaves that decoder out for patent reasons" if name else None
+
+
+def unreadable(path):
+    """The codec a sound or video file needs and ArkaOS has no decoder for, or None: ffmpeg decodes a
+    moment of its first picture and first sound, in the sandbox."""
+    if kind_of(path) not in ("audio", "video"):
+        return None
+    with tempfile.TemporaryDirectory(prefix="arka-convert-") as d:
+        done = subprocess.run(sandbox_prefix(Path(d)) + [
+            "ffmpeg", "-nostdin", "-v", "error", "-i", str(Path(path).resolve()), "-map", "0:v:0?", "-map", "0:a:0?",
+            "-t", "0.2", "-f", "null", "-"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+    return missing_codec(done.stderr)
 
 
 def targets_for(path):
     kind = kind_of(path)
     ext = Path(path).suffix.lower().lstrip(".")
     ext = {"jpeg": "jpg", "tif": "tiff"}.get(ext, ext)
+    if kind == "iwork":
+        return [IWORK[ext], "pdf", "zip"]
     return [t for t in TARGETS.get(kind, ["zip"])
             if t != ext and (t != "clean" or ext in CLEAN_EXT) and (t != "smaller-image" or ext in SMALLER_IMAGE)]
 
@@ -230,7 +293,7 @@ def run(scratch, cmd, timeout=None, private_tmp=False):
         raise RuntimeError(f"{cmd[0]} took too long and was stopped") from None
     if done.returncode != 0:
         lines = [l for l in done.stderr.strip().splitlines() if l.strip()]
-        raise RuntimeError(lines[-1] if lines else f"{cmd[0]} failed")
+        raise RuntimeError(no_decoder(done.stderr) or (lines[-1] if lines else f"{cmd[0]} failed"))
 
 
 def media_seconds(scratch, inp):
@@ -273,8 +336,9 @@ def run_ffmpeg(scratch, cmd, total, on_progress):
                 proc.terminate()
                 proc.wait()
     if proc.returncode != 0:
-        lines = [l for l in errors.read_text(errors="replace").splitlines() if l.strip()]
-        raise RuntimeError(lines[-1] if lines else "ffmpeg failed")
+        text = errors.read_text(errors="replace")
+        lines = [l for l in text.splitlines() if l.strip()]
+        raise RuntimeError(no_decoder(text) or (lines[-1] if lines else "ffmpeg failed"))
 
 
 def readable_image(scratch, src):
@@ -423,6 +487,31 @@ def convert_one(src, fmt, on_progress=None, level="light"):
                 run(scratch, [sys.executable, "-I", os.path.realpath(__file__),
                               "--image-worker", inp, str(tmp), fmt])
             made = [tmp]
+        elif kind == "iwork":
+            # LibreOffice reads Apple's file and saves the Office twin or a PDF, in the sandbox.
+            work = scratch / f"in{src.suffix.lower()}"
+            shutil.copyfile(src, work)
+            out_filter = {"docx": "docx:MS Word 2007 XML", "xlsx": "xlsx:Calc MS Excel 2007 XML",
+                          "pptx": "pptx:Impress MS PowerPoint 2007 XML", "pdf": "pdf"}[fmt]
+            # The Apple filter is named, so a damaged file is not read as plain text instead.
+            in_filter = {".pages": "Apple Pages", ".numbers": "Apple Numbers", ".key": "Apple Keynote"}[src.suffix.lower()]
+            unread = "LibreOffice could not read it: it may be from a newer Pages, Numbers or Keynote, or damaged"
+            try:
+                run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
+                              "--norestore", f"--infilter={in_filter}", "--convert-to", out_filter, "--outdir",
+                              str(scratch), str(work)], timeout=240, private_tmp=True)
+            except RuntimeError as e:
+                raise RuntimeError(unread if "could not be loaded" in str(e) else str(e)) from None
+            made = [scratch / f"in.{fmt}"]
+            if not made[0].exists():
+                raise RuntimeError(unread)
+        elif kind == "drawing":
+            made = [drawing_to(scratch, src, fmt)]
+        elif kind == "xps":
+            work = scratch / f"in{src.suffix.lower()}"
+            shutil.copyfile(src, work)
+            run(scratch, ["xpstopdf", work.name, "out.pdf"], timeout=240)
+            made = [scratch / "out.pdf"]
         elif kind == "office":
             # LibreOffice does the work, inside the same sandbox, on a copy with a plain name.
             work = scratch / f"in{src.suffix.lower()}"
@@ -512,6 +601,37 @@ def convert_one(src, fmt, on_progress=None, level="light"):
         return results
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def drawing_to(scratch, src, fmt):
+    """An EMF or WMF drawing as a PDF or PNG the size of the drawing. LibreOffice centres it on an A4
+    page, so the page is cropped to what is drawn (Ghostscript measures it); the PDF stays vector."""
+    work = scratch / f"in{src.suffix.lower()}"
+    shutil.copyfile(src, work)
+    run(scratch, ["soffice", f"-env:UserInstallation=file://{scratch}/lo-profile", "--headless",
+                  "--norestore", "--convert-to", "pdf", "--outdir", str(scratch), str(work)],
+        timeout=240, private_tmp=True)
+    page = scratch / "in.pdf"
+    if not page.exists():
+        raise RuntimeError("LibreOffice could not draw it: it may be damaged")
+    done = subprocess.run(sandbox_prefix(scratch) + ["gs", "-q", "-dSAFER", "-dNOPAUSE", "-dBATCH", "-sDEVICE=bbox",
+                                                     str(page)],
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+    m = re.search(r"%%HiResBoundingBox: ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)", done.stderr)
+    if not m or float(m.group(3)) <= float(m.group(1)) or float(m.group(4)) <= float(m.group(2)):
+        raise RuntimeError("the drawing is empty")
+    margin = 4   # points, so nothing drawn touches the edge
+    x0, y0, x1, y1 = (float(v) for v in m.groups())
+    x0, y0, x1, y1 = x0 - margin, y0 - margin, x1 + margin, y1 + margin
+    cropped = scratch / "out.pdf"
+    run(scratch, ["gs", "-q", "-dSAFER", "-dNOPAUSE", "-dBATCH", "-sDEVICE=pdfwrite", "-dFIXEDMEDIA",
+                  f"-dDEVICEWIDTHPOINTS={x1 - x0:.2f}", f"-dDEVICEHEIGHTPOINTS={y1 - y0:.2f}",
+                  "-sOutputFile=" + str(cropped), "-c", f"<</PageOffset [{-x0:.2f} {-y0:.2f}]>> setpagedevice",
+                  "-f", str(page)], timeout=120)
+    if fmt == "pdf":
+        return cropped
+    run(scratch, ["pdftoppm", "-png", "-r", "300", "-singlefile", str(cropped), str(scratch / "out")], timeout=120)
+    return scratch / "out.png"
 
 
 def image_fit_worker(src, dst, ext, limit):
@@ -1239,8 +1359,8 @@ def audio_codec(ext):
     return ["-c:a", "libopus", "-b:a", "128k"] if ext == "webm" else ["-c:a", "aac", "-b:a", "192k"]
 
 
-# Standard volume: EBU R128 loudness normalisation to -16 LUFS (true peak -1.5 dB), the level most
-# podcast and video sites play at. Measured in a first pass, then applied as one gain where possible
+# Standard volume: EBU R128 loudness normalisation to -16 LUFS (true peak -1.5 dB), the loudness Apple
+# recommends for podcasts. Measured in a first pass, then applied as one gain where possible
 # (linear), so the file's own quiet and loud parts keep their difference.
 LOUDNESS = "I=-16:TP=-1.5:LRA=11"
 
@@ -2151,6 +2271,15 @@ def main(argv):
             seconds = media_seconds(Path(d), str(Path(argv[2]).resolve()))
         print(f"{seconds:.3f}" if seconds else "")
         return 0 if seconds else 1
+    if len(argv) == 3 and argv[1] == "--unreadable":
+        # For the wheel: the codec this sound or video needs and ArkaOS can't read, or nothing.
+        try:
+            why = unreadable(argv[2])
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            why = None
+        if why:
+            print(why)
+        return 0
     if len(argv) == 3 and argv[1] == "--targets":
         print("\n".join(targets_for(argv[2])))
         return 0
@@ -2209,7 +2338,7 @@ def main(argv):
             return 2
     # "smaller" means the smaller-... action that fits each file, so one menu entry covers a mixed selection.
     per_file = {"image": "smaller-image", "pdf": "smaller-pdf", "audio": "smaller-audio", "video": "smaller-video"}
-    heavy = any(kind_of(f) in ("audio", "video", "office", "text") for f in files) or fmt == "docx"
+    heavy = any(kind_of(f) in ("audio", "video", "office", "text", "iwork", "drawing", "xps") for f in files) or fmt == "docx"
     nid = notify("Making smaller" if fmt == "smaller" else f"Converting to {NAMES.get(fmt, fmt)}",
                  files[0] if len(files) == 1 else f"{len(files)} files", urgency="low") if heavy else None
     made, failed = [], []

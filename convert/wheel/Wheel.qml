@@ -74,7 +74,7 @@ Window {
                                     mp3: "MP3", wav: "WAV", flac: "FLAC", ogg: "OGG", opus: "Opus", m4a: "M4A", mp4: "MP4",
                                     mkv: "MKV", webm: "WebM", "smaller-pdf": "Smaller PDF", "smaller-image": "Smaller",
                                     "smaller-audio": "Smaller", "smaller-video": "Smaller", zip: "ZIP", "zip-all": "Zip together",
-                                    docx: "Word (rough)", text: "Text (OCR)", more: "More",
+                                    docx: "Word (rough)", xlsx: "Excel", pptx: "PowerPoint", text: "Text (OCR)", more: "More",
                                     "smaller:light": "Light", "smaller:medium": "Medium", "smaller:strong": "Strong",
                                     "smaller:10mb": "Under 10 MB", "smaller:25mb": "Under 25 MB",
                                     crop: "Crop", redact: "Black out", background: "Background", "rotate-left": "Rotate left",
@@ -102,6 +102,7 @@ Window {
         if (!edit && isPdf() && f === "png") return "PNG pages"
         if (!edit && isVideo() && f === "mp3") return "MP3 audio"
         if (!edit && isText() && f === "docx") return "Word"   // from plain text nothing is lost
+        if (!edit && ext() === "pages" && f === "docx") return "Word"
         if (!edit && f === "zip" && files.length > 1) return "ZIP each"
         return names[f] || f.toUpperCase()   // an unknown format name is written as formats are
     }
@@ -111,7 +112,8 @@ Window {
                     avif: "image-x-generic", pdf: "x-office-document", "smaller-pdf": "x-office-document", mp3: "audio-mpeg",
                     wav: "audio-x-wav", flac: "audio-flac", ogg: "audio-ogg", opus: "audio-x-generic", m4a: "audio-mp4",
                     mp4: "video-mp4", mkv: "video-x-matroska", webm: "video-webm", zip: "application-zip",
-                    "zip-all": "application-zip", docx: "x-office-document", odt: "x-office-document", text: "text-x-generic" }
+                    "zip-all": "application-zip", docx: "x-office-document", odt: "x-office-document", text: "text-x-generic",
+                    xlsx: "x-office-spreadsheet", pptx: "x-office-presentation" }
         if (m[f]) return m[f]
         if (String(f).indexOf("smaller") === 0) return "view-restore"
         return ""
@@ -129,11 +131,13 @@ Window {
                     "pdf-combine": "Put the pictures into one PDF, in the order you picked them",
                     searchable: "Save a copy whose words can be found and copied", resize: "Choose a width",
                     "copy-path": "Copy where the file is to the clipboard",
-                    "loudness": "Save a copy as loud as most podcasts and videos play (-16 LUFS)",
+                    "loudness": "Save a copy at -16 LUFS, the loudness Apple recommends for podcasts",
                     speed: "Choose a speed", snapshot: "Open a window to pick a moment and save that frame as a picture" }
         if (d[f]) return d[f]
         if (String(f).indexOf("smaller") === 0) return "Save a smaller copy"
         if (String(f).indexOf("speed:") === 0) return "Save a copy at " + label(f).toLowerCase() + "; voices keep their pitch"
+        if (["pages", "numbers", "key"].indexOf(ext()) >= 0 && ["docx", "xlsx", "pptx"].indexOf(f) >= 0)
+            return "Save a copy as " + label(f) + "; the layout may differ from the Mac's"
         return "Save a copy as " + label(f)
     }
     function ext() { return files.length ? String(files[0]).split(".").pop().toLowerCase() : "" }
@@ -145,11 +149,13 @@ Window {
     // What the hint says when the ring is empty.
     function emptyHint() {
         if (!files.length) return "Move the file you are dragging over the wheel, or press Esc"
+        const why = wheel.whyUnreadable(files)
+        if (why) return why
         if (edit) return "Edits work on pictures, PDFs, sound, video and text files"
         if (isHeic()) return "iPhone HEIC photos can't be converted yet: Fedora has no decoder for them"
         return "This file can't be converted yet"
     }
-    function isVideo() { return ["mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"].indexOf(ext()) >= 0 }
+    function isVideo() { return ["mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv", "wmv"].indexOf(ext()) >= 0 }
     function fileLabel() {
         if (!files.length) return ""
         if (files.length > 1) return files.length + " files"
@@ -167,10 +173,10 @@ Window {
                                       split: "One PDF per page", more: "More choices", zip: "Put it in a ZIP",
                                       "zip-all": "All in one ZIP", "smaller-image": "A smaller copy", "smaller-pdf": "A smaller copy",
                                       "smaller-audio": "A smaller copy", "smaller-video": "A smaller copy",
-                                      "loudness": "As loud as most videos", speed: "Choose a speed",
+                                      "loudness": "Podcast loudness", speed: "Choose a speed",
                                       snapshot: "Save one frame" })
     readonly property var targets: ["png", "jpg", "webp", "avif", "tiff", "bmp", "pdf", "mp3", "wav", "flac", "ogg", "opus",
-                                    "m4a", "mp4", "mkv", "webm", "docx", "text"]
+                                    "m4a", "mp4", "mkv", "webm", "docx", "xlsx", "pptx", "text"]
     function hubText() {
         // The middle says what picking the slot does, in other words than the slot's own label.
         if (hover >= 0 && hover < formats.length) {

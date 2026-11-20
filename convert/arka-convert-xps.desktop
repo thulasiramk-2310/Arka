@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+MimeType=application/vnd.ms-xpsdocument;application/oxps;
+Actions=pdf;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action pdf]
+Name=PDF
+Exec=arka-convert pdf %F
+Icon=application-pdf

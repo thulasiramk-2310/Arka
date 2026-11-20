@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install the converters and Qt
         run: |
-          dnf install -y -q ffmpeg-free python3-pillow poppler-utils ghostscript bubblewrap mat2 bsdtar 7zip \
+          dnf install -y -q ffmpeg-free python3-pillow poppler-utils ghostscript bubblewrap mat2 bsdtar 7zip libgxps-tools \
             tesseract tesseract-langpack-eng cmake gcc-c++ extra-cmake-modules qt6-qtbase-devel \
             qt6-qtdeclarative-devel qt6-qtmultimedia kf6-kglobalaccel-devel kf6-kwindowsystem-devel \
             layer-shell-qt-devel dbus-daemon

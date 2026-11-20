@@ -119,6 +119,11 @@ COPY convert/arka-smaller.desktop /usr/share/kio/servicemenus/arka-smaller.deskt
 COPY convert/arka-zip.desktop /usr/share/kio/servicemenus/arka-zip.desktop
 COPY convert/arka-convert-audio.desktop /usr/share/kio/servicemenus/arka-convert-audio.desktop
 COPY convert/arka-convert-video.desktop /usr/share/kio/servicemenus/arka-convert-video.desktop
+COPY convert/arka-convert-pages.desktop /usr/share/kio/servicemenus/arka-convert-pages.desktop
+COPY convert/arka-convert-numbers.desktop /usr/share/kio/servicemenus/arka-convert-numbers.desktop
+COPY convert/arka-convert-keynote.desktop /usr/share/kio/servicemenus/arka-convert-keynote.desktop
+COPY convert/arka-convert-drawing.desktop /usr/share/kio/servicemenus/arka-convert-drawing.desktop
+COPY convert/arka-convert-xps.desktop /usr/share/kio/servicemenus/arka-convert-xps.desktop
 COPY convert/arka-wheel-servicemenu.desktop /usr/share/kio/servicemenus/arka-wheel.desktop
 COPY convert/arka-clean.desktop /usr/share/kio/servicemenus/arka-clean.desktop
 COPY convert/arka-edit-image.desktop /usr/share/kio/servicemenus/arka-edit-image.desktop
@@ -653,7 +658,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bin
 # The format wheel (arka-wheel) needs Qt Quick, KGlobalAccel, KWindowSystem and
 # LayerShellQt, which Plasma already brings; listed so they stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
-    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 tesseract tesseract-langpack-eng bsdtar \
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 tesseract tesseract-langpack-eng bsdtar libgxps-tools \
       qt6-qtdeclarative qt6-qtmultimedia kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
 # Git, offered next to VARA in setup's Advanced options.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \

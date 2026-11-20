@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Service
-MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/avif;
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/avif;image/vnd.microsoft.icon;image/x-icns;
 Actions=png;jpg;webp;avif;pdf;tiff;bmp;text;
 X-KDE-Submenu=Convert to
 X-KDE-Priority=TopLevel

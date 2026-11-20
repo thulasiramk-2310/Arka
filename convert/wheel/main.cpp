@@ -14,10 +14,12 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFont>
 #include <QFontDatabase>
+#include <QHash>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -56,13 +58,29 @@ static bool isArchive(const QString &path)
     return false;
 }
 
+// Sound and video arka-convert converts (AUDIO and VIDEO there), Mac and Windows kinds included.
+static const QStringList ConvertAudio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac", "aif", "aiff", "aifc",
+                                      "caf", "wma", "m4r"};
+static const QStringList ConvertVideo{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv", "wmv"};
+
+// A one-file Pages, Numbers or Keynote document is a ZIP (a Mac can also keep one as a folder). The
+// check also keeps TLS and SSH .key files away from "Keynote".
+static bool isZipFile(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) && f.read(4) == QByteArray("PK\x03\x04", 4);
+}
+
 // The formats each kind of file can become, in wheel order. Every entry must
 // also be a target in arka-convert, which checks the request again anyway.
 static QStringList formatsForFile(const QString &path)
 {
-    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"};
-    static const QStringList audio{"mp3", "wav", "flac", "ogg", "oga", "opus", "m4a", "aac"};
-    static const QStringList video{"mp4", "mkv", "webm", "mov", "avi", "m4v", "ogv"};
+    // ico and icns: Windows and Mac icons, read as pictures.
+    static const QStringList image{"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif", "ico", "icns"};
+    const QStringList &audio = ConvertAudio;
+    const QStringList &video = ConvertVideo;
+    static const QStringList drawing{"emf", "wmf"};   // Windows drawings
+    static const QStringList xps{"xps", "oxps"};      // Windows' page format
     static const QStringList office{"doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "ppt", "pptx", "odp"};
     // The same list as TEXT in arka-convert.
     static const QStringList text{"txt", "text", "log", "md", "markdown", "rst", "csv", "tsv", "json", "xml", "yaml",
@@ -83,6 +101,17 @@ static QStringList formatsForFile(const QString &path)
         out = {"pdf", "zip"};
     else if (text.contains(ext))
         out = {"docx", "pdf", "odt", "zip"};
+    // Apple's Pages, Numbers and Keynote: the Microsoft Office twin first, as Windows opens it.
+    else if (ext == "pages" && isZipFile(path))
+        out = {"docx", "pdf", "zip"};
+    else if (ext == "numbers" && isZipFile(path))
+        out = {"xlsx", "pdf", "zip"};
+    else if (ext == "key" && isZipFile(path))
+        out = {"pptx", "pdf", "zip"};
+    else if (drawing.contains(ext))
+        out = {"png", "pdf", "zip"};
+    else if (xps.contains(ext))
+        out = {"pdf", "zip"};
     else if (QFileInfo(path).isFile())
         out = {"zip"}; // any other file can still be put in a ZIP
     out.removeAll(ext == "jpeg" ? QStringLiteral("jpg") : ext == "tif" ? QStringLiteral("tiff") : ext); // not the format it already is
@@ -202,8 +231,44 @@ public:
         return ok ? qBound(0.0, factor, 4.0) : 1.0;
     }
 
+    // The codec a dragged sound or video needs and Fedora leaves out (HEVC from an iPhone, WMV9 and
+    // so on), asked of arka-convert once per version of the file; empty when every file can be read.
+    // A file that can't be read gets no slots, and the wheel says why instead.
+    Q_INVOKABLE QString whyUnreadable(const QList<QUrl> &urls) const
+    {
+        for (const QUrl &u : urls) {
+            if (!u.isLocalFile())
+                continue;
+            const QString path = u.toLocalFile();
+            const QFileInfo fi(path);
+            const QString ext = fi.suffix().toLower();
+            if (!fi.isFile() || !(ConvertAudio.contains(ext) || ConvertVideo.contains(ext)))
+                continue;
+            const QString key = path + QLatin1Char('\n') + QString::number(fi.size()) + QLatin1Char('\n')
+                              + QString::number(fi.lastModified().toMSecsSinceEpoch());
+            auto it = m_codecs.constFind(key);
+            if (it == m_codecs.constEnd()) {
+                QProcess p;
+                p.start(QStringLiteral("arka-convert"), {QStringLiteral("--unreadable"), path});
+                QString codec;
+                if (p.waitForFinished(4000))   // bounded: a slow disk must not hang the wheel
+                    codec = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+                else
+                    p.kill();
+                it = m_codecs.insert(key, codec);
+            }
+            if (!it->isEmpty()) {
+                const QString why = QStringLiteral("ArkaOS can't read %1: Fedora leaves it out for patent reasons").arg(*it);
+                return urls.size() > 1 ? fi.fileName() + QStringLiteral(": ") + why : why;
+            }
+        }
+        return {};
+    }
+
     Q_INVOKABLE QStringList formatsFor(const QList<QUrl> &urls) const
     {
+        if (!whyUnreadable(urls).isEmpty())
+            return {};
         QStringList common;
         bool first = true;
         for (const QUrl &u : urls) {
@@ -243,7 +308,7 @@ public:
     // or more sounds (or videos) joined; everything else works on one file at a time.
     Q_INVOKABLE QStringList toolsFor(const QList<QUrl> &urls) const
     {
-        if (urls.isEmpty())
+        if (urls.isEmpty() || !whyUnreadable(urls).isEmpty())
             return {};
         for (const QUrl &u : urls)
             if (!u.isLocalFile())
@@ -414,6 +479,9 @@ Q_SIGNALS:
     // Empty urls: wait for a dragged file. Otherwise: click mode for these files.
     // edit: show the edits instead of the formats.
     void opened(const QList<QUrl> &urls, bool edit);
+
+private:
+    mutable QHash<QString, QString> m_codecs;   // file + size + time -> codec it can't read ("" = fine)
 };
 
 int main(int argc, char **argv)

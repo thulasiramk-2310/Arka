@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Service
+MimeType=application/vnd.apple.numbers;application/x-iwork-numbers-sffnumbers;
+Actions=xlsx;pdf;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action xlsx]
+Name=Excel
+Exec=arka-convert xlsx %F
+Icon=x-office-spreadsheet
+
+[Desktop Action pdf]
+Name=PDF
+Exec=arka-convert pdf %F
+Icon=application-pdf

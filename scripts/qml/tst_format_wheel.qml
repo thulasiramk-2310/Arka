@@ -17,6 +17,10 @@ TestCase {
         property var chosenUrls: []
         property real motion: 1
         function animationScale() { return motion }
+        function whyUnreadable(urls) {
+            return urls.length && String(urls[0]).endsWith("hevc.mov")
+                ? "ArkaOS can't read HEVC (H.265): Fedora leaves it out for patent reasons" : ""
+        }
         function dark() { return true }
         function sizeText(urls) { return urls.length ? "1.2 MiB" : "" }
         function totalBytes(urls) { return String(urls[0]).indexOf("big") >= 0 ? 30000000 : 1200000 }
@@ -253,6 +257,13 @@ TestCase {
         picker.open(["file:///tmp/photo.jpg"], false)
         compare(picker.levelMode, false)
         compare(picker.formats[1], "smaller-image")
+    }
+
+    function test_a_video_whose_codec_is_left_out_says_which_in_both_wheels() {
+        picker.open(["file:///tmp/iphone-hevc.mov"], false)
+        compare(picker.emptyHint(), "ArkaOS can't read HEVC (H.265): Fedora leaves it out for patent reasons")
+        picker.open(["file:///tmp/iphone-hevc.mov"], true)
+        verify(picker.emptyHint().indexOf("HEVC") >= 0)
     }
 
     function test_empty_ring_hint_explains_heic_and_stays_plain_otherwise() {

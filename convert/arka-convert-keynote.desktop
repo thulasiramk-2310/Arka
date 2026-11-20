@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Service
+MimeType=application/vnd.apple.keynote;application/x-iwork-keynote-sffkey;
+Actions=pptx;pdf;
+X-KDE-Submenu=Convert to
+X-KDE-Priority=TopLevel
+
+[Desktop Action pptx]
+Name=PowerPoint
+Exec=arka-convert pptx %F
+Icon=x-office-presentation
+
+[Desktop Action pdf]
+Name=PDF
+Exec=arka-convert pdf %F
+Icon=application-pdf

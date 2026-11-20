@@ -1006,7 +1006,10 @@ class MediaEditTest(unittest.TestCase):
         ffmpeg("-f", "lavfi", "-i", "sine=frequency=300:duration=4", str(src))
         done = convert("speed", str(src), "0.5")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertAlmostEqual(media_info(self.made("half speed"))[0], 8, delta=0.3)
+        slow = self.made("half speed")
+        self.assertAlmostEqual(media_info(slow)[0], 8, delta=0.3)
+        # The pitch stays: the 300 Hz tone is still 300 Hz, not dropped an octave to 150 Hz.
+        self.assertGreater(tone_power(slow, 2, 2, 300), 50 * tone_power(slow, 2, 2, 150))
         self.assertNotEqual(convert("speed", str(src), "3").returncode, 0)
 
     @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
@@ -1223,6 +1226,178 @@ class NewPictureFormatsTest(unittest.TestCase):
         self.assertNotIn("tiff", convert("--targets", "x.tif").stdout.split())
         self.assertNotIn("avif", convert("--targets", "x.avif").stdout.split())
         self.assertIn("avif", convert("--targets", "x.png").stdout.split())
+
+
+# A one-frame 64x64 HEVC (H.265) video in a MOV, as an iPhone records, made with x265. Fedora's ffmpeg
+# has no HEVC decoder, which is what the test checks.
+TINY_HEVC_MOV = (
+    "AAAAFGZ0eXBxdCAgAAACAHF0ICAAAAAId2lkZQAAAB9tZGF0AAAAEygBryb6VQP/7ul/85Mh1tBSn54AAAMXbW9vdgAAAGxt"
+    "dmhkAAAAAAAAAAAAAAAAAAAD6AAAAMgAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqN0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAMgA"
+    "AAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAEAAAABAAAAAAAAkZWR0cwAAABxl"
+    "bHN0AAAAAAAAAAEAAADIAAAAAAABAAAAAAIbbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAACAB//wAAAAAALWhkbHIA"
+    "AAAAbWhscnZpZGUAAAAAAAAAAAAAAAAMVmlkZW9IYW5kbGVyAAABxm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACxoZGxy"
+    "AAAAAGRobHJ1cmwgAAAAAAAAAAAAAAAAC0RhdGFIYW5kbGVyAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAAB"
+    "AAABWnN0YmwAAAD2c3RzZAAAAAAAAAABAAAA5mh2YzEAAAAAAAAAAQAAAABGRk1QAAACAAAAAgAAQABAAEgAAABIAAAAAAAA"
+    "AAEMTGF2YyBsaWJ4MjY1AAAAAAAAAAAAAAAAAAAAAAAAAAAY//8AAAB2aHZjQwEBYAAAAJAAAAAAAB7wAPz9+PgAAA8DoAAB"
+    "ABhAAQwB//8BYAAAAwCQAAADAAADAB6VmAmhAAEAKUIBAQFgAAADAJAAAAMAAAMAHqAggQWWVmkkyvAWgIAAAAMAgAAAAwKE"
+    "ogABAAdEAcFytCJAAAAACmZpZWwBAAAAABBwYXNwAAAAAQAAAAEAAAAYc3R0cwAAAAAAAAABAAAAAQAACAAAAAAcc3RzYwAA"
+    "AAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAFwAAAAEAAAAUc3RjbwAAAAAAAAABAAAAJA=="
+)
+
+
+def wmf_rectangle(width=200, height=100):
+    """A Windows metafile (WMF) with one filled rectangle, written record by record."""
+    import struct
+    def record(func, *params):
+        return struct.pack("<IH", 3 + len(params), func) + struct.pack("<%dh" % len(params), *params)
+    body = (record(0x020B, 0, 0) + record(0x020C, height, width)                        # window origin, size
+            + struct.pack("<IHHIH", 7, 0x02FC, 0, 0x003CC81E, 0)                        # solid brush
+            + record(0x012D, 0) + record(0x041B, height - 10, width - 10, 10, 10)       # select it, rectangle
+            + record(0x0000))
+    words = (18 + len(body)) // 2
+    header = struct.pack("<HHHIHIH", 1, 9, 0x0300, words, 1, 7, 0)
+    placeable = struct.pack("<IHhhhhHI", 0x9AC6CDD7, 0, 0, 0, width, height, 96, 0)
+    check = 0
+    for (w,) in struct.iter_unpack("<H", placeable):
+        check ^= w
+    return placeable + struct.pack("<H", check) + header + body
+
+
+def xps_page(path):
+    """An XPS document with one Letter-size page and a red square on it."""
+    import zipfile
+    ns = "http://schemas.microsoft.com/xps/2005/06"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml",
+                   '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                   '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                   '<Default Extension="fdseq" ContentType="application/vnd.ms-package.xps-fixeddocumentsequence+xml"/>'
+                   '<Default Extension="fdoc" ContentType="application/vnd.ms-package.xps-fixeddocument+xml"/>'
+                   '<Default Extension="fpage" ContentType="application/vnd.ms-package.xps-fixedpage+xml"/></Types>')
+        z.writestr("_rels/.rels",
+                   '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                   '<Relationship Type="http://schemas.microsoft.com/xps/2005/06/fixedrepresentation" '
+                   'Target="/FixedDocSeq.fdseq" Id="R0"/></Relationships>')
+        z.writestr("FixedDocSeq.fdseq", f'<FixedDocumentSequence xmlns="{ns}">'
+                   '<DocumentReference Source="/Documents/1/FixedDoc.fdoc"/></FixedDocumentSequence>')
+        z.writestr("Documents/1/FixedDoc.fdoc", f'<FixedDocument xmlns="{ns}">'
+                   '<PageContent Source="/Documents/1/Pages/1.fpage"/></FixedDocument>')
+        z.writestr("Documents/1/Pages/1.fpage", f'<FixedPage xmlns="{ns}" Width="816" Height="1056" xml:lang="en-US">'
+                   '<Path Data="M 96,96 L 400,96 400,400 96,400 Z" Fill="#FFC81E3C"/></FixedPage>')
+
+
+def has_decoder(name):
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-decoders"], capture_output=True, text=True).stdout
+    return any(line.split()[1:2] == [name] for line in out.splitlines())
+
+
+class AppleWindowsFormatsTest(unittest.TestCase):
+    """Files from Macs, iPhones and Windows that the other side can't open, added 2026-11-20."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_windows_and_mac_icons_become_pictures_at_their_biggest_size(self):
+        from PIL import Image
+        im = Image.new("RGBA", (256, 256), (30, 120, 200, 255))
+        im.save(self.dir / "app.ico", sizes=[(16, 16), (256, 256)])
+        im.save(self.dir / "app.icns")
+        for name in ("app.ico", "app.icns"):
+            with self.subTest(icon=name):
+                self.assertIn("png", convert("--targets", str(self.dir / name)).stdout.split())
+                (self.dir / "app.png").unlink(missing_ok=True)
+                r = convert("png", str(self.dir / name))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                with Image.open(self.dir / "app.png") as out:
+                    self.assertGreaterEqual(out.size[0], 256)
+                    self.assertEqual(out.convert("RGB").getpixel((out.size[0] // 2,) * 2), (30, 120, 200))
+
+    def test_mac_and_windows_sound_becomes_wav(self):
+        made = {"voice.caf": ["-c:a", "pcm_s16le", "-f", "caf"], "song.aiff": ["-c:a", "pcm_s16be"],
+                "old.wma": ["-c:a", "wmav2"], "ring.m4r": ["-c:a", "aac", "-f", "ipod"]}
+        for name, opts in made.items():
+            with self.subTest(file=name):
+                ffmpeg("-f", "lavfi", "-i", "sine=f=440:d=1", *opts, str(self.dir / name))
+                r = convert("wav", str(self.dir / name))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                seconds, *_ = media_info(self.dir / (Path(name).stem + ".wav"))
+                self.assertAlmostEqual(seconds, 1, delta=0.1)
+
+    @unittest.skipUnless("libopenh264" in encoders(), "MP4 needs openh264 (ArkaOS has it)")
+    def test_old_windows_media_video_becomes_mp4(self):
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=s=320x240:d=1:r=25", "-f", "lavfi", "-i", "sine=d=1",
+               "-c:v", "wmv2", "-c:a", "wmav2", str(self.dir / "clip.wmv"))
+        r = convert("mp4", str(self.dir / "clip.wmv"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        seconds, w, h, sound = media_info(self.dir / "clip.mp4")
+        self.assertEqual((w, h, sound), (320, 240, True))
+
+    def test_a_missing_decoder_is_named_in_plain_words(self):
+        mod = load_script()
+        line = "[vist#0:0/hevc @ 0x55] Decoding requested, but no decoder found for: hevc"
+        self.assertEqual(mod.missing_codec(line), "HEVC (H.265)")
+        self.assertEqual(mod.no_decoder(line), "it uses HEVC (H.265), which ArkaOS can't read: "
+                                               "Fedora leaves that decoder out for patent reasons")
+        self.assertIsNone(mod.no_decoder("Invalid data found when processing input"))
+
+    @unittest.skipIf(has_decoder("hevc"), "this ffmpeg reads HEVC (Fedora's, as in ArkaOS, does not)")
+    def test_an_iphone_hevc_video_is_turned_down_by_name(self):
+        import base64
+        mov = self.dir / "IMG_0001.mov"
+        mov.write_bytes(base64.b64decode("".join(TINY_HEVC_MOV)))
+        self.assertEqual(convert("--unreadable", str(mov)).stdout.strip(), "HEVC (H.265)")
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "HEVC .H.265., which ArkaOS can't read"):
+            mod.convert_one(mov, "mp4")
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["IMG_0001.mov"])
+        # A video it can read says nothing.
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=s=64x64:d=0.2", "-c:v", "mpeg4", str(self.dir / "fine.mp4"))
+        self.assertEqual(convert("--unreadable", str(self.dir / "fine.mp4")).stdout, "")
+
+    @unittest.skipUnless(shutil.which("soffice") and shutil.which("gs") and shutil.which("pdftoppm"),
+                         "needs LibreOffice, Ghostscript and poppler (ArkaOS has them)")
+    def test_windows_drawing_becomes_png_and_pdf_the_size_of_the_drawing(self):
+        from PIL import Image
+        import re
+        (self.dir / "chart.wmf").write_bytes(wmf_rectangle())
+        for fmt in ("pdf", "png"):
+            r = convert(fmt, str(self.dir / "chart.wmf"))
+            self.assertEqual(r.returncode, 0, r.stderr)
+        size = subprocess.run(["pdfinfo", str(self.dir / "chart.pdf")], capture_output=True, text=True).stdout
+        w, h = map(float, re.search(r"Page size:\s+([\d.]+) x ([\d.]+)", size).groups())
+        # The 200x100 drawing at 96 dpi is 150x75 points, less its 10-pixel border, plus a 4-point margin: not an A4 page.
+        self.assertLess(w, 160)
+        self.assertLess(h, 85)
+        self.assertGreater(w / h, 1.6)
+        with Image.open(self.dir / "chart.png") as im:
+            rgb = im.convert("RGB")
+            self.assertEqual(rgb.getpixel((rgb.size[0] // 2, rgb.size[1] // 2)), (30, 200, 60))
+            self.assertLess(rgb.size[0], 800)
+
+    @unittest.skipUnless(shutil.which("xpstopdf"), "needs xpstopdf (libgxps-tools; ArkaOS has it)")
+    def test_xps_becomes_a_pdf_with_its_page(self):
+        xps_page(self.dir / "letter.xps")
+        self.assertEqual(convert("--targets", str(self.dir / "letter.xps")).stdout.split(), ["pdf", "zip"])
+        r = convert("pdf", str(self.dir / "letter.xps"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        info = subprocess.run(["pdfinfo", str(self.dir / "letter.pdf")], capture_output=True, text=True).stdout
+        self.assertIn("612 x 792", info)
+
+    @unittest.skipUnless(shutil.which("soffice"), "needs LibreOffice (ArkaOS has it)")
+    def test_a_damaged_pages_file_says_so_and_leaves_nothing(self):
+        import zipfile
+        with zipfile.ZipFile(self.dir / "report.pages", "w") as z:
+            z.writestr("Index/Document.iwa", b"not really a document")
+        self.assertEqual(convert("--targets", str(self.dir / "report.pages")).stdout.split(), ["docx", "pdf", "zip"])
+        mod = load_script()
+        with self.assertRaisesRegex(RuntimeError, "LibreOffice could not read it"):
+            mod.convert_one(self.dir / "report.pages", "docx")
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["report.pages"])
 
 
 class FitToSizeTest(unittest.TestCase):

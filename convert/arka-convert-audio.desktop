@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Service
-MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;
+MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;audio/x-aiff;audio/x-aifc;audio/x-caf;audio/x-ms-wma;audio/x-m4r;
 Actions=mp3;flac;wav;ogg;opus;m4a;
 X-KDE-Submenu=Convert to
 X-KDE-Priority=TopLevel

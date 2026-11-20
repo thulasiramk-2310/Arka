@@ -18,6 +18,7 @@ CONVERT = ROOT / "convert" / "arka-convert"
 
 
 def cpp_list(name):
+    name = {"audio": "ConvertAudio", "video": "ConvertVideo"}.get(name, name)
     m = re.search(r"static const QStringList %s\{([^}]*)\}" % name, SOURCE)
     return re.findall(r'"([^"]+)"', m.group(1))
 
@@ -28,6 +29,9 @@ def wheel_slots():
     for kind, cond in (("image", "image.contains(ext)"), ("audio", "audio.contains(ext)"),
                        ("video", "video.contains(ext)"), ("pdf", 'ext == "pdf"'),
                        ("office", "office.contains(ext)"), ("text", "text.contains(ext)"),
+                       ("pages", 'ext == "pages" && isZipFile(path)'), ("numbers", 'ext == "numbers" && isZipFile(path)'),
+                       ("key", 'ext == "key" && isZipFile(path)'), ("drawing", "drawing.contains(ext)"),
+                       ("xps", "xps.contains(ext)"),
                        ("other", "QFileInfo(path).isFile()")):
         m = re.search(re.escape(cond) + r"\)\s*out = \{([^}]*)\};", SOURCE)
         slots[kind] = re.findall(r'"([^"]+)"', m.group(1))
@@ -56,7 +60,9 @@ class WheelFormatsTest(unittest.TestCase):
 
     def test_every_wheel_slot_is_accepted_by_arka_convert(self):
         exts = {"image": cpp_list("image"), "audio": cpp_list("audio"), "video": cpp_list("video"), "pdf": ["pdf"],
-                "office": cpp_list("office"), "text": cpp_list("text"), "other": ["dat"]}
+                "office": cpp_list("office"), "text": cpp_list("text"), "other": ["dat"],
+                "pages": ["pages"], "numbers": ["numbers"], "key": ["key"], "drawing": cpp_list("drawing"),
+                "xps": cpp_list("xps")}
         for kind, slots in wheel_slots().items():
             for ext in exts[kind]:
                 accepted = targets(f"file.{ext}")
@@ -68,6 +74,25 @@ class WheelFormatsTest(unittest.TestCase):
                         continue  # the wheel drops it for pictures that can't be made smaller
                     with self.subTest(kind=kind, ext=ext, slot=slot):
                         self.assertIn(slot, accepted)
+
+
+class SameKindsTest(unittest.TestCase):
+    def test_wheel_and_converter_read_the_same_sound_and_video_kinds(self):
+        text = CONVERT.read_text()
+        for name in ("AUDIO", "VIDEO"):
+            with self.subTest(kind=name):
+                converter = set(re.findall(r'"([^"]+)"', re.search(r"^%s = \{([^}]*)\}" % name, text, re.M).group(1)))
+                self.assertEqual(set(cpp_list(name.lower())), converter)
+
+    def test_a_tls_key_is_not_taken_for_keynote(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            key = Path(d) / "server.key"
+            key.write_text("-----BEGIN PRIVATE KEY-----\n")
+            self.assertEqual(targets(str(key)), ["zip"])
+            deck = Path(d) / "deck.key"
+            deck.write_bytes(b"PK\x03\x04" + bytes(26))
+            self.assertEqual(targets(str(deck)), ["pptx", "pdf", "zip"])
 
 
 class ZipTogetherTest(unittest.TestCase):
