@@ -1,6 +1,7 @@
 #!/bin/bash
 # windows-disk.sh FILE: an 80 GiB sparse disk laid out like a Windows 11 install (EFI
-# system partition with EFI/Microsoft/Boot/bootmgfw.efi, Microsoft reserved, 24 GiB
+# system partition with EFI/Microsoft/Boot/bootmgfw.efi and the fallback EFI/Boot/bootx64.efi
+# Windows also writes, Microsoft reserved, 24 GiB
 # data, 1 GiB recovery at the end) with about 54 GiB free between data and recovery.
 # The data partition gets 16 random 1 MiB blocks, all inside the data partition; FILE.sums records their hashes and
 # the boot file's, for check-windows.sh to compare after an install.
@@ -15,8 +16,9 @@ sgdisk -n 1:2048:+260M -t 1:EF00 -c 1:"EFI System Partition" \
 mkfs.fat --offset 2048 -F 32 -s 1 -n SYSTEM "$f" 266240 >/dev/null
 o=$((2048 * 512))
 head -c 1500000 /dev/urandom > "$f.bootmgfw"
-mmd -i "$f@@$o" ::EFI ::EFI/Microsoft ::EFI/Microsoft/Boot
+mmd -i "$f@@$o" ::EFI ::EFI/Microsoft ::EFI/Microsoft/Boot ::EFI/Boot
 mcopy -i "$f@@$o" "$f.bootmgfw" ::EFI/Microsoft/Boot/bootmgfw.efi
+mcopy -i "$f@@$o" "$f.bootmgfw" ::EFI/Boot/bootx64.efi
 start3=$(sgdisk -i 3 "$f" | awk '/First sector/ {print $3}')
 : > "$f.sums"
 for i in $(seq 0 15); do

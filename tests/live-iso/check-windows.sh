@@ -16,5 +16,9 @@ done < "$f.sums"
 o=$((2048 * 512))
 got=$(mtype -i "$f@@$o" ::EFI/Microsoft/Boot/bootmgfw.efi | sha256sum | cut -c1-64)
 [ "$got" = "$(awk '/^bootmgfw/ {print $2}' "$f.sums")" ] || { echo "bootmgfw.efi CHANGED"; bad=1; }
+# The fallback loader is reported, not required: the installer says on screen whether it changed.
+fb=$(mtype -i "$f@@$o" ::EFI/Boot/bootx64.efi 2>/dev/null | sha256sum | cut -c1-64)
+if [ "$fb" = "$(awk '/^bootmgfw/ {print $2}' "$f.sums")" ]; then echo "fallback EFI/Boot/bootx64.efi: unchanged (Windows')"
+else echo "fallback EFI/Boot/bootx64.efi: REPLACED"; mdir -i "$f@@$o" ::EFI/Boot || true; fi
 [ $bad = 0 ] && echo "Windows partitions, 16 data blocks and bootmgfw.efi unchanged"
 exit $bad
