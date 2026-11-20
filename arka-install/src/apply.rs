@@ -183,6 +183,17 @@ fn mount_all(root_dev: &str, boot: &str, esp: &str, c: &mut Cleanup) -> Result<(
     Ok(())
 }
 
+/// Unmounts every mount of the new root filesystem that is left anywhere. When bootc runs
+/// on the live system itself (not in a container) it leaves /run/bootc/storage mounted from
+/// the new root. That mount keeps the encrypted volume open, and, because it is the same
+/// read-only filesystem, makes a second mount of it read-only too.
+fn release_mounts(device: &str) {
+    let list = run::capture("findmnt", &["-rno", "TARGET", "-S", device]).map(|o| o.stdout).unwrap_or_default();
+    for target in list.lines().rev().map(str::trim).filter(|t| !t.is_empty()) {
+        let _ = run::capture("umount", &["-R", target]);
+    }
+}
+
 /// Closes the encrypted volume. Right after an unmount something (udev, a file manager) can
 /// hold the device for a moment, and on the live system it did: "still in use". Retry for a
 /// few seconds; if it still will not close, say what holds it and ask for a deferred close
@@ -192,6 +203,7 @@ fn close_luks(c: &mut Cleanup) {
     if !c.opened_luks {
         return;
     }
+    release_mounts(&format!("/dev/mapper/{LUKS_NAME}"));
     for _ in 0..15 {
         let _ = run::capture("udevadm", &["settle", "--timeout=3"]);
         if run::capture("cryptsetup", &["close", LUKS_NAME]).map(|o| o.ok).unwrap_or(false) {
@@ -279,6 +291,7 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
 
     run::stdout("umount", &["-R", TARGET])?;
     c.mounted_target = false;
+    release_mounts(root_dev);
     // bootc leaves the root filesystem read-only too: mount it again on its own to give the
     // installed system's /var a copy of the log.
     run::stdout("mount", &[root_dev, TARGET])?;
