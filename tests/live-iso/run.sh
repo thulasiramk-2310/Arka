@@ -89,7 +89,7 @@ log "installed system up"
 sleep 30; shot installed-3-running
 S 'bootc status; echo; cat /proc/cmdline; echo; findmnt /sysroot; echo; efibootmgr; echo; cat /boot/grub2/custom.cfg; echo; mokutil --sb-state; systemctl is-system-running' \
   > "$OUT/installed-system.txt" 2>&1 || true
-grep -q "Booted image" "$OUT/installed-system.txt" || fail "bootc status did not report a booted image"
+awk '/^  booted:/{b=1} /^  rollback:/{b=0} b && /imageDigest: sha256:/{f=1} END{exit !f}' "$OUT/installed-system.txt" || fail "bootc status did not report a booted image"
 grep -q "Windows" "$OUT/installed-system.txt" || fail "no Windows entry in custom.cfg"
 stop_vm
 chmod -R a+rX "$OUT"
