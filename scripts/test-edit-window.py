@@ -126,6 +126,23 @@ class EditWindowTest(unittest.TestCase):
         parts = self.wait_for("(part ")
         self.assertEqual(len(parts), 2)
 
+    def test_picture_of_a_frame_saves_the_middle_moment_by_default(self):
+        from PIL import Image
+        src = self.dir / "clip.mp4"
+        # mpeg4 and aac are encoders that Fedora's ffmpeg-free has too.
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=4",
+                        "-c:v", "mpeg4", str(src)], check=True)
+        self.run_window("snapshot", src, "k enter")
+        out = self.wait_for("(picture at 2.0s)")[0]
+        with Image.open(out) as im:
+            self.assertEqual((im.format, im.size), ("PNG", (320, 240)))
+
+    def test_picture_of_a_frame_needs_a_video(self):
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_FORCE_STDERR_LOGGING="1", PATH=f"{self.bin}:{os.environ['PATH']}")
+        done = subprocess.run([EDIT, "snapshot", str(self.sound())], env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("needs a video", done.stderr)
+
     def test_bleep_part_dragged_on_the_timeline_is_saved(self):
         src = self.sound()
         # Drag across the left part of the timeline, then Enter.

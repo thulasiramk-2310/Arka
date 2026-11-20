@@ -653,7 +653,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked --mount=type=bin
 # The format wheel (arka-wheel) needs Qt Quick, KGlobalAccel, KWindowSystem and
 # LayerShellQt, which Plasma already brings; listed so they stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
-    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 tesseract tesseract-langpack-eng \
+    dnf install --setopt=keepcache=True -y -q ffmpeg-free python3-pillow poppler-utils mat2 tesseract tesseract-langpack-eng bsdtar \
       qt6-qtdeclarative qt6-qtmultimedia kf6-kglobalaccel kf6-kwindowsystem layer-shell-qt
 # Git, offered next to VARA in setup's Advanced options.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \

@@ -977,6 +977,60 @@ class MediaEditTest(unittest.TestCase):
         self.assertAlmostEqual(first + second, 4, delta=0.2)
         self.assertNotEqual(convert("split-media", str(src), "9").returncode, 0)  # after the end
 
+    def loudness(self, path):
+        out = subprocess.run(["ffmpeg", "-nostdin", "-i", str(path), "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+                             capture_output=True, text=True).stderr
+        return float(json.loads(out[out.rindex("{"):out.rindex("}") + 1])["input_i"])
+
+    def test_set_loudness_brings_a_quiet_sound_to_the_steady_level(self):
+        src = self.dir / "quiet.wav"
+        ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-af", "volume=0.05", str(src))
+        self.assertLess(self.loudness(src), -40)
+        done = convert("loudness", str(src))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertAlmostEqual(self.loudness(self.made("standard volume")), -16, delta=1.5)
+        self.assertTrue(src.exists(), "the original stays")
+
+    @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
+    def test_set_loudness_copies_a_videos_picture_and_refuses_a_silent_one(self):
+        done = convert("loudness", str(self.video()))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        seconds, w, h, sound = media_info(self.made("standard volume"))
+        self.assertEqual((w, h), (320, 240))
+        self.assertTrue(sound)
+        self.assertAlmostEqual(seconds, 4, delta=0.2)
+        self.assertNotEqual(convert("loudness", str(self.video("mute.webm", sound=False))).returncode, 0)
+
+    def test_speed_halves_a_sound_and_refuses_other_speeds(self):
+        src = self.dir / "talk.wav"
+        ffmpeg("-f", "lavfi", "-i", "sine=frequency=300:duration=4", str(src))
+        done = convert("speed", str(src), "0.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertAlmostEqual(media_info(self.made("half speed"))[0], 8, delta=0.3)
+        self.assertNotEqual(convert("speed", str(src), "3").returncode, 0)
+
+    @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
+    def test_double_speed_video_is_half_as_long_with_its_sound(self):
+        done = convert("speed", str(self.video()), "2")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        seconds, w, h, sound = media_info(self.made("double speed"))
+        self.assertAlmostEqual(seconds, 2, delta=0.2)
+        self.assertEqual((w, h), (320, 240))
+        self.assertTrue(sound)
+
+    @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
+    def test_snapshot_saves_the_picture_at_that_moment(self):
+        from PIL import Image
+        src = self.video()
+        done = convert("snapshot", str(src), "1.5")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        out = self.made("picture at 1.5s")
+        self.assertEqual(out.suffix, ".png")
+        with Image.open(out) as im:
+            self.assertEqual(im.size, (320, 240))
+        self.assertNotEqual(convert("snapshot", str(src), "9").returncode, 0)   # after the end
+        self.assertNotEqual(convert("snapshot", str(self.sound()), "1").returncode, 0)   # a sound has no picture
+
     @unittest.skipUnless(WEBM_OK, "ffmpeg has no VP9/Opus encoder here")
     def test_join_videos_fits_the_second_inside_the_first_and_adds_silence(self):
         a = self.video("a.webm")
@@ -1511,6 +1565,56 @@ class WheelAdditionsTest(unittest.TestCase):
         r = convert("extract", str(self.dir / "link.tar"))
         self.assertNotEqual(r.returncode, 0, "a link to outside the folder is refused")
         self.assertEqual(self.names(), ["evil.zip", "link.tar"])
+
+    # Two RAR files from libarchive's test suite (BSD-2-Clause): no free program writes RAR.
+    # test_read_format_rar.rar: test.txt, testdir/test.txt, an empty folder and a link to test.txt.
+    RAR = ("UmFyIRoHAM+QcwAADQAAAAAAAACEUnQgkDIAFAAAABQAAAADQqLIvrd22j4UMAgApIEAAHRlc3QudHh0gAi3dto+t3baPnRlc3Qg"
+           "dGV4dCBkb2N1bWVudA0KnS90IJAyAAgAAAAIAAAAA3tEybbRTNg+FDAIAP+hAAB0ZXN0bGlua8AI0UzYPlBf2j50ZXN0LnR4dM3g"
+           "dCCQOgAUAAAAFAAAAANCosi+Y3faPhQwEACkgQAAdGVzdGRpclx0ZXN0LnR4dMDMY3faPmN32j50ZXN0IHRleHQgZG9jdW1lbnQN"
+           "CqHIdOCQMQAAAAAAAAAAAAMAAAAAY3faPhQwBwDtQQAAdGVzdGRpcsDMY3faPmR32j7m53TgkDYAAAAAAAAAAAADAAAAAJ2r1T4U"
+           "MAwA7UEAAHRlc3RlbXB0eWRpcoDMnavVPsVd2j7EPXsAQAcA")
+    # test_read_format_rar_encryption_data.rar: two files locked with a password.
+    LOCKED_RAR = ("UmFyIRoHAM+QcwAADQAAAAAAAABd/HQkhC8AIAAAABAAAAADXIatpqVMMUMdMwcAtIEAAGZvby50eHRPA7zZ1hZM30VAGpKSiN8V"
+                  "K46ez3C5QOjJR+bO1r9E4rg1qJzoZTcBB0V0JIQvACAAAAAQAAAAA77ikM2mTDFDHTMHALSBAABiYXIudHh0TwO82dYWTN9wdHpI"
+                  "iYgPZlt95Qa5ch6oJVX4yjcBo+308RTzI2TRocQ9ewBABwA=")
+
+    def test_extract_a_rar_and_drop_its_links(self):
+        import base64
+        (self.dir / "sample.rar").write_bytes(base64.b64decode(self.RAR))
+        self.assertIn("extract", convert("--targets", str(self.dir / "sample.rar")).stdout.split())
+        r = convert("extract", str(self.dir / "sample.rar"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.dir / "sample" / "test.txt").read_bytes(), b"test text document\r\n")
+        self.assertEqual((self.dir / "sample" / "testdir" / "test.txt").read_bytes(), b"test text document\r\n")
+        self.assertFalse(os.path.lexists(self.dir / "sample" / "testlink"), "links are skipped, as for ZIP")
+        self.assertEqual(self.names(), ["sample", "sample.rar"])
+
+    def test_extract_a_locked_rar_says_so_and_leaves_nothing(self):
+        import base64
+        (self.dir / "locked.rar").write_bytes(base64.b64decode(self.LOCKED_RAR))
+        r = convert("extract", str(self.dir / "locked.rar"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.names(), ["locked.rar"])
+        # The sentence the notification shows (the worker prints it; quiet mode hides notifications).
+        (self.dir / "out").mkdir()
+        w = convert("--extract-worker", str(self.dir / "locked.rar"), str(self.dir / "out"))
+        self.assertNotEqual(w.returncode, 0)
+        self.assertIn("locked with a password", w.stderr)
+
+    @unittest.skipUnless(shutil.which("7z"), "7z makes the test archive")
+    def test_extract_a_7z(self):
+        src = self.dir / "src"
+        (src / "sub").mkdir(parents=True)
+        (src / "a.txt").write_text("alpha")
+        (src / "sub" / "b c.txt").write_text("beta")
+        os.symlink("/etc/passwd", src / "link")
+        subprocess.run(["7z", "a", "-snl", str(self.dir / "notes.7z"), "."], cwd=src, check=True, capture_output=True)
+        shutil.rmtree(src)
+        r = convert("extract", str(self.dir / "notes.7z"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.dir / "notes" / "a.txt").read_text(), "alpha")
+        self.assertEqual((self.dir / "notes" / "sub" / "b c.txt").read_text(), "beta")
+        self.assertFalse(os.path.lexists(self.dir / "notes" / "link"))
 
     def test_pictures_into_one_pdf_in_the_order_given(self):
         a = self.picture("one.png", color=(200, 30, 30))

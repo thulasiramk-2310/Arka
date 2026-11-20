@@ -21,6 +21,7 @@ Requires:       bubblewrap
 Requires:       ffmpeg-free
 Requires:       python3-pillow
 Requires:       poppler-utils
+Requires:       bsdtar
 Requires:       ghostscript
 Requires:       libnotify
 Requires:       dbus-tools

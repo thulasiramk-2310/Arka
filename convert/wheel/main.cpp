@@ -33,6 +33,7 @@
 #include <QMimeDatabase>
 #include <QMouseEvent>
 #include <QRegion>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -44,10 +45,10 @@
 static const QString Service = QStringLiteral("org.arkaos.Wheel");
 static const QString Path = QStringLiteral("/Wheel");
 
-// ZIP and TAR archives, which "Extract here" unpacks (ARCHIVE_SUFFIXES in arka-convert).
+// ZIP, TAR, RAR and 7z archives, which "Extract here" unpacks (ARCHIVE_SUFFIXES in arka-convert).
 static bool isArchive(const QString &path)
 {
-    static const QStringList suffixes{".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz"};
+    static const QStringList suffixes{".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz", ".rar", ".7z"};
     const QString name = QFileInfo(path).fileName().toLower();
     for (const QString &s : suffixes)
         if (name.endsWith(s) && name.size() > s.size())
@@ -115,9 +116,9 @@ static QStringList toolsForFile(const QString &path)
     } else if (ext == "pdf") {
         out = {"split", "smaller", "searchable", "clean"};
     } else if (audio.contains(ext)) {
-        out = {"trim", "split-media", "bleep", "smaller", "clean"};
+        out = {"trim", "split-media", "bleep", "smaller", "loudness", "speed", "clean"};
     } else if (video.contains(ext)) {
-        out = {"trim", "crop", "redact", "bleep", "smaller", "split-media", "clean"};
+        out = {"trim", "crop", "redact", "bleep", "snapshot", "smaller", "split-media", "speed", "loudness", "clean"};
     } else if (QMimeDatabase().mimeTypeForFile(path).inherits(QStringLiteral("text/plain"))) {
         out = {"open-editor"};   // any text file (notes, Markdown, code) is edited in the text editor
     }
@@ -191,6 +192,16 @@ public:
         return true;
     }
 
+    // KDE's animation speed (System Settings > Animation speed): 1 is normal, 0 is "Instant", which
+    // people pick when motion bothers them. The wheel scales its animations by it.
+    Q_INVOKABLE qreal animationScale() const
+    {
+        QSettings kde(QDir::homePath() + QStringLiteral("/.config/kdeglobals"), QSettings::IniFormat);
+        bool ok = false;
+        const qreal factor = kde.value(QStringLiteral("KDE/AnimationDurationFactor")).toReal(&ok);
+        return ok ? qBound(0.0, factor, 4.0) : 1.0;
+    }
+
     Q_INVOKABLE QStringList formatsFor(const QList<QUrl> &urls) const
     {
         QStringList common;
@@ -240,7 +251,7 @@ public:
         if (urls.size() > 1) {
             // Several files of one kind: put them together, and the edits that work file by file.
             const QString kind = kindOf(urls.first().toLocalFile());
-            bool allSmaller = true, allClean = true;
+            bool allSmaller = true, allClean = true, allLoud = true;
             for (const QUrl &u : urls) {
                 const QString path = u.toLocalFile();
                 if (kindOf(path) != kind)
@@ -248,6 +259,7 @@ public:
                 const QStringList one = toolsForFile(path);
                 allSmaller = allSmaller && one.contains(QStringLiteral("smaller"));
                 allClean = allClean && one.contains(QStringLiteral("clean"));
+                allLoud = allLoud && one.contains(QStringLiteral("loudness"));
             }
             QStringList multi;
             bool allResize = true;
@@ -261,6 +273,8 @@ public:
                 multi << QStringLiteral("join");
             if (allSmaller)
                 multi << QStringLiteral("smaller");
+            if (allLoud)
+                multi << QStringLiteral("loudness");
             if (allClean)
                 multi << QStringLiteral("clean");
             return multi;
@@ -302,7 +316,7 @@ public:
                 files << u.toLocalFile();
         if (files.isEmpty())
             return;
-        static const QStringList windowed{"crop", "redact", "annotate", "background", "trim", "bleep"};
+        static const QStringList windowed{"crop", "redact", "annotate", "background", "trim", "bleep", "snapshot"};
         if (windowed.contains(tool))
             QProcess::startDetached(QStringLiteral("arka-edit"), {tool, files.first()});
         else if (tool == QLatin1String("hide-private"))
@@ -320,6 +334,10 @@ public:
             QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"join-media"} + files);
         } else if (tool == QLatin1String("clean"))
             QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"clean"} + files);
+        else if (tool == QLatin1String("loudness"))
+            QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"loudness"} + files);
+        else if (tool.startsWith(QLatin1String("speed:")))
+            QProcess::startDetached(QStringLiteral("arka-convert"), {"speed", files.first(), tool.mid(6)});
         else if (tool.startsWith(QLatin1String("resize:")))
             QProcess::startDetached(QStringLiteral("arka-convert"), QStringList{"resize", tool.mid(7)} + files);
         else if (tool == QLatin1String("searchable"))

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Service
 MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;
-Actions=trim;split;bleep;
+Actions=trim;split;bleep;loudness;halfspeed;doublespeed;
 X-KDE-Submenu=Edit sound
 X-KDE-Priority=TopLevel
 X-KDE-MaxNumberOfUrls=1
@@ -20,3 +20,18 @@ Icon=view-split-left-right
 Name=Bleep out parts...
 Exec=arka-edit bleep %f
 Icon=audio-volume-muted
+
+[Desktop Action loudness]
+Name=Standard volume
+Exec=arka-convert loudness %f
+Icon=audio-volume-medium
+
+[Desktop Action halfspeed]
+Name=Half speed
+Exec=arka-convert speed %f 0.5
+Icon=speedometer
+
+[Desktop Action doublespeed]
+Name=Double speed
+Exec=arka-convert speed %f 2
+Icon=speedometer

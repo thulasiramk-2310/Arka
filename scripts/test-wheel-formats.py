@@ -117,8 +117,15 @@ class EditToolsTest(unittest.TestCase):
         qml = (ROOT / "convert" / "wheel" / "Wheel.qml").read_text()
         for tool in self.tools():
             with self.subTest(tool=tool):
-                # "smaller" opens the level ring in the QML, which then converts.
-                self.assertTrue(tool in handled or (tool in ("smaller", "resize") and f'formats[i] === "{tool}"' in qml), tool)
+                # "smaller", "resize" and "speed" open a level ring in the QML, whose choices are then run.
+                self.assertTrue(tool in handled or (tool in ("smaller", "resize", "speed") and f'formats[i] === "{tool}"' in qml), tool)
+
+    def test_the_speed_ring_offers_only_speeds_arka_convert_accepts(self):
+        qml = (ROOT / "convert" / "wheel" / "Wheel.qml").read_text()
+        offered = re.findall(r'"speed:([0-9.]+)"', re.search(r'formats = \[("speed:[^\]]*)\]', qml).group(1))
+        accepted = re.search(r'^SPEEDS = \(([^)]*)\)', CONVERT.read_text(), re.M).group(1)
+        self.assertEqual(offered, re.findall(r'"([0-9.]+)"', accepted))
+        self.assertIn('tool.startsWith(QLatin1String("speed:"))', SOURCE)
 
     def test_edit_window_knows_every_windowed_tool(self):
         run = re.search(r"Q_INVOKABLE void runTool\(.*?\n    }\n", SOURCE, re.S).group(0)

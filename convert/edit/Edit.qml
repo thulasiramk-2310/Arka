@@ -18,7 +18,8 @@ Window {
     minimumHeight: 520
     visible: true
     title: ({ crop: edit.isVideo ? "Crop video" : "Crop picture", redact: "Black out parts", annotate: "Draw on it",
-              background: "Add a background", trim: "Trim", split: "Split in two", bleep: "Bleep out parts" })[edit.tool]
+              background: "Add a background", trim: "Trim", split: "Split in two", bleep: "Bleep out parts",
+              snapshot: "Picture of a frame" })[edit.tool]
            + " — " + edit.fileName
     color: bg
 
@@ -46,7 +47,7 @@ Window {
     readonly property color cutAway: dark ? Qt.rgba(0.02, 0.025, 0.03, 0.30) : Qt.rgba(0.35, 0.38, 0.42, 0.12)
     readonly property color accentEdge: dark ? accent : "#2A8564"
 
-    readonly property bool timeTool: edit.tool === "trim" || edit.tool === "split" || edit.tool === "bleep"
+    readonly property bool timeTool: edit.tool === "trim" || edit.tool === "split" || edit.tool === "bleep" || edit.tool === "snapshot"
     readonly property bool isImage: !timeTool
     // The tools that draw on the picture (for a video: on one frame of it).
     readonly property bool picTool: edit.tool === "crop" || edit.tool === "redact" || edit.tool === "annotate"
@@ -199,8 +200,19 @@ Window {
     }
 
     // ---- split state: one time, inside the file
+    // "Picture of a frame" uses the same one moment, and may be at 0 (the first frame).
+    readonly property bool oneTime: edit.tool === "split" || edit.tool === "snapshot"
     readonly property real tSplit: secs(splitField.text)
-    readonly property bool splitOk: !isNaN(tSplit) && tSplit > 0 && (total <= 0 || tSplit < total)
+    readonly property bool splitOk: !isNaN(tSplit) && (tSplit > 0 || (edit.tool === "snapshot" && tSplit === 0))
+                                    && (total <= 0 || tSplit < total)
+    // The frame at that moment, read again (a little after the last move) whenever the moment changes.
+    property url momentUrl: ""
+    onTSplitChanged: if (edit.tool === "snapshot" && splitOk) momentTimer.restart()
+    Timer { id: momentTimer; interval: 120; onTriggered: edit.previewAt(win.tSplit) }
+    Connections {
+        target: edit
+        function onPreviewReady(picture) { win.momentUrl = picture }
+    }
 
     // ---- bleep state: the parts to beep over
     ListModel { id: parts }
@@ -224,7 +236,7 @@ Window {
         if (edit.tool === "redact") return boxes.count > 0 && (!edit.isVideo || rOk)
         if (edit.tool === "annotate") return shapes.length > 0
         if (edit.tool === "background") return true
-        if (edit.tool === "split") return splitOk
+        if (oneTime) return splitOk
         if (edit.tool === "bleep") return parts.count > 0
         return trimOk
     }
@@ -244,7 +256,7 @@ Window {
             edit.apply([JSON.stringify(shapes.map(sh => Object.assign({}, sh, { p: sh.p.map(r) })))])
         } else if (edit.tool === "background") {
             edit.apply([swatches[swatch], String(Math.round(padding))])
-        } else if (edit.tool === "split") {
+        } else if (oneTime) {
             edit.apply([splitField.text.trim()])
         } else if (edit.tool === "bleep") {
             const a = []
@@ -361,13 +373,14 @@ Window {
         if (edit.tool === "crop") return Math.round(cropW) + " × " + Math.round(cropH) + " px"
         if (edit.tool === "trim") return trimOk ? clock(Math.min(tEnd, total > 0 ? total : tEnd) - tStart) : ""
         if (edit.tool === "split") return splitOk && total > 0 ? clock(tSplit) + " + " + clock(total - tSplit) : ""
+        if (edit.tool === "snapshot") return splitOk ? "PNG at " + clock(tSplit) : ""
         if (edit.tool === "bleep") return parts.count ? parts.count + (parts.count === 1 ? " part" : " parts") : ""
         if (edit.tool === "redact") return boxes.count ? boxes.count + (boxes.count === 1 ? " box" : " boxes") : ""
         if (edit.tool === "background") return Math.round(imgSize.width + 2 * padding) + " × " + Math.round(imgSize.height + 2 * padding) + " px"
         return ""
     }
     // What the first row of the File card calls the copy-to-be.
-    readonly property string resultLabel: ({ crop: "New size", background: "New size", trim: "New length", split: "Parts",
+    readonly property string resultLabel: ({ crop: "New size", background: "New size", trim: "New length", split: "Parts", snapshot: "Picture",
                                              bleep: "Bleeped", redact: "Covered" })[edit.tool] ?? "Result"
     Rectangle {
         id: inspectorToggle
@@ -641,7 +654,8 @@ Window {
         Text { textFormat: Text.PlainText
             width: parent.width
             text: ({ crop: edit.isVideo ? "Crop video" : "Crop", redact: "Black out", annotate: "Annotate",
-                     background: "Background", trim: "Trim", split: "Split in two", bleep: "Bleep out" })[edit.tool]
+                     background: "Background", trim: "Trim", split: "Split in two", bleep: "Bleep out",
+                     snapshot: "Picture of a frame" })[edit.tool]
             color: win.ink
             font.family: "Noto Serif"
             font.pixelSize: 26
@@ -659,6 +673,7 @@ Window {
                      background: "Pick a colour and how much room to leave around the picture.",
                      trim: "Drag the ends of the timeline to the part you want to keep.",
                      split: "Click the timeline where to cut. Both halves are saved as new files.",
+                     snapshot: "Click the timeline at the moment you want. That frame is saved as a picture.",
                      bleep: "Drag across the timeline over each part to bleep out, or type the times." })[edit.tool]
             color: win.muted
             font.pixelSize: 13
@@ -1127,7 +1142,8 @@ Window {
                     height: parent.height
                     width: frame.implicitHeight > 0 ? Math.min(parent.width, height * frame.implicitWidth / frame.implicitHeight)
                                                     : parent.width
-                    Image { id: frame; anchors.fill: parent; fillMode: Image.PreserveAspectFit; source: edit.hasFrame ? edit.pictureUrl : ""
+                    Image { id: frame; anchors.fill: parent; fillMode: Image.PreserveAspectFit
+                            source: win.momentUrl.toString() !== "" ? win.momentUrl : edit.hasFrame ? edit.pictureUrl : ""
                             visible: !(player.item && player.item.playing) }
                     // Only the sound and video tools play; pictures never load Qt Multimedia.
                     Loader { id: player; anchors.fill: parent; active: win.timeTool; source: "Player.qml"
@@ -1141,10 +1157,11 @@ Window {
                     visible: player.status === Loader.Ready && win.total > 0
                     iconName: player.item && player.item.playing ? "media-playback-pause" : "media-playback-start"
                     text: player.item && player.item.playing ? "Stop" : ({ trim: "Play the part kept", split: "Play 3 s around the cut",
+                                                                           snapshot: "Play 3 s around it",
                                                                            bleep: "Play the original" })[edit.tool] ?? "Play"
                     onClicked: {
                         if (edit.tool === "trim") player.item.toggle(win.tStart, Math.min(win.tEnd, win.total))
-                        else if (edit.tool === "split") player.item.toggle(Math.max(0, win.tSplit - 3), Math.min(win.total, win.tSplit + 3))
+                        else if (win.oneTime) player.item.toggle(Math.max(0, win.tSplit - 3), Math.min(win.total, win.tSplit + 3))
                         else player.item.toggle(0, -1)
                     }
                 }
@@ -1178,13 +1195,15 @@ Window {
                 // trim; Ctrl takes whole seconds. Bleep parts are typed in the fields below.
                 activeFocusOnTab: live && edit.tool !== "bleep"
                 Accessible.role: Accessible.Slider
-                Accessible.name: edit.tool === "trim" ? "Part to keep" : edit.tool === "split" ? "Where to cut" : "Timeline"
+                Accessible.name: edit.tool === "trim" ? "Part to keep" : edit.tool === "split" ? "Where to cut"
+                               : edit.tool === "snapshot" ? "Moment to save" : "Timeline"
                 Accessible.description: edit.tool === "trim" ? "From " + win.clock(win.tStart) + " to " + win.clock(win.tEnd)
-                                      : edit.tool === "split" ? "Cut at " + win.clock(win.tSplit) : "Drag across a part to bleep it out"
+                                      : edit.tool === "split" ? "Cut at " + win.clock(win.tSplit)
+                                      : edit.tool === "snapshot" ? "At " + win.clock(win.tSplit) : "Drag across a part to bleep it out"
                 function nudge(ev, dir) {
                     byMouse = false   // the keyboard is in use: show where focus is
                     const step = (ev.modifiers & Qt.ControlModifier) ? 1 : 0.1
-                    if (edit.tool === "split") splitField.text = win.clock(Math.max(0.1, Math.min(span - 0.1, (isNaN(win.tSplit) ? span / 2 : win.tSplit) + dir * step)))
+                    if (win.oneTime) splitField.text = win.clock(Math.max(edit.tool === "snapshot" ? 0 : 0.1, Math.min(span - 0.1, (isNaN(win.tSplit) ? span / 2 : win.tSplit) + dir * step)))
                     else if (edit.tool === "trim") {
                         const end = (ev.modifiers & Qt.ShiftModifier) !== 0
                         win.setTrim(end ? 1 : 0, (end ? Math.min(win.tEnd, span) : win.tStart) + dir * step)
@@ -1256,7 +1275,7 @@ Window {
                 }
                 // split: the cut
                 Rectangle {
-                    visible: edit.tool === "split" && win.splitOk && bar.live
+                    visible: win.oneTime && win.splitOk && bar.live
                     x: bar.xAt(win.tSplit) - 1.5; width: 3; height: parent.height; color: win.accent
                     Rectangle {   // a grip, so the cut looks like something to drag
                         anchors.centerIn: parent; width: 16; height: 48; radius: 4; color: win.accent
@@ -1299,7 +1318,7 @@ Window {
                         if (edit.tool === "trim") {
                             grip = Math.abs(t - win.tStart) <= Math.abs(t - Math.min(win.tEnd, bar.span)) ? 0 : 1
                             win.setTrim(grip, t)
-                        } else if (edit.tool === "split") {
+                        } else if (win.oneTime) {
                             splitField.text = win.clock(t)
                         } else if (edit.tool === "bleep") {
                             drawingPart.a = t; drawingPart.b = t; drawingPart.visible = true
@@ -1309,7 +1328,7 @@ Window {
                         if (!pressed) return
                         const t = bar.tAt(m.x)
                         if (edit.tool === "trim") win.setTrim(grip, t)
-                        else if (edit.tool === "split") splitField.text = win.clock(t)
+                        else if (win.oneTime) splitField.text = win.clock(t)
                         else if (edit.tool === "bleep") drawingPart.b = t
                     }
                     onReleased: {
@@ -1349,7 +1368,7 @@ Window {
         anchors { left: parent.left; right: inspector.left; bottom: parent.bottom }
         // The tool's own controls on top, then a footer row with Cancel and the main button.
         readonly property int footer: 64
-        height: footer + (edit.tool === "annotate" ? annotSwatches.y + annotSwatches.height + 16 : 0) + (({ background: 116, trim: 100, split: 96, bleep: 140, annotate: 0, crop: 100,
+        height: footer + (edit.tool === "annotate" ? annotSwatches.y + annotSwatches.height + 16 : 0) + (({ background: 116, trim: 100, split: 96, snapshot: 96, bleep: 140, annotate: 0, crop: 100,
                              // Black out grows with its note, which says more once Find private text has run.
                              redact: Math.max(104, 58 + redactAdvice.height + (edit.isVideo ? 12 + 36 : 0) + 16) })[edit.tool] ?? 104)
         color: win.panel
@@ -1609,13 +1628,23 @@ Window {
             }
         }
 
-        // split: one time
+        // split and picture of a frame: one time
         Row {
-            visible: edit.tool === "split"
+            visible: win.oneTime
             anchors { left: parent.left; top: parent.top; margins: 16 }
             spacing: 14
-            Text { textFormat: Text.PlainText; text: "Cut at"; color: win.muted; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
-            TimeField { id: splitField; text: win.total > 0 ? win.clock(win.total / 2) : ""; Accessible.name: "Cut at" }
+            Text { textFormat: Text.PlainText; text: edit.tool === "snapshot" ? "At" : "Cut at"; color: win.muted; font.pixelSize: 13
+                   anchors.verticalCenter: parent.verticalCenter }
+            TimeField { id: splitField; text: win.total > 0 ? win.clock(win.total / 2) : ""
+                        Accessible.name: edit.tool === "snapshot" ? "Moment to save" : "Cut at" }
+        }
+        Text { textFormat: Text.PlainText;
+            visible: edit.tool === "snapshot"
+            anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 62 }
+            text: win.splitOk ? "The frame at " + win.clock(win.tSplit) + " is saved as a PNG picture, shown above."
+                              : "Use seconds, mm:ss or hh:mm:ss, inside the video."
+            color: win.splitOk ? win.muted : "#D6643A"
+            font.pixelSize: 13
         }
         Text { textFormat: Text.PlainText;
             visible: edit.tool === "split"
@@ -1686,7 +1715,8 @@ Window {
             visible: !win.canApply
             text: ({ crop: "Nothing to save yet: the box is still the whole picture", redact: "Nothing to save yet: no boxes",
                      annotate: "Nothing to save yet: nothing drawn", trim: "Nothing to save yet: check the times",
-                     split: "Nothing to save yet: the cut has to be inside the file", bleep: "Nothing to save yet: no parts" })[edit.tool] ?? ""
+                     split: "Nothing to save yet: the cut has to be inside the file", bleep: "Nothing to save yet: no parts",
+                     snapshot: "Nothing to save yet: the moment has to be inside the video" })[edit.tool] ?? ""
             color: win.muted; font.pixelSize: 13
         }
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: controls.footer }
@@ -1697,7 +1727,7 @@ Window {
             Btn { text: "Cancel"; onClicked: Qt.quit() }
             Btn {
                 text: ({ crop: "Save cropped copy", redact: "Save blacked-out copy", annotate: "Save annotated copy",
-                         background: "Save with background", trim: "Save trimmed copy", split: "Save both parts",
+                         background: "Save with background", trim: "Save trimmed copy", split: "Save both parts", snapshot: "Save picture",
                          bleep: "Save bleeped copy" })[edit.tool]
                 primary: true
                 enabledState: win.canApply

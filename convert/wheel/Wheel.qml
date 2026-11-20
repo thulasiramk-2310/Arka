@@ -31,6 +31,25 @@ Window {
     property int hover: -1
     property bool dark: true
 
+    // Motion. KDE's animation speed scales every duration (0 = "Instant": no motion at all).
+    // The ring grows in with a small overshoot, then the slots arrive one after another, each
+    // sliding a little outwards. `reveal` runs from 0 to the last slot's end; slot i plays its own
+    // part from i * stagger to i * stagger + 1 (see slotIn).
+    property real motion: 1
+    property real reveal: 1
+    readonly property real stagger: 0.22
+    readonly property real revealEnd: 1 + Math.max(0, formats.length - 1) * stagger
+    property bool enterPending: false
+    function ms(d) { return Math.round(d * motion) }
+    function slotIn(i) {
+        const t = Math.max(0, Math.min(1, reveal - i * stagger))
+        return 1 - Math.pow(1 - t, 3)   // ease out
+    }
+    function replaySlots() {
+        if (!visible || !placed) return
+        slotsIn.stop(); reveal = 0; slotsIn.restart()
+    }
+
     // The ArkaOS look, as on the wallpaper: a flat field, hairlines, no gloss or glow.
     // Green appears once, as a short line on the slot you are on.
     readonly property color surface: dark ? Qt.rgba(20 / 255, 22 / 255, 28 / 255, 0.97) : Qt.rgba(221 / 255, 225 / 255, 230 / 255, 0.97)
@@ -65,7 +84,9 @@ Window {
                                     odt: "ODT", "open-editor": "Text editor", extract: "Extract here", "pdf-combine": "One PDF",
                                     searchable: "Searchable", resize: "Resize", "copy-path": "Copy path",
                                     "resize:50%": "Half size", "resize:1920": "1920 wide", "resize:1280": "1280 wide",
-                                    "resize:800": "800 wide" })
+                                    "resize:800": "800 wide", "loudness": "Standard volume", speed: "Speed",
+                                    snapshot: "Save frame", "speed:0.5": "Half speed", "speed:0.75": "0.75×",
+                                    "speed:1.25": "1.25×", "speed:1.5": "1.5×", "speed:2": "Double speed" })
     // A theme icon for each edit, so a slot is recognised before it is read. Formats stay as words.
     readonly property var icons: ({ more: "overflow-menu", crop: "transform-crop", annotate: "draw-freehand", redact: "view-hidden",
                                     background: "color-fill", smaller: "view-restore", clean: "document-cleanup", "hide-private": "document-scan",
@@ -74,7 +95,8 @@ Window {
                                     resize: "transform-scale", "copy-path": "edit-copy",
                                     trim: "edit-cut", "split-media": "view-split-left-right", split: "view-split-left-right",
                                     bleep: "audio-volume-muted", join: "media-playlist-append", merge: "media-playlist-append",
-                                    "zip-all": "archive-insert", zip: "archive-insert" })
+                                    "zip-all": "archive-insert", zip: "archive-insert", "loudness": "audio-volume-medium",
+                                    speed: "speedometer", snapshot: "camera-photo" })
 
     function label(f) {
         if (!edit && isPdf() && f === "png") return "PNG pages"
@@ -106,9 +128,12 @@ Window {
                     "open-editor": "Open it in the text editor", extract: "Unpack it into a folder beside it",
                     "pdf-combine": "Put the pictures into one PDF, in the order you picked them",
                     searchable: "Save a copy whose words can be found and copied", resize: "Choose a width",
-                    "copy-path": "Copy where the file is to the clipboard" }
+                    "copy-path": "Copy where the file is to the clipboard",
+                    "loudness": "Save a copy as loud as most podcasts and videos play (-16 LUFS)",
+                    speed: "Choose a speed", snapshot: "Open a window to pick a moment and save that frame as a picture" }
         if (d[f]) return d[f]
         if (String(f).indexOf("smaller") === 0) return "Save a smaller copy"
+        if (String(f).indexOf("speed:") === 0) return "Save a copy at " + label(f).toLowerCase() + "; voices keep their pitch"
         return "Save a copy as " + label(f)
     }
     function ext() { return files.length ? String(files[0]).split(".").pop().toLowerCase() : "" }
@@ -141,7 +166,9 @@ Window {
                                       join: "One file, in name order", merge: "One PDF, in name order",
                                       split: "One PDF per page", more: "More choices", zip: "Put it in a ZIP",
                                       "zip-all": "All in one ZIP", "smaller-image": "A smaller copy", "smaller-pdf": "A smaller copy",
-                                      "smaller-audio": "A smaller copy", "smaller-video": "A smaller copy" })
+                                      "smaller-audio": "A smaller copy", "smaller-video": "A smaller copy",
+                                      "loudness": "As loud as most videos", speed: "Choose a speed",
+                                      snapshot: "Save one frame" })
     readonly property var targets: ["png", "jpg", "webp", "avif", "tiff", "bmp", "pdf", "mp3", "wav", "flac", "ogg", "opus",
                                     "m4a", "mp4", "mkv", "webm", "docx", "text"]
     function hubText() {
@@ -149,6 +176,7 @@ Window {
         if (hover >= 0 && hover < formats.length) {
             const f = formats[hover]
             if (!edit && targets.indexOf(f) >= 0) return "Make a " + label(f) + " copy"
+            if (String(f).indexOf("speed:") === 0) return "Voices keep their pitch"
             return effects[f] || effects[String(f).split(":")[0]] || label(f)
         }
         return clickMode ? "Pick one" : (files.length ? "Drop on one" : "Drop a file")   // nothing hovered yet
@@ -172,6 +200,7 @@ Window {
             formats = list
             rest = []
         }
+        replaySlots()   // "More" and the "Make smaller" levels bring a new ring of slots
     }
     // Pick slot i for these files: do it, or open the next ring for "More".
     function pick(i, urls) {
@@ -187,10 +216,17 @@ Window {
             const big = urls.every(u => wheel.totalBytes([u]) > 10000000), huge = urls.every(u => wheel.totalBytes([u]) > 25000000)
             formats = ["smaller:light", "smaller:medium", "smaller:strong"]
                       .concat(big ? ["smaller:10mb"] : []).concat(huge ? ["smaller:25mb"] : []); rest = []
+            replaySlots()
         } else if (edit && formats[i] === "resize") {
             // Resize asks for a width first, like Smaller asks how much.
             files = urls; clickMode = true; hover = -1; levelMode = true
             formats = ["resize:50%", "resize:1920", "resize:1280", "resize:800"]; rest = []
+            replaySlots()
+        } else if (edit && formats[i] === "speed") {
+            // Speed asks how fast, like Resize asks how wide.
+            files = urls; clickMode = true; hover = -1; levelMode = true
+            formats = ["speed:0.5", "speed:0.75", "speed:1.25", "speed:1.5", "speed:2"]; rest = []
+            replaySlots()
         } else {
             // The level ring's choices convert, also when it was opened from the edit wheel.
             if (edit && String(formats[i]).indexOf("smaller:") !== 0) wheel.runTool(formats[i], urls)
@@ -200,7 +236,9 @@ Window {
     }
 
     function open(urls, editMode) {
-        closing = false; fade.stop(); enter.stop(); leaveTimer.stop(); ring.opacity = 0; ring.scale = 0.6
+        closing = false; fade.stop(); enter.stop(); slotsIn.stop(); leaveTimer.stop(); enterPending = false
+        ring.opacity = 0; ring.scale = 0.86; reveal = 0
+        motion = typeof wheel.animationScale === "function" ? wheel.animationScale() : 1
         dark = wheel.dark()
         edit = editMode
         levelMode = false
@@ -224,8 +262,17 @@ Window {
         cy = Math.max(outerR + 8, Math.min(height - outerR - dockClear, y))
         placed = true
         wheel.setBlur(cx, cy, shapeR, innerR)
-        enter.restart()
+        // Start once the ring's first frame is on screen: started at once, the first part of the
+        // animation ran before the new window showed anything, and the ring seemed to just appear.
+        enterPending = true
+        enterFallback.restart()
     }
+    function startEnter() {
+        if (!enterPending) return
+        enterPending = false; enterFallback.stop()
+        enter.restart(); slotsIn.restart()
+    }
+    onFrameSwapped: if (enterPending) Qt.callLater(startEnter)
     function indexAt(x, y) {
         const n = formats.length
         if (!n) return -1
@@ -370,14 +417,29 @@ Window {
     Timer { id: placeTimer; interval: 150; onTriggered: win.place(win.width / 2, win.height / 2) }
     Timer { id: leaveTimer; interval: 300; onTriggered: win.close() }
 
+    // If no frame is reported (nothing new to draw), start anyway rather than stay invisible.
+    Timer { id: enterFallback; interval: 60; onTriggered: win.startEnter() }
+
     ParallelAnimation {
         id: enter
-        NumberAnimation { target: ring; property: "scale"; from: 0.6; to: 1; duration: 150; easing.type: Easing.OutCubic }
-        NumberAnimation { target: ring; property: "opacity"; from: 0; to: 1; duration: 150; easing.type: Easing.OutCubic }
+        NumberAnimation { target: ring; property: "scale"; from: 0.86; to: 1; duration: win.ms(300)
+                          easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+        NumberAnimation { target: ring; property: "opacity"; from: 0; to: 1; duration: win.ms(180); easing.type: Easing.OutCubic }
     }
     SequentialAnimation {
+        id: slotsIn
+        PauseAnimation { duration: win.ms(60) }
+        // Linear on purpose: each slot eases its own part in slotIn().
+        NumberAnimation { target: win; property: "reveal"; from: 0; to: win.revealEnd; duration: win.ms(200 * win.revealEnd) }
+    }
+    // Leaving is quicker than arriving: a short shrink and fade.
+    SequentialAnimation {
         id: fade
-        NumberAnimation { target: ring; property: "opacity"; to: 0; duration: 100 }
+        ScriptAction { script: { enter.stop(); slotsIn.stop() } }
+        ParallelAnimation {
+            NumberAnimation { target: ring; property: "opacity"; to: 0; duration: win.ms(120); easing.type: Easing.InCubic }
+            NumberAnimation { target: ring; property: "scale"; to: 0.94; duration: win.ms(120); easing.type: Easing.InCubic }
+        }
         ScriptAction { script: { wheel.clearBlur(); win.visible = false; win.closing = false } }
     }
 
@@ -425,6 +487,7 @@ Window {
 
     Item {
         id: ring
+        objectName: "ring"
         x: win.cx - win.outerR; y: win.cy - win.outerR
         width: 2 * win.outerR; height: 2 * win.outerR
         visible: win.placed
@@ -475,7 +538,14 @@ Window {
                 readonly property real r: (win.outerR + win.innerR) / 2
                 readonly property real ym: win.outerR + r * Math.sin(mid)
                 readonly property string path: win.slotPath(index, win.formats.length)
+                readonly property real shown: win.slotIn(index)
                 anchors.fill: parent
+                opacity: shown
+                // Arrives from a little nearer the middle, along its own direction.
+                transform: Translate {
+                    x: -(1 - slotItem.shown) * 14 * Math.cos(slotItem.mid)
+                    y: -(1 - slotItem.shown) * 14 * Math.sin(slotItem.mid)
+                }
 
                 // What a screen reader says and does for this slot.
                 Accessible.role: Accessible.Button
@@ -494,6 +564,8 @@ Window {
                         joinStyle: ShapePath.RoundJoin     // a miter left spurs at the sharp inner corners
                         fillRule: ShapePath.OddEvenFill
                         fillColor: slotItem.on ? win.slotOnFill : win.slotFill
+                        Behavior on fillColor { ColorAnimation { duration: win.ms(90) } }
+                        Behavior on strokeColor { ColorAnimation { duration: win.ms(90) } }
                         PathSvg { path: slotItem.path }
                     }
                 }

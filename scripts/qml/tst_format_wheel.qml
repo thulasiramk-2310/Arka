@@ -15,6 +15,8 @@ TestCase {
         property string operation: ""
         property string chosen: ""
         property var chosenUrls: []
+        property real motion: 1
+        function animationScale() { return motion }
         function dark() { return true }
         function sizeText(urls) { return urls.length ? "1.2 MiB" : "" }
         function totalBytes(urls) { return String(urls[0]).indexOf("big") >= 0 ? 30000000 : 1200000 }
@@ -31,7 +33,7 @@ TestCase {
         }
         function toolsFor(urls) {
             if (!urls.length) return []
-            if (String(urls[0]).endsWith(".mp4")) return ["trim", "smaller", "bleep"]
+            if (String(urls[0]).endsWith(".mp4")) return ["trim", "smaller", "bleep", "speed"]
             return ["crop", "redact"]
         }
         function convert(format, urls) { calls++; operation = "convert"; chosen = format; chosenUrls = urls }
@@ -53,7 +55,47 @@ TestCase {
         backend.chosenUrls = []
         picker.open(["file:///tmp/example.png"], false)
     }
-    function cleanup() { picker.visible = false }
+    function cleanup() { picker.visible = false; backend.motion = 1 }
+
+    function test_the_ring_grows_in_and_the_slots_arrive_one_after_another() {
+        const ring = findChild(picker, "ring")
+        picker.open(["file:///tmp/example.png"], false)
+        compare(ring.opacity, 0)
+        picker.place(400, 300)
+        // Not all at once: partway in, the first slot is further along than the last.
+        tryVerify(() => picker.reveal > 0.5 && picker.reveal < picker.revealEnd - 0.3, 2000)
+        verify(picker.slotIn(0) > picker.slotIn(picker.formats.length - 1))
+        tryVerify(() => ring.opacity === 1 && ring.scale === 1 && picker.reveal === picker.revealEnd, 2000)
+        compare(picker.slotIn(picker.formats.length - 1), 1)
+    }
+
+    function test_speed_asks_how_fast_then_runs_that_speed() {
+        picker.open(["file:///tmp/clip.mp4"], true)
+        picker.pick(picker.formats.indexOf("speed"), picker.files)
+        compare(backend.calls, 0, "the first pick only opens the speed ring")
+        compare(picker.formats, ["speed:0.5", "speed:0.75", "speed:1.25", "speed:1.5", "speed:2"])
+        compare(picker.label("speed:2"), "Double speed")
+        picker.pick(picker.formats.indexOf("speed:2"), picker.files)
+        compare(backend.operation, "edit")
+        compare(backend.chosen, "speed:2")
+    }
+
+    function test_instant_animation_speed_opens_without_motion() {
+        backend.motion = 0
+        const ring = findChild(picker, "ring")
+        picker.open(["file:///tmp/example.png"], false)
+        picker.place(400, 300)
+        tryVerify(() => ring.opacity === 1 && picker.slotIn(picker.formats.length - 1) === 1, 300)
+    }
+
+    function test_more_brings_its_slots_in_again() {
+        picker.open(["file:///tmp/clip.aac"], false)
+        picker.place(400, 300)
+        tryVerify(() => picker.reveal === picker.revealEnd, 2000)
+        picker.pick(picker.formats.indexOf("more"), picker.files)
+        verify(picker.reveal < picker.revealEnd)
+        tryVerify(() => picker.reveal === picker.revealEnd, 2000)
+    }
 
     function drop(urls, raw) {
         return {

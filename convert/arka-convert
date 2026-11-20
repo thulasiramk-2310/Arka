@@ -32,7 +32,10 @@
                                        10mb / 25mb: a copy under that size, or none at all
     arka-convert zip FILE...           put each file in its own ZIP (any kind of file)
     arka-convert zip-all ITEM ITEM...  put files and folders together in ONE ZIP
-    arka-convert extract ARCHIVE...    unpack each ZIP or TAR archive into a folder beside it
+    arka-convert extract ARCHIVE...    unpack each ZIP, TAR, RAR or 7z archive into a folder beside it
+    arka-convert loudness FILE...      a copy of each sound or video at the standard loudness (-16 LUFS)
+    arka-convert speed FILE SPEED      a copy played at SPEED: 0.5, 0.75, 1.25, 1.5 or 2 (voices keep their pitch)
+    arka-convert snapshot VIDEO TIME   the picture at TIME saved as a PNG beside the video
     arka-convert pdf-combine PICTURE PICTURE...  put pictures into ONE PDF, a page each, in the order given
     arka-convert searchable PDF        a copy of a scanned PDF whose words can be found and copied (OCR,
                                        English; it can make mistakes)
@@ -611,8 +614,11 @@ def fit_to_size(path, level, on_progress=None):
 
 # --- Extract, pictures into one PDF, searchable PDF, resize (wheel additions, 2026-11-13) ----------
 
-# Archives "Extract here" opens: ZIP and the TAR family, which Python reads without extra programs.
-ARCHIVE_SUFFIXES = (".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz")
+# Archives "Extract here" opens: ZIP and the TAR family, which Python reads itself, and RAR and 7z,
+# which go through bsdtar (libarchive).
+ARCHIVE_SUFFIXES = (".zip", ".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tbz", ".rar", ".7z")
+BSDTAR_SUFFIXES = (".rar", ".7z")
+ARCHIVE_UNREADABLE = "it could not be unpacked: it may be locked with a password, which Extract here can't open, or damaged"
 # An archive that unpacks to more than this, or holds more entries, is refused before anything is
 # written: a small file that expands without end (a "zip bomb") must not fill the disk.
 EXTRACT_MAX_BYTES = 20 * 1024 ** 3
@@ -654,6 +660,8 @@ def extract_worker(src, dest):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with z.open(info) as fin, open(target, "xb") as fout:
                     shutil.copyfileobj(fin, fout)
+    elif src.lower().endswith(BSDTAR_SUFFIXES):
+        bsdtar_extract(src, dest)
     else:
         with tarfile.open(src) as tar:
             members = tar.getmembers()
@@ -662,13 +670,40 @@ def extract_worker(src, dest):
             tar.extractall(dest, filter="data")
 
 
+def bsdtar_extract(src, dest):
+    """Inside the sandbox: RAR and 7z through bsdtar, as Python reads neither. bsdtar refuses names with
+    '..', drops a leading '/' and never writes through a link; links it made are then removed, as for
+    ZIP. Any error (a damaged archive, or one locked with a password) fails the whole unpack, and the
+    caller throws the half-made folder away."""
+    listing = subprocess.run(["bsdtar", "-tvf", src], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if listing.returncode != 0:
+        raise RuntimeError(ARCHIVE_UNREADABLE)
+    # Each line reads like ls -l: mode, links, owner, group, size, date (three fields), name.
+    entries = [line.split(None, 8) for line in listing.stdout.splitlines() if line.strip()]
+    try:
+        total = sum(int(e[4]) for e in entries)
+    except (IndexError, ValueError):
+        raise RuntimeError(ARCHIVE_UNREADABLE) from None
+    if len(entries) > EXTRACT_MAX_ENTRIES or total > EXTRACT_MAX_BYTES:
+        raise RuntimeError("it unpacks to more than 20 GB or 200,000 files, so it was not unpacked")
+    done = subprocess.run(["bsdtar", "-xf", src, "-C", str(dest), "--no-same-owner", "--no-same-permissions"],
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise RuntimeError(ARCHIVE_UNREADABLE)
+    for root, dirs, files in os.walk(dest):
+        for name in dirs + files:
+            p = Path(root, name)
+            if p.is_symlink():   # skipped, never followed
+                p.unlink()
+
+
 def extract_archive(path):
     """Unpack one archive into a folder beside it, named after it. When everything inside sits in
     one folder already, that folder is what appears (no folder inside a folder of the same name)."""
     src = Path(path).resolve()
     stem = archive_stem(src)
     if not stem:
-        raise RuntimeError(f"{src.name} isn't a ZIP or TAR archive")
+        raise RuntimeError(f"{src.name} isn't a ZIP, TAR, RAR or 7z archive")
     out_dir = save_dir(src.parent)
     scratch = Path(tempfile.mkdtemp(prefix=".arka-convert-", dir=out_dir))
     try:
@@ -1193,6 +1228,100 @@ def split_media(path, at, on_progress=None):
                    total - t if total else None, on_progress)
         return edit_done(scratch, [first, second],
                          [(out_dir, f"{src.stem} (part 1)", ext), (out_dir, f"{src.stem} (part 2)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def audio_codec(ext):
+    """The sound encoder for an edited file in format ext, for edits that copy the picture as it is."""
+    if ext in AUDIO_OPTS:
+        return [o for o in AUDIO_OPTS[ext] if o != "-vn"]
+    return ["-c:a", "libopus", "-b:a", "128k"] if ext == "webm" else ["-c:a", "aac", "-b:a", "192k"]
+
+
+# Standard volume: EBU R128 loudness normalisation to -16 LUFS (true peak -1.5 dB), the level most
+# podcast and video sites play at. Measured in a first pass, then applied as one gain where possible
+# (linear), so the file's own quiet and loud parts keep their difference.
+LOUDNESS = "I=-16:TP=-1.5:LRA=11"
+
+
+def set_loudness(path, on_progress=None):
+    """Save a copy of a sound or a video at the standard loudness. A video's picture is copied as it is."""
+    import json
+    src, kind, out_dir, scratch = media_job(path, ("audio", "video"))
+    try:
+        info = probe(scratch, str(src))
+        if not info["audio"]:
+            raise RuntimeError("it has no sound")
+        total = info["seconds"]
+        half = (lambda f: on_progress(f / 2)) if on_progress else None
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "info", "-i", str(src),
+                             "-map", "0:a:0", "-af", f"loudnorm={LOUDNESS}:print_format=json", "-f", "null", "-"],
+                   total, half)
+        text = (scratch / "ffmpeg-errors.txt").read_text(errors="replace")
+        try:
+            m = json.loads(text[text.rindex("{"):text.rindex("}") + 1])
+            measured = (f"measured_I={float(m['input_i'])}:measured_TP={float(m['input_tp'])}:"
+                        f"measured_LRA={float(m['input_lra'])}:measured_thresh={float(m['input_thresh'])}:"
+                        f"offset={float(m['target_offset'])}")
+        except (ValueError, KeyError, TypeError):
+            raise RuntimeError("its loudness could not be measured") from None
+        ext = media_ext(src)
+        out = scratch / f"out.{ext}"
+        maps = ["-map", "0:v:0", "-map", "0:a:0", "-sn", "-c:v", "copy"] if kind == "video" else ["-vn"]
+        rest = (lambda f: on_progress(0.5 + f / 2)) if on_progress else None
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), *maps,
+                             "-af", f"loudnorm={LOUDNESS}:{measured}:linear=true", "-ar", "48000",
+                             *audio_codec(ext), str(out)], total, rest)
+        return edit_done(scratch, [out], [(out_dir, f"{src.stem} (standard volume)", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+# The speeds "Change speed" offers: slower to follow along, faster to skim.
+SPEEDS = ("0.5", "0.75", "1.25", "1.5", "2")
+
+
+def change_speed(path, factor, on_progress=None):
+    """Save a copy of a sound or video played at another speed. Voices keep their pitch (atempo)."""
+    if factor not in SPEEDS:
+        raise RuntimeError("the speed has to be one of " + ", ".join(f"{s}x" for s in SPEEDS))
+    f = float(factor)
+    src, kind, out_dir, scratch = media_job(path, ("audio", "video"))
+    try:
+        info = probe(scratch, str(src))
+        ext = media_ext(src)
+        out = scratch / f"out.{ext}"
+        sound = ["-af", f"atempo={f}"] if info["audio"] else []
+        if kind == "video":
+            # The picture has to be made again at the new pace, so MKV gets MP4's codecs here.
+            opts = codec_opts("mp4" if ext == "mkv" else ext)
+            cmd = ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-vf", f"setpts=PTS/{f}", *sound, *opts]
+        else:
+            cmd = ["-vn", *sound, *codec_opts(ext)]
+        total = info["seconds"] / f if info["seconds"] else None
+        run_ffmpeg(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), *cmd, str(out)],
+                   total, on_progress)
+        label = {"0.5": "half speed", "2": "double speed"}.get(factor, f"{factor}x speed")
+        return edit_done(scratch, [out], [(out_dir, f"{src.stem} ({label})", ext)])
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def snapshot(path, at):
+    """Save the picture shown at one moment of a video as a PNG beside it."""
+    t = parse_time(at)
+    src, _kind, out_dir, scratch = media_job(path, ("video",))
+    try:
+        total = probe(scratch, str(src))["seconds"]
+        if total and t >= total:
+            raise RuntimeError("the moment has to be inside the video")
+        out = scratch / "frame.png"
+        # -ss after -i: exact to the frame, not the nearest keyframe.
+        run(scratch, ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(src), "-ss", f"{t:.3f}",
+                      "-frames:v", "1", "-update", "1", str(out)], timeout=600)
+        stamp = f"{int(t // 60)}m{t % 60:04.1f}s" if t >= 60 else f"{t:.1f}s"
+        return edit_done(scratch, [out], [(out_dir, f"{src.stem} (picture at {stamp})", "png")])
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
@@ -1898,7 +2027,8 @@ def run_edit(tool, args):
     wanted = {"merge-pdf": (2, None), "split-pdf": (1, 1), "trim": (3, 3), "rotate": (2, 2), "crop": (5, 5),
               "redact": (5, None), "background": (3, 3), "zip-all": (2, None), "annotate": (2, 2),
               "split-media": (2, 2), "join-media": (2, None), "bleep": (3, None),
-              "extract": (1, None), "pdf-combine": (2, None), "searchable": (1, 1), "resize": (2, None)}[tool]
+              "extract": (1, None), "pdf-combine": (2, None), "searchable": (1, 1), "resize": (2, None),
+              "loudness": (1, None), "speed": (2, 2), "snapshot": (2, 2)}[tool]
     if len(args) < wanted[0] or (wanted[1] and len(args) > wanted[1]):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)
         return 2
@@ -1906,12 +2036,14 @@ def run_edit(tool, args):
              "redact": "Hidden parts blacked out", "background": "Background added",
              "zip-all": "Zipped together", "annotate": "Annotated", "split-media": "Split in two",
              "join-media": "Joined", "bleep": "Bleeped", "extract": "Unpacked", "pdf-combine": "Put into one PDF",
-             "searchable": "Made searchable", "resize": "Resized"}[tool]
-    media = tool in ("trim", "split-media", "join-media", "bleep", "extract", "searchable") or (
+             "searchable": "Made searchable", "resize": "Resized", "loudness": "Set to standard volume",
+             "speed": "Speed changed", "snapshot": "Picture saved"}[tool]
+    media = tool in ("trim", "split-media", "join-media", "bleep", "extract", "searchable", "loudness", "speed") or (
         tool in ("crop", "redact") and kind_of(args[0]) == "video")
     working = {"trim": "Trimming", "split-media": "Splitting", "join-media": "Joining", "bleep": "Bleeping",
                "crop": "Cropping", "redact": "Blacking out", "extract": "Unpacking",
-               "searchable": "Reading the text (this takes a while)"}
+               "searchable": "Reading the text (this takes a while)", "loudness": "Setting the volume",
+               "speed": "Changing the speed"}
     nid = notify(working[tool], Path(args[0]).name if tool != "join-media" else f"{len([a for a in args if a != '--name-order'])} files",
                  urgency="low") if media else None
     last = [0.0]
@@ -1945,13 +2077,20 @@ def run_edit(tool, args):
             made = join_media(name_order(args[1:]) if args[0] == "--name-order" else args, progress)
         elif tool == "bleep":
             made = bleep_media(args[0], args[1:], progress)
+        elif tool == "loudness":
+            made = [m for a in args for m in set_loudness(a, progress)]
+        elif tool == "speed":
+            made = change_speed(args[0], args[1], progress)
+        elif tool == "snapshot":
+            made = snapshot(args[0], args[1])
         elif tool in ("crop", "redact") and kind_of(args[0]) == "video":
             made = edit_video(tool, args[0], args[1:], progress)
         else:
             made = edit_image(tool, args[0], args[1:])
     except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as e:
         # A ZIP of many items has no single file to name; its messages already say which one.
-        verb = {"pdf-combine": "make the PDF", "searchable": "make it searchable"}.get(tool, tool.split('-')[0])
+        verb = {"pdf-combine": "make the PDF", "searchable": "make it searchable", "loudness": "set the volume",
+                "speed": "change the speed", "snapshot": "save the picture"}.get(tool, tool.split('-')[0])
         notify(f"Couldn't {verb}", str(e) if tool in ("zip-all", "join-media", "pdf-combine", "resize") else f"{Path(args[0]).name}: {e}",
                nid)
         return 1
@@ -2050,7 +2189,8 @@ def main(argv):
         return 0
     if len(argv) >= 2 and argv[1] in ("merge-pdf", "split-pdf", "trim", "rotate", "crop", "redact", "background",
                                       "zip-all", "annotate", "split-media", "join-media", "bleep",
-                                      "extract", "pdf-combine", "searchable", "resize"):
+                                      "extract", "pdf-combine", "searchable", "resize", "loudness", "speed",
+                                      "snapshot"):
         return run_edit(argv[1], argv[2:])
     if len(argv) < 3 or argv[1].startswith("-"):
         print(__doc__.strip().split("\n\n")[0], file=sys.stderr)

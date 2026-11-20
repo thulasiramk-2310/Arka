@@ -1,7 +1,7 @@
 // arka-edit: the small window behind the "Edit" entries: crop or black out parts
 // of a picture or a video, draw on a picture, put a picture on a background, and
-// trim, split or beep over parts of a sound or video.
-//   arka-edit crop|redact|annotate|background|trim|split|bleep FILE
+// trim, split or beep over parts of a sound or video, or save the picture at one moment of a video.
+//   arka-edit crop|redact|annotate|background|trim|split|bleep|snapshot FILE
 // It only collects what you chose. The work is done by arka-convert, which
 // runs it in the sandbox and never changes the original.
 
@@ -94,6 +94,9 @@ public:
     QString m_wave;             // for sound and video: the waveform, saved where m_tmp is
     QTemporaryDir m_tmp;
     mutable qreal m_duration = -1;
+    QProcess *m_preview = nullptr;  // "Picture of a frame": the frame being read for the preview
+    qreal m_previewNext = -1;       // a moment asked for while one was still being read
+    int m_previewCount = 0;         // each preview gets its own file, so the picture is not served from cache
     QVariantMap m_hidden;       // the hidden details mat2 finds, read once before the window shows
 
     QString fileName() const { return QFileInfo(m_file).fileName(); }
@@ -131,7 +134,7 @@ public:
             return m_duration;
         m_duration = 0;
         if (m_tool != QLatin1String("trim") && m_tool != QLatin1String("split") && m_tool != QLatin1String("bleep")
-            && !isVideo())
+            && m_tool != QLatin1String("snapshot") && !isVideo())
             return 0;
         QProcess p;
         p.start(QStringLiteral("arka-convert"), {QStringLiteral("--duration"), m_file});
@@ -293,8 +296,35 @@ Q_SIGNALS:
     void inspectorOpenChanged();
     void hiddenChanged();
     void privateFound(const QVariantList &found, const QString &error);
+    void previewReady(const QUrl &picture);
 
 public:
+    // "Picture of a frame": read the frame at t (seconds) for the preview. Only the newest request counts:
+    // while one frame is being read, a newer moment waits and older ones are dropped. Sends previewReady.
+    Q_INVOKABLE void previewAt(qreal t)
+    {
+        if (!m_tmp.isValid() || t < 0)
+            return;
+        if (m_preview) {
+            m_previewNext = t;
+            return;
+        }
+        const QString out = m_tmp.filePath(QStringLiteral("moment-%1.png").arg(++m_previewCount));
+        m_preview = new QProcess(this);
+        connect(m_preview, &QProcess::finished, this, [this, out](int code) {
+            m_preview->deleteLater();
+            m_preview = nullptr;
+            if (code == 0 && QFileInfo(out).isFile())
+                Q_EMIT previewReady(QUrl::fromLocalFile(out));
+            if (m_previewNext >= 0) {
+                const qreal next = m_previewNext;
+                m_previewNext = -1;
+                previewAt(next);
+            }
+        });
+        m_preview->start(QStringLiteral("arka-convert"), {QStringLiteral("--frame"), m_file, QString::number(t, 'f', 3), out});
+    }
+
     Q_INVOKABLE bool dark() const
     {
         QFile f(QDir::homePath() + QStringLiteral("/.config/arka-look"));
@@ -359,10 +389,10 @@ int main(int argc, char **argv)
     }
 
     const QStringList a = app.arguments();
-    static const QStringList tools{"crop", "redact", "annotate", "background", "trim", "split", "bleep"};
+    static const QStringList tools{"crop", "redact", "annotate", "background", "trim", "split", "bleep", "snapshot"};
     const bool find = a.size() == 4 && a[1] == QLatin1String("redact") && a[3] == QLatin1String("--find-private");
     if ((a.size() != 3 && !find) || !tools.contains(a[1]) || !QFileInfo(a[2]).isFile()) {
-        qCritical("usage: arka-edit crop|redact|annotate|background|trim|split|bleep FILE\n"
+        qCritical("usage: arka-edit crop|redact|annotate|background|trim|split|bleep|snapshot FILE\n"
                   "       arka-edit redact FILE --find-private");
         return 2;
     }
@@ -374,7 +404,11 @@ int main(int argc, char **argv)
     edit.duration();   // asked once, before the window is drawn, so no property read waits on it later
     edit.readHidden();
     const bool timeTool = edit.m_tool == QLatin1String("trim") || edit.m_tool == QLatin1String("split")
-                          || edit.m_tool == QLatin1String("bleep");
+                          || edit.m_tool == QLatin1String("bleep") || edit.m_tool == QLatin1String("snapshot");
+    if (edit.m_tool == QLatin1String("snapshot") && !edit.isVideo()) {
+        qCritical("arka-edit: a picture of a frame needs a video, and %s is not one", qPrintable(edit.fileName()));
+        return 2;
+    }
     if ((edit.m_tool == QLatin1String("crop") || edit.m_tool == QLatin1String("redact")) && edit.isVideo()
         && !edit.grabFrame()) {
         qCritical("arka-edit: could not read a frame of %s", qPrintable(edit.fileName()));
