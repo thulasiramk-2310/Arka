@@ -197,7 +197,8 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 # retries=25 + fastestmirror ride out the transient Fedora mirror hiccups that
 # otherwise fail this 1500-package transaction ("All mirrors were tried").
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 --setopt=fastestmirror=True \
-    --setopt=max_parallel_downloads=10 --exclude=rootfiles \
+    --setopt=max_parallel_downloads=10 --exclude=rootfiles --exclude='proj-data-*' \
+    --exclude=plasma-workspace-wallpapers \
     @kde-desktop-environment sddm \
     pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
     libadwaita flatpak xdg-user-dirs brightnessctl \
@@ -705,6 +706,13 @@ RUN for f in gcdmaster org.kde.contactprintthemeeditor org.kde.contactthemeedito
       d=/usr/share/applications/$f.desktop; [ -f "$d" ] || continue; \
       grep -q '^NoDisplay=true' "$d" || sed -i '0,/^\[Desktop Entry\]/s//[Desktop Entry]\nNoDisplay=true/' "$d"; \
     done
+
+# digiKam pulls in GDAL and with it PROJ, and PROJ's map-projection grids come along as
+# weak dependencies: about 700 MB in the image that nothing in ArkaOS uses (PROJ works
+# without them; its small core package proj-data stays). The KDE install excludes them; fail
+# here if a later install brings them back. The same for KDE's stock wallpapers (about 300 MB):
+# ArkaOS ships its own, and nothing points at the stock ones.
+RUN ! rpm -qa --qf '%{NAME}\n' | grep -E '^(proj-data-|plasma-workspace-wallpapers$)'
 
 # Built binaries go in LAST: they change on every Rust edit, and anything after
 # a changed layer rebuilds. Units and configs that reference them are installed
