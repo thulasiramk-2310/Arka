@@ -16,5 +16,5 @@ done < "$f.sums"
 o=$((2048 * 512))
 got=$(mtype -i "$f@@$o" ::EFI/Microsoft/Boot/bootmgfw.efi | sha256sum | cut -c1-64)
 [ "$got" = "$(awk '/^bootmgfw/ {print $2}' "$f.sums")" ] || { echo "bootmgfw.efi CHANGED"; bad=1; }
-[ $bad = 0 ] && echo "Windows partitions, 17 data blocks and bootmgfw.efi unchanged"
+[ $bad = 0 ] && echo "Windows partitions, 16 data blocks and bootmgfw.efi unchanged"
 exit $bad
