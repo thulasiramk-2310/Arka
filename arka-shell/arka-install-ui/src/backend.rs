@@ -7,6 +7,7 @@
 //! ARKA_INSTALL_BACKEND replaces that command (words split on spaces) for previews and tests.
 
 use serde::Deserialize;
+use gtk4::prelude::ToVariant;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
@@ -62,6 +63,8 @@ pub struct Plan {
     pub mode: String,
     pub disk: Disk,
     pub encrypt: bool,
+    #[serde(default)]
+    pub tpm: bool,
     pub rows: Vec<Row>,
     pub entry_label: String,
     pub warnings: Vec<String>,
@@ -83,7 +86,11 @@ impl Plan {
 pub struct Outcome {
     pub kept_unchanged: bool,
     pub windows_boot_files_unchanged: Option<bool>,
+    #[serde(default)]
+    pub fallback_unchanged: Option<bool>,
     pub boot_entry: Option<String>,
+    /// Shown once on the last page; the backend never logs it.
+    pub recovery_key: Option<String>,
 }
 
 /// What the backend said: a result, or a refusal / error message meant for the person.
@@ -166,10 +173,12 @@ pub fn probe() -> Said<Vec<Disk>> {
 }
 
 /// Plans an install; the plan is saved to `out` for apply.
-pub fn plan(disk: &str, mode: &str, encrypt: bool, keymap: &str, image: &str, out: &str) -> Said<Plan> {
+pub fn plan(disk: &str, mode: &str, encrypt: bool, tpm: bool, keymap: &str, image: &str, out: &str) -> Said<Plan> {
     let mut args = vec!["plan", "--disk", disk, "--mode", mode, "--image", image, "--keymap", keymap, "--out", out];
     if !encrypt {
         args.push("--no-encrypt");
+    } else if tpm {
+        args.push("--tpm");
     }
     run(&args)
 }
@@ -186,7 +195,10 @@ pub enum Event {
 
 impl PartialEq for Outcome {
     fn eq(&self, o: &Self) -> bool {
-        self.kept_unchanged == o.kept_unchanged && self.windows_boot_files_unchanged == o.windows_boot_files_unchanged && self.boot_entry == o.boot_entry
+        self.kept_unchanged == o.kept_unchanged
+            && self.windows_boot_files_unchanged == o.windows_boot_files_unchanged
+            && self.boot_entry == o.boot_entry
+            && self.recovery_key == o.recovery_key
     }
 }
 
@@ -419,6 +431,43 @@ pub fn passphrase_problem(p: &str, again: &str) -> Option<&'static str> {
     }
 }
 
+/// PIN rules (the TPM chip unlocks the disk only with it): at least 6 characters, typed the
+/// same twice.
+pub fn pin_problem(p: &str, again: &str) -> Option<&'static str> {
+    if p.chars().count() < 6 {
+        Some("Use at least 6 characters.")
+    } else if p != again {
+        Some("The two PINs are different.")
+    } else {
+        None
+    }
+}
+
+/// True when this computer has a TPM 2.0 chip (the same test as the backend's).
+pub fn has_tpm2() -> bool {
+    std::fs::read_to_string("/sys/class/tpm/tpm0/tpm_version_major").map(|v| v.trim() == "2").unwrap_or(false)
+        && std::path::Path::new("/dev/tpmrm0").exists()
+}
+
+/// Asks logind to restart the computer over D-Bus. No program is started, so this still works
+/// when the USB stick the installer runs from has been taken out.
+pub fn restart() -> Result<(), String> {
+    let bus = gtk4::gio::bus_get_sync(gtk4::gio::BusType::System, gtk4::gio::Cancellable::NONE).map_err(|e| e.to_string())?;
+    bus.call_sync(
+        Some("org.freedesktop.login1"),
+        "/org/freedesktop/login1",
+        "org.freedesktop.login1.Manager",
+        "Reboot",
+        Some(&gtk4::glib::Variant::tuple_from_iter([false.to_variant()])),
+        None,
+        gtk4::gio::DBusCallFlags::NONE,
+        10_000,
+        gtk4::gio::Cancellable::NONE,
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,6 +487,7 @@ mod tests {
             mode: "free".into(),
             disk: disk(true, 4, 0),
             encrypt: true,
+            tpm: false,
             rows: vec![
                 Row { label: Some("arka-boot".into()), raw_size: Some(2 * GIB), activity: "create".into() },
                 Row { label: Some("arka-root".into()), raw_size: Some(root), activity: "create".into() },
@@ -504,6 +554,9 @@ mod tests {
         assert!(passphrase_problem("short", "short").is_some());
         assert!(passphrase_problem("long enough", "long enougH").is_some());
         assert_eq!(passphrase_problem("long enough", "long enough"), None);
+        assert!(pin_problem("12345", "12345").is_some());
+        assert!(pin_problem("123456", "123457").is_some());
+        assert_eq!(pin_problem("123456", "123456"), None);
     }
 }
 

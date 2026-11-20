@@ -39,6 +39,7 @@ const STOPS: &[usize] = &[0, 2, 4, 6, 7, 8, 7];
 const STEPS: &[(&str, &str)] = &[
     ("check", "Checking the disk again"),
     ("partition", "Creating the ArkaOS partitions"),
+    ("keys", "Setting up the disk keys"),
     ("install", "Copying ArkaOS onto the disk"),
     ("verify", "Checking the result"),
     ("boot-menu", "Adding the start-up entries"),
@@ -159,6 +160,13 @@ struct St {
     disks: Vec<Disk>,
     picked: Option<usize>,
     encrypt: bool,
+    /// This computer has a TPM 2.0 chip.
+    tpm_chip: bool,
+    /// Unlock with the chip and a PIN (else a passphrase).
+    use_tpm: bool,
+    /// The last page shows a recovery key and the person said it is saved.
+    key_shown: bool,
+    key_saved: bool,
     plan: Option<Plan>,
     last_step: Option<String>,
     installing: bool,
@@ -185,8 +193,10 @@ struct App {
     pass: gtk4::PasswordEntry,
     again: gtk4::PasswordEntry,
     no_encrypt: gtk4::CheckButton,
+    use_pass: gtk4::CheckButton,
     pass_box: gtk4::Box,
     enc_note: gtk4::Label,
+    enc_sub: gtk4::Label,
     // review
     review_body: gtk4::Box,
     // installing
@@ -273,7 +283,7 @@ impl App {
         let wbody = gtk4::Box::new(gtk4::Orientation::Vertical, sp(10));
         wbody.append(&label("Keyboard layout", "ai-section"));
         wbody.append(&keymap);
-        wbody.append(&label("The layout you will type the disk passphrase with when the computer starts.", "oobe-note"));
+        wbody.append(&label("The layout you will type the disk PIN or passphrase with when the computer starts.", "oobe-note"));
         let before = gtk4::Box::new(gtk4::Orientation::Vertical, sp(12));
         before.set_margin_top(sp(36));
         before.append(&label("Before you start", "ai-section"));
@@ -283,7 +293,7 @@ impl App {
             "",
         ));
         before.append(&dot_line(
-            "Installing next to Windows is new in this Developer Preview and has been tested only in virtual machines so far.",
+            "Installing next to Windows is new in this Developer Preview. It has been tested in virtual machines and on one laptop so far.",
             "",
         ));
         if backend::on_battery() {
@@ -314,15 +324,18 @@ impl App {
         let enc_note = label("", "oobe-note");
         pass_box.append(&enc_note);
         ebody.append(&pass_box);
+        let tpm_chip = backend::has_tpm2();
+        let use_pass = gtk4::CheckButton::with_label("Use a long passphrase instead of the TPM chip");
+        use_pass.add_css_class("oobe-tool");
+        use_pass.set_margin_top(sp(24));
+        use_pass.set_visible(tpm_chip);
+        ebody.append(&use_pass);
         let no_encrypt = gtk4::CheckButton::with_label("Don't encrypt ArkaOS");
         no_encrypt.add_css_class("oobe-tool");
-        no_encrypt.set_margin_top(sp(24));
+        no_encrypt.set_margin_top(sp(if tpm_chip { 4 } else { 24 }));
         ebody.append(&no_encrypt);
-        let esub = label(
-            "ArkaOS keeps your files and settings on an encrypted partition. They can be read only after this passphrase is typed when the computer starts. If it is forgotten, there is no way to get them back.",
-            "oobe-sub",
-        );
-        pages.add_named(&page("Choose a disk passphrase", &esub, &ebody), Some("encrypt"));
+        let esub = label("", "oobe-sub");
+        pages.add_named(&page(if tpm_chip { "Disk encryption" } else { "Choose a disk passphrase" }, &esub, &ebody), Some("encrypt"));
 
         // ── review ──
         let review_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(14));
@@ -370,7 +383,8 @@ impl App {
 
         // ── done / failed ──
         let done_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(14));
-        let dsub = label("You can remove the installer (USB stick or disc) and restart.", "oobe-sub");
+        // The installer runs from the USB stick: taking it out first leaves nothing to restart with.
+        let dsub = label("Click Restart. Take out the USB stick or disc when the screen goes dark.", "oobe-sub");
         pages.add_named(&page("ArkaOS is installed", &dsub, &done_body), Some("done"));
         let fail_body = gtk4::Box::new(gtk4::Orientation::Vertical, sp(14));
         let fail_sub = label("", "oobe-sub");
@@ -412,15 +426,17 @@ impl App {
             next: next.clone(),
             err,
             cur: Cell::new(0),
-            st: RefCell::new(St { keymap: keymaps[us].clone(), encrypt: true, ..Default::default() }),
+            st: RefCell::new(St { keymap: keymaps[us].clone(), encrypt: true, tpm_chip, use_tpm: tpm_chip, ..Default::default() }),
             image,
             preview,
             where_body,
             pass: pass.clone(),
             again: again.clone(),
             no_encrypt: no_encrypt.clone(),
+            use_pass: use_pass.clone(),
             pass_box,
             enc_note,
+            enc_sub: esub,
             review_body,
             step_rows,
             log_lbl,
@@ -458,6 +474,16 @@ impl App {
         {
             let a = a.clone();
             no_encrypt.connect_toggled(move |c| a.encryption_toggled(c.is_active()));
+        }
+        {
+            let a = a.clone();
+            use_pass.connect_toggled(move |c| {
+                a.st.borrow_mut().use_tpm = a.st.borrow().tpm_chip && !c.is_active();
+                // A PIN and a passphrase are different secrets: start the fields again.
+                a.pass.set_text("");
+                a.again.set_text("");
+                a.refresh();
+            });
         }
         {
             let a = a.clone();
@@ -525,11 +551,24 @@ impl App {
             "welcome" => ("Continue", true),
             "where" => ("Continue", st.picked.is_some()),
             "encrypt" => {
-                let problem = if st.encrypt { backend::passphrase_problem(&self.pass.text(), &self.again.text()) } else { None };
+                let pin = st.use_tpm;
+                let problem = match (st.encrypt, pin) {
+                    (false, _) => None,
+                    (true, true) => backend::pin_problem(&self.pass.text(), &self.again.text()),
+                    (true, false) => backend::passphrase_problem(&self.pass.text(), &self.again.text()),
+                };
+                self.pass.set_property("placeholder-text", if pin { "PIN" } else { "Passphrase" });
+                self.use_pass.set_sensitive(st.encrypt);
+                self.enc_sub.set_text(if pin {
+                    "ArkaOS keeps your files and settings on an encrypted partition. When the computer starts, its TPM security chip unlocks it after you type this PIN, as long as Secure Boot is set up as it is now. At the end of the install you get a recovery key, for when the chip can't unlock it."
+                } else {
+                    "ArkaOS keeps your files and settings on an encrypted partition. They can be read only after this passphrase is typed when the computer starts. At the end of the install you get a recovery key, for when the passphrase is forgotten."
+                });
                 let typed = !self.pass.text().is_empty() || !self.again.text().is_empty();
                 let show_problem = typed && problem.is_some();
                 self.enc_note.set_text(match (problem, typed) {
                     (Some(p), true) => p,
+                    _ if pin => "At least 6 characters. Digits are quickest to type; letters work too.",
                     _ => "At least 8 characters. A few unrelated words are easier to type and remember than a short password.",
                 });
                 self.enc_note.set_css_classes(&[if show_problem { "oobe-err" } else { "oobe-note" }]);
@@ -542,7 +581,7 @@ impl App {
                 }
                 (if erase { "Erase and install" } else { "Install ArkaOS" }, st.plan.is_some())
             }
-            "done" => ("Restart", true),
+            "done" => ("Restart", !st.key_shown || st.key_saved),
             "failed" => ("Start over", true),
             _ => ("Continue", false),
         };
@@ -570,7 +609,10 @@ impl App {
             }
             "review" => self.confirm_install(),
             "done" => {
-                let _ = std::process::Command::new("systemctl").arg("reboot").spawn();
+                if let Err(e) = backend::restart() {
+                    self.err.set_text(&format!("Could not restart ({e}). Hold the power button to turn the computer off."));
+                    self.err.set_visible(true);
+                }
             }
             "failed" => {
                 {
@@ -598,7 +640,7 @@ impl App {
                     let mut choices = vec![];
                     for d in disks.iter().filter(|d| !d.in_use) {
                         let tag = d.path.trim_start_matches("/dev/").replace('/', "-");
-                        let p = |mode: &str| backend::plan(&d.path, mode, true, &keymap, &image, &format!("/run/arka-install/choice-{tag}-{mode}.json"));
+                        let p = |mode: &str| backend::plan(&d.path, mode, true, false, &keymap, &image, &format!("/run/arka-install/choice-{tag}-{mode}.json"));
                         choices.extend(backend::choices(d, &p("free"), &p("empty"), &p("erase")));
                     }
                     Ok((disks, choices))
@@ -732,11 +774,11 @@ impl App {
         self.refresh();
         let st = self.st.borrow();
         let Some(c) = st.picked.and_then(|i| st.choices.get(i)).cloned() else { return };
-        let (encrypt, keymap, image) = (st.encrypt, st.keymap.clone(), self.image.clone());
+        let (encrypt, tpm, keymap, image) = (st.encrypt, st.use_tpm, st.keymap.clone(), self.image.clone());
         drop(st);
         let a = self.clone();
         glib::spawn_future_local(async move {
-            let said = gio::spawn_blocking(move || backend::plan(&c.disk, c.mode, encrypt, &keymap, &image, PLAN_FILE))
+            let said = gio::spawn_blocking(move || backend::plan(&c.disk, c.mode, encrypt, tpm, &keymap, &image, PLAN_FILE))
                 .await
                 .unwrap_or_else(|_| Said::Failed("Planning stopped unexpectedly.".into()));
             a.fill_review(said);
@@ -796,8 +838,14 @@ impl App {
         let security = group("Security");
         if p.encrypt {
             let keymap = self.st.borrow().keymap.clone();
-            security.append(&dot_line("Encrypted with the passphrase you chose.", "create"));
-            security.append(&dot_line(&format!("Keyboard layout for the passphrase at start-up: {}.", backend::keymap_name(&keymap)), ""));
+            let what = if p.tpm { "PIN" } else { "passphrase" };
+            if p.tpm {
+                security.append(&dot_line("Encrypted. The TPM chip unlocks it at start-up with the PIN you chose, while Secure Boot stays as it is now.", "create"));
+            } else {
+                security.append(&dot_line("Encrypted with the passphrase you chose.", "create"));
+            }
+            security.append(&dot_line("A recovery key is made and shown once, at the end of the install.", "create"));
+            security.append(&dot_line(&format!("Keyboard layout for the {what} at start-up: {}.", backend::keymap_name(&keymap)), ""));
         } else {
             security.append(&dot_line("Not encrypted.", "erase"));
         }
@@ -891,8 +939,11 @@ impl App {
     }
 
     fn mark_step(&self, step: &str) {
-        // "mount" belongs to creating the partitions on screen.
-        let shown = if step == "mount" { "partition" } else { step };
+        // "mount" has no line of its own: the line before it stays current.
+        if step == "mount" {
+            return;
+        }
+        let shown = step;
         let Some(k) = STEPS.iter().position(|(s, _)| *s == shown) else { return };
         {
             let mut st = self.st.borrow_mut();
@@ -930,23 +981,62 @@ impl App {
                 clear(&self.done_body);
                 let checked = gtk4::Box::new(gtk4::Orientation::Vertical, sp(10));
                 checked.append(&label("Checked after installing", "ai-section"));
-                let (free, windows, encrypt) = {
+                let (free, windows, encrypt, tpm) = {
                     let st = self.st.borrow();
                     let p = st.plan.as_ref();
-                    (p.is_some_and(|p| p.mode == "free"), p.is_some_and(|p| p.mode == "free" && p.disk.has_windows), st.encrypt)
+                    (p.is_some_and(|p| p.mode == "free"), p.is_some_and(|p| p.mode == "free" && p.disk.has_windows), st.encrypt, p.is_some_and(|p| p.tpm))
                 };
                 // Only next to existing partitions is there anything to have kept.
                 if free && o.kept_unchanged {
                     checked.append(&dot_line("The partitions that were already on the disk are where they were, with the same size and type.", "create"));
                 }
                 if o.windows_boot_files_unchanged == Some(true) {
-                    checked.append(&dot_line("Windows' start-up files are unchanged.", "create"));
+                    checked.append(&dot_line("Windows Boot Manager's files are unchanged.", "create"));
+                }
+                if o.fallback_unchanged == Some(false) {
+                    checked.append(&dot_line(
+                        "The disk's fallback start-up file (EFI\\BOOT\\BOOTX64.EFI) is now ArkaOS's. Firmware normally uses it only when it has no other start-up entry for this disk.",
+                        "",
+                    ));
                 }
                 if let Some(e) = &o.boot_entry {
                     let name = e.split_once(' ').map(|(_, n)| n).unwrap_or(e);
                     checked.append(&dot_line(&format!("The start-up entry “{name}” is in place."), "create"));
                 }
                 self.done_body.append(&checked);
+                {
+                    let mut st = self.st.borrow_mut();
+                    st.key_shown = o.recovery_key.is_some();
+                    st.key_saved = false;
+                }
+                if let Some(k) = &o.recovery_key {
+                    let kb = gtk4::Box::new(gtk4::Orientation::Vertical, sp(10));
+                    kb.set_margin_top(sp(28));
+                    kb.append(&label("Recovery key", "ai-section"));
+                    // Two lines of four groups; the dashes are part of the key when it is typed.
+                    let groups: Vec<&str> = k.split('-').collect();
+                    let shown = if groups.len() == 8 { format!("{}-\n{}", groups[..4].join("-"), groups[4..].join("-")) } else { k.clone() };
+                    let key = label(&shown, "ai-key");
+                    key.set_selectable(true);
+                    kb.append(&key);
+                    kb.append(&label(
+                        if tpm {
+                            "ArkaOS asks for this key when the TPM chip can't unlock the disk: for example after Secure Boot is turned off or its keys change, or if the disk is moved to another computer. Type it with the dashes. Write it down or take a photo, and keep it away from this computer. It is shown only now."
+                        } else {
+                            "This key opens the disk if the passphrase is forgotten. Write it down or take a photo, and keep it away from this computer. It is shown only now."
+                        },
+                        "oobe-note",
+                    ));
+                    let saved = gtk4::CheckButton::with_label("I have written down or photographed the recovery key");
+                    saved.add_css_class("oobe-tool");
+                    let a = self.clone();
+                    saved.connect_toggled(move |c| {
+                        a.st.borrow_mut().key_saved = c.is_active();
+                        a.refresh();
+                    });
+                    kb.append(&saved);
+                    self.done_body.append(&kb);
+                }
                 let next = gtk4::Box::new(gtk4::Orientation::Vertical, sp(10));
                 next.set_margin_top(sp(28));
                 next.append(&label("After the restart", "ai-section"));
@@ -955,9 +1045,15 @@ impl App {
                         "To start Windows, pick Windows in the menu that appears when the computer starts. Your computer's boot menu key also lists it; the key differs by maker.",
                         "",
                     ));
+                    next.append(&dot_line(
+                        "If the computer starts Windows straight away, without the ArkaOS menu, its firmware kept Windows first. Open the firmware settings and put ArkaOS first in the boot order; on some computers that list is inside the disk's own boot priorities.",
+                        "",
+                    ));
                 }
                 next.append(&dot_line(
-                    if encrypt {
+                    if encrypt && tpm {
+                        "ArkaOS asks for your PIN, then sets up your account the first time it starts."
+                    } else if encrypt {
                         "ArkaOS asks for the disk passphrase, then sets up your account the first time it starts."
                     } else {
                         "ArkaOS sets up your account the first time it starts."

@@ -2,7 +2,7 @@
 //!
 //!   arka-install probe                      list the disks and what is on them (JSON)
 //!   arka-install plan --disk D --mode M     plan an install with systemd-repart's dry run (JSON)
-//!   arka-install apply --plan FILE          carry out a reviewed plan (passphrase on stdin)
+//!   arka-install apply --plan FILE          carry out a reviewed plan (passphrase or PIN on stdin)
 //!
 //! probe and plan write nothing to any disk. apply writes only after checking that the disk is
 //! exactly as it was when the plan was made. Exit codes: 0 done, 1 error, 2 usage, 3 refused.
@@ -18,7 +18,7 @@ const DEFAULT_TARGET_IMGREF: &str = "ghcr.io/thulasiramk-2310/arka:latest";
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  arka-install probe\n  arka-install plan --disk /dev/X --mode free|empty|erase --image IMAGE [--target-imgref REF] [--no-encrypt] [--keymap us] [--out FILE]\n  arka-install apply --plan FILE   (reads the passphrase from stdin when the plan encrypts)"
+        "usage:\n  arka-install probe\n  arka-install plan --disk /dev/X --mode free|empty|erase --image IMAGE [--target-imgref REF] [--no-encrypt | --tpm] [--keymap us] [--out FILE]\n  arka-install apply --plan FILE   (reads the passphrase, or with --tpm the PIN, from stdin when the plan encrypts)"
     );
     ExitCode::from(2)
 }
@@ -57,6 +57,7 @@ fn main() -> ExitCode {
                 disk: d,
                 mode,
                 encrypt: !args.iter().any(|a| a == "--no-encrypt"),
+                tpm: args.iter().any(|a| a == "--tpm"),
                 keymap: flag(&args, "--keymap").unwrap_or_else(|| "us".into()),
                 image,
                 target_imgref: flag(&args, "--target-imgref").unwrap_or_else(|| DEFAULT_TARGET_IMGREF.into()),

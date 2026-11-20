@@ -133,6 +133,10 @@ pub struct EspInfo {
     pub size_bytes: u64,
     /// sha256 of every file under EFI/Microsoft, to prove afterwards that Windows' boot files are unchanged.
     pub microsoft_files: BTreeMap<String, String>,
+    /// sha256 of every file under EFI/BOOT, the fallback loader firmware starts when it has no
+    /// entry for the disk (on a Windows computer, a copy of Windows Boot Manager).
+    #[serde(default)]
+    pub fallback_files: BTreeMap<String, String>,
     pub other_systems: Vec<String>,
 }
 
@@ -275,7 +279,9 @@ fn inspect_esp(node: &str) -> Result<EspInfo, String> {
                         .microsoft_files
                         .keys()
                         .any(|k| k.to_ascii_lowercase().ends_with("/boot/bootmgfw.efi"));
-                } else if !name.eq_ignore_ascii_case("BOOT") {
+                } else if name.eq_ignore_ascii_case("BOOT") {
+                    collect_hashes(&e.path(), &dir, &mut info.fallback_files);
+                } else {
                     info.other_systems.push(name);
                 }
             }

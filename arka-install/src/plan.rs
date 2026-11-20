@@ -68,6 +68,9 @@ pub struct Plan {
     pub mode: Mode,
     pub disk: Disk,
     pub encrypt: bool,
+    /// Unlock with the TPM chip and a PIN instead of a passphrase (only when encrypting).
+    #[serde(default)]
+    pub tpm: bool,
     pub keymap: String,
     /// The podman image bootc installs from.
     pub image: String,
@@ -91,9 +94,17 @@ pub struct Request {
     pub disk: String,
     pub mode: Mode,
     pub encrypt: bool,
+    pub tpm: bool,
     pub keymap: String,
     pub image: String,
     pub target_imgref: String,
+}
+
+/// True when this computer has a TPM 2.0 chip the kernel can use (what systemd-cryptenroll
+/// --tpm2-device=auto needs).
+pub fn has_tpm2() -> bool {
+    std::fs::read_to_string("/sys/class/tpm/tpm0/tpm_version_major").map(|v| v.trim() == "2").unwrap_or(false)
+        && std::path::Path::new("/dev/tpmrm0").exists()
 }
 
 /// A refusal: the install is not safe or not possible as asked. The message is for the person.
@@ -252,6 +263,12 @@ pub fn make(req: &Request) -> Result<Plan, Refusal> {
     if req.keymap.is_empty() || !req.keymap.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) {
         return Err(Refusal(format!("\"{}\" is not a keyboard layout name.", req.keymap)));
     }
+    if req.tpm && !req.encrypt {
+        return Err(Refusal("Unlocking with the TPM chip needs encryption.".into()));
+    }
+    if req.tpm && !has_tpm2() {
+        return Err(Refusal("This computer has no TPM 2.0 chip ArkaOS can use. Go back and choose a passphrase instead.".into()));
+    }
     if !std::path::Path::new("/sys/firmware/efi").exists() {
         return Err(Refusal("This computer was started in legacy BIOS mode. ArkaOS installs only on computers started in UEFI mode.".into()));
     }
@@ -346,6 +363,7 @@ pub fn make(req: &Request) -> Result<Plan, Refusal> {
         esp_node: d.esp.as_ref().map(|e| e.node.clone()).filter(|_| req.mode == Mode::Free),
         disk: d,
         encrypt: req.encrypt,
+        tpm: req.tpm,
         keymap: req.keymap.clone(),
         image: req.image.clone(),
         target_imgref: req.target_imgref.clone(),

@@ -46,19 +46,75 @@ impl Drop for Cleanup {
 pub struct Outcome {
     pub kept_unchanged: bool,
     pub windows_boot_files_unchanged: Option<bool>,
+    /// Whether EFI/BOOT (the fallback loader) is as it was; None when it was empty before.
+    #[serde(default)]
+    pub fallback_unchanged: Option<bool>,
     pub created: Vec<String>,
     pub boot_entry: Option<String>,
+    /// The recovery key made for the encrypted partition. It goes to the screen through this
+    /// result only, never to the log.
+    pub recovery_key: Option<String>,
     pub log: String,
 }
 
-fn read_passphrase() -> Result<String, String> {
+fn read_secret(what: &str) -> Result<String, String> {
     let mut line = String::new();
-    std::io::stdin().lock().read_line(&mut line).map_err(|e| format!("could not read the passphrase: {e}"))?;
+    std::io::stdin().lock().read_line(&mut line).map_err(|e| format!("could not read the {what}: {e}"))?;
     let p = line.trim_end_matches(['\n', '\r']).to_string();
     if p.is_empty() {
-        return Err("The passphrase is empty.".into());
+        return Err(format!("The {what} is empty."));
     }
     Ok(p)
+}
+
+/// A one-time key for creating the encrypted partition when the TPM and a PIN unlock it. It is
+/// removed from the partition once the TPM key and the recovery key are in place.
+fn random_key() -> Result<String, String> {
+    use std::io::Read;
+    let mut b = [0u8; 32];
+    std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).map_err(|e| format!("could not make a key: {e}"))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
+/// Finds the recovery key in systemd-cryptenroll's output: eight groups of eight "modhex"
+/// letters joined by dashes.
+pub fn find_recovery_key(text: &str) -> Option<String> {
+    text.split(|c: char| c.is_whitespace()).map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-')).find(|w| {
+        let groups: Vec<&str> = w.split('-').collect();
+        groups.len() == 8 && groups.iter().all(|g| g.len() == 8 && g.chars().all(|c| "cbdefghijklnrtuv".contains(c)))
+    })
+    .map(str::to_string)
+}
+
+/// "Key slot 0 unlocked." from `cryptsetup open --test-passphrase -v`.
+pub fn unlocked_slot(text: &str) -> Option<String> {
+    text.lines().find_map(|l| l.trim().strip_prefix("Key slot ").and_then(|r| r.strip_suffix(" unlocked.")).map(str::to_string))
+}
+
+/// Adds the recovery key and, with `pin`, a TPM key that also needs the PIN. The TPM key is
+/// bound to PCR 7 (Secure Boot's state and keys) only, so ArkaOS updates, which change the
+/// kernel and the initramfs, keep it working; changing Secure Boot makes ArkaOS ask for the
+/// recovery key instead.
+fn enroll(root: &str, pin: Option<&str>) -> Result<String, String> {
+    let unlock = format!("--unlock-key-file={KEY}");
+    let o = run::capture("systemd-cryptenroll", &[&unlock, "--recovery-key", root])?;
+    if !o.ok {
+        return Err(run::failed("systemd-cryptenroll", &o));
+    }
+    let rk = find_recovery_key(&o.stdout).or_else(|| find_recovery_key(&o.stderr)).ok_or("systemd-cryptenroll made a recovery key but did not show it")?;
+    log("added a recovery key (not logged)");
+    if let Some(pin) = pin {
+        let o = run::capture_env(
+            "systemd-cryptenroll",
+            &[&unlock, "--tpm2-device=auto", "--tpm2-pcrs=7", "--tpm2-with-pin=yes", root],
+            &[("NEWPIN", pin)],
+        )?;
+        if !o.ok {
+            return Err(run::failed("systemd-cryptenroll", &o));
+        }
+        log("added a TPM key that needs the PIN (bound to PCR 7)");
+    }
+    Ok(rk)
 }
 
 fn write_key(pass: &str) -> Result<(), String> {
@@ -128,10 +184,18 @@ pub fn apply(p: &Plan) -> Result<Outcome, String> {
         return Err("systemd-repart now plans something different from what was reviewed. Nothing was written; plan again.".into());
     }
 
-    if p.encrypt {
-        let pass = read_passphrase()?;
-        write_key(&pass)?;
-    }
+    // With the TPM, the secret on stdin is the PIN and the partition is made with a one-time
+    // key; without it, the secret is the passphrase and is the key.
+    let pin = if p.encrypt && p.tpm {
+        let pin = read_secret("PIN")?;
+        write_key(&random_key()?)?;
+        Some(pin)
+    } else {
+        if p.encrypt {
+            write_key(&read_secret("passphrase")?)?;
+        }
+        None
+    };
 
     step("partition");
     let defs = format!("--definitions={DEFS_DIR}");
@@ -155,12 +219,34 @@ pub fn apply(p: &Plan) -> Result<Outcome, String> {
         _ => node_of(&done, "EFI System Partition")?,
     };
 
+    let recovery_key = if p.encrypt {
+        step("keys");
+        Some(enroll(&root, pin.as_deref())?)
+    } else {
+        None
+    };
+    drop(pin);
+
     step("mount");
     // repart made the filesystem inside the encrypted volume; open it with the same key, then
-    // delete the key file at once.
+    // (TPM) remove the one-time key from the partition and delete the key file at once.
     let (root_dev, luks_uuid) = if p.encrypt {
         let uuid = run::stdout("cryptsetup", &["luksUUID", &root])?.trim().to_string();
+        let slot = if p.tpm {
+            let t = run::capture("cryptsetup", &["open", "--test-passphrase", "-v", "--key-file", KEY, &root])?;
+            Some(unlocked_slot(&t.stdout).or_else(|| unlocked_slot(&t.stderr)).ok_or("could not find the one-time key's slot")?)
+        } else {
+            None
+        };
         let opened = run::stdout("cryptsetup", &["open", "--key-file", KEY, &root, LUKS_NAME]);
+        if let (Ok(_), Some(s)) = (&opened, &slot) {
+            // Batch mode: no remaining key is asked for; the TPM and recovery keys stay.
+            if let Err(e) = run::stdout("cryptsetup", &["luksKillSlot", "-q", &root, s]) {
+                let _ = std::fs::remove_file(KEY);
+                return Err(format!("could not remove the one-time key: {e}"));
+            }
+            log(&format!("removed the one-time key (slot {s})"));
+        }
         let _ = std::fs::remove_file(KEY);
         opened?;
         cleanup.opened_luks = true;
@@ -169,7 +255,7 @@ pub fn apply(p: &Plan) -> Result<Outcome, String> {
         (root.clone(), None)
     };
     mount_all(&root_dev, &boot, &esp, &mut cleanup)?;
-    install_and_finish(p, &root_dev, &boot, &esp, luks_uuid.as_deref(), &mut cleanup)
+    install_and_finish(p, &root_dev, &boot, &esp, luks_uuid.as_deref(), recovery_key, &mut cleanup)
 }
 
 fn mount_all(root_dev: &str, boot: &str, esp: &str, c: &mut Cleanup) -> Result<(), String> {
@@ -222,12 +308,17 @@ fn close_luks(c: &mut Cleanup) {
     }
 }
 
-fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid: Option<&str>, c: &mut Cleanup) -> Result<Outcome, String> {
+fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid: Option<&str>, recovery_key: Option<String>, c: &mut Cleanup) -> Result<Outcome, String> {
     step("install");
     let vol = format!("{TARGET}:/target");
     let mut kargs: Vec<String> = Vec::new();
     if let Some(u) = luks_uuid {
         kargs.push(format!("rd.luks.uuid=luks-{u}"));
+        if p.tpm {
+            // Try the TPM (with the PIN) first; without it, or if it refuses, systemd-cryptsetup
+            // asks for the recovery key.
+            kargs.push("rd.luks.options=tpm2-device=auto".into());
+        }
     }
     kargs.push(format!("rd.vconsole.keymap={}", p.keymap));
     kargs.push(format!("vconsole.keymap={}", p.keymap));
@@ -260,20 +351,21 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
     step("verify");
     let now = run::stdout("sfdisk", &["--json", &p.disk.path]).and_then(|s| disk::parse_sfdisk(&s))?;
     let kept_ok = kept_unchanged(&p.kept, &now.partitions);
-    let ms_ok = match (&p.mode, &p.disk.esp) {
-        (Mode::Free, Some(e)) if !e.microsoft_files.is_empty() => {
-            let mut after = std::collections::BTreeMap::new();
-            hash_tree(std::path::Path::new(&format!("{TARGET}/boot/efi")), &format!("{TARGET}/boot/efi"), &mut after);
-            let before: std::collections::BTreeMap<String, String> =
-                e.microsoft_files.iter().map(|(k, v)| (k.to_ascii_lowercase(), v.clone())).collect();
-            let after: std::collections::BTreeMap<String, String> = after
-                .into_iter()
-                .filter(|(k, _)| k.to_ascii_lowercase().starts_with("efi/microsoft/"))
-                .map(|(k, v)| (k.to_ascii_lowercase(), v))
-                .collect();
-            Some(before == after)
-        }
-        _ => None,
+    let mut esp_after = std::collections::BTreeMap::new();
+    hash_tree(std::path::Path::new(&format!("{TARGET}/boot/efi")), &format!("{TARGET}/boot/efi"), &mut esp_after);
+    // The same files under one directory before and after (names compared ignoring case: FAT).
+    let same = |before: &std::collections::BTreeMap<String, String>, dir: &str| {
+        let lower = |m: &std::collections::BTreeMap<String, String>| -> std::collections::BTreeMap<String, String> {
+            m.iter().map(|(k, v)| (k.to_ascii_lowercase(), v.clone())).filter(|(k, _)| k.starts_with(dir)).collect()
+        };
+        lower(before) == lower(&esp_after)
+    };
+    let (ms_ok, fallback_ok) = match (&p.mode, &p.disk.esp) {
+        (Mode::Free, Some(e)) => (
+            (!e.microsoft_files.is_empty()).then(|| same(&e.microsoft_files, "efi/microsoft/")),
+            (!e.fallback_files.is_empty()).then(|| same(&e.fallback_files, "efi/boot/")),
+        ),
+        _ => (None, None),
     };
     match &kept_ok {
         Ok(()) => log("verify: every partition that was kept is unchanged"),
@@ -281,6 +373,10 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
     }
     if let Some(ok) = ms_ok {
         log(&format!("verify: Windows boot files {}", if ok { "unchanged" } else { "CHANGED" }));
+    }
+    if let Some(ok) = fallback_ok {
+        let now: Vec<&String> = esp_after.keys().filter(|k| k.to_ascii_lowercase().starts_with("efi/boot/")).collect();
+        log(&format!("verify: fallback loader EFI/BOOT {} (now: {now:?})", if ok { "unchanged" } else { "replaced" }));
     }
     let entries = run::stdout("efibootmgr", &[]).map(|o| disk::parse_efibootmgr(&o)).unwrap_or_default();
     let order = run::stdout("efibootmgr", &[]).ok().and_then(|o| {
@@ -338,8 +434,10 @@ fn install_and_finish(p: &Plan, root_dev: &str, boot: &str, esp: &str, luks_uuid
     Ok(Outcome {
         kept_unchanged: true,
         windows_boot_files_unchanged: ms_ok,
+        fallback_unchanged: fallback_ok,
         created: p.rows.iter().filter(|r| r.file.is_some()).filter_map(|r| r.label.clone()).collect(),
         boot_entry,
+        recovery_key,
         log: run::LOG.into(),
     })
 }
@@ -372,6 +470,21 @@ fi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_key_is_found() {
+        let key = "fbfrhjru-ilfvtbtb-bdedlguu-lbdfngcd-nvjgchfh-eckfikbk-ekudhjlf-jvtbtfle";
+        assert_eq!(find_recovery_key(&format!("{key}\n")).as_deref(), Some(key));
+        assert_eq!(find_recovery_key(&format!("A secret recovery key has been generated:\n\n    \u{1f510} {key}\n")).as_deref(), Some(key));
+        assert_eq!(find_recovery_key("New TPM2 token enrolled as key slot 2."), None);
+        assert_eq!(find_recovery_key("abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh-abcdefgh"), None);
+    }
+
+    #[test]
+    fn slot_is_read() {
+        assert_eq!(unlocked_slot("Key slot 0 unlocked.\nCommand successful.\n").as_deref(), Some("0"));
+        assert_eq!(unlocked_slot("No key available with this passphrase."), None);
+    }
 
     #[test]
     fn kept_partitions_compare() {

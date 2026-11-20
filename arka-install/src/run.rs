@@ -38,6 +38,29 @@ pub fn capture(prog: &str, args: &[&str]) -> Result<Output, String> {
     })
 }
 
+/// Like `capture`, with extra environment variables. Their values never reach the log: this is
+/// how a PIN is handed to systemd-cryptenroll ($NEWPIN).
+pub fn capture_env(prog: &str, args: &[&str], env: &[(&str, &str)]) -> Result<Output, String> {
+    log(&format!("$ {} {} {}", env.iter().map(|(k, _)| format!("{k}=…")).collect::<Vec<_>>().join(" "), prog, args.join(" ")));
+    let out = Command::new(prog)
+        .args(args)
+        .envs(env.iter().copied())
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("could not start {prog}: {e}"))?;
+    Ok(Output {
+        ok: out.status.success(),
+        code: out.status.code(),
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+    })
+}
+
+/// An error naming the program and its message, for a failed `Output`.
+pub fn failed(prog: &str, o: &Output) -> String {
+    format!("{prog} failed (exit {}): {}", o.code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into()), o.stderr.trim())
+}
+
 /// Runs a program and returns its standard output, or an error naming the program and its message.
 pub fn stdout(prog: &str, args: &[&str]) -> Result<String, String> {
     let o = capture(prog, args)?;

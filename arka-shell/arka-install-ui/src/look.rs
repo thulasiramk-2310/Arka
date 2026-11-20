@@ -144,6 +144,7 @@ button.ai-card label.ai-card-title {{ font-size: 17px; font-weight: 600; color: 
 .ai-warnbox label {{ font-size: 15px; color: {fg}; }}
 .ai-ok {{ font-size: 16px; color: {ok}; font-weight: 600; }}
 
+.ai-key {{ font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-size: 20px; color: {fg}; background-color: {hover}; border-radius: 10px; padding: 16px 20px; letter-spacing: 1px; }}
 .ai-log {{ font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-size: 12px; color: {faint}; }}
 expander.ai-adv title {{ font-size: 15px; color: {muted}; min-height: 32px; padding: 4px 0; }}
 expander.ai-adv arrow {{ color: {muted}; }}
