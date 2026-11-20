@@ -451,6 +451,12 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 # Default cursor theme for new users.
 RUN printf '[Mouse]\ncursorTheme=ArkaCursor\n' > /etc/skel/.config/kcminputrc
 
+# Disk unlock with the computer's TPM chip and a PIN (arka-install sets it up). dracut's
+# tpm2-tss module needs tpm2-tools, and it goes into the initramfs only when asked for; the
+# rebuild below picks it up.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y --setopt=retries=25 tpm2-tools tpm2-tss && \
+    printf 'add_dracutmodules+=" tpm2-tss "\n' > /usr/lib/dracut/dracut.conf.d/50-arka-tpm2.conf
+
 # Activate the boot splash: set the theme, rebuild the initramfs so plymouth
 # carries it, and add rhgb+quiet kargs so the splash actually shows. Disk
 # images get console=ttyS0 from bootc-image-builder, and plymouth falls back to
