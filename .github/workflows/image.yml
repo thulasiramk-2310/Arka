@@ -60,6 +60,30 @@ jobs:
             --label org.opencontainers.image.revision=${{ github.sha }} \
             -t localhost/arka:build .
 
+      # On test branches the Live ISO workflow puts this same image in its ISO instead of
+      # building it a second time (see live-iso.yml). Compressed, it is about a third the size.
+      - name: Hand the image to the Live ISO workflow
+        if: startsWith(github.ref, 'refs/heads/test/')
+        run: |
+          sudo mkdir -p /mnt/handoff
+          sudo skopeo copy --dest-compress-format zstd containers-storage:localhost/arka:build \
+            oci-archive:/mnt/handoff/arka-build.tar
+          sudo chown "$USER" /mnt/handoff/arka-build.tar
+          ls -l /mnt/handoff
+
+      - name: Keep the image for the Live ISO workflow
+        if: startsWith(github.ref, 'refs/heads/test/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: arka-build-image
+          path: /mnt/handoff/arka-build.tar
+          retention-days: 1
+          compression-level: 0
+
+      - name: Remove the handed-over copy
+        if: startsWith(github.ref, 'refs/heads/test/')
+        run: sudo rm -rf /mnt/handoff
+
       - name: Split into small layers
         run: |
           sudo podman run --rm --privileged --security-opt label=disable \

@@ -4,7 +4,8 @@ name: Live ISO
 # on a disk (next to Windows, on an empty disk, or over a whole disk). The ISO carries
 # the image it installs, so installing needs no network.
 #
-# On test/* branches the image is built from the branch (it is not published) and the
+# On test/* branches the image is the one the Image workflow built from the same commit
+# (handed over as an artifact, so it is built once, not twice; it is not published), and the
 # ISO is kept as a downloadable artifact for a few days. Not yet run on master.
 
 on:
@@ -73,8 +74,57 @@ jobs:
         if: steps.reuse.outputs.run != ''
         run: cd /mnt/out && sha256sum -c arkaos-live.iso.sha256
 
-      - name: Build the ArkaOS image from this branch
+      # The Image workflow builds this commit at the same time and hands the image over; wait
+      # for it rather than building it again. A started-by-hand run with no Image run for this
+      # commit builds the image itself.
+      - name: Wait for the Image workflow's build of this commit
+        id: image
         if: steps.reuse.outputs.run == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 20); do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/image.yml/runs?head_sha=$GITHUB_SHA&per_page=1" \
+                  --jq '.workflow_runs[0].id // empty')
+            [ -n "$run" ] && break
+            sleep 15
+          done
+          if [ -z "$run" ]; then
+            echo "No Image run for $GITHUB_SHA: building the image here."
+            exit 0
+          fi
+          echo "Waiting for the image from Image run $run."
+          while :; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" \
+                 --jq '.artifacts[].name' | grep -qx arka-build-image; then
+              echo "run=$run" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq .status)
+            if [ "$state" = completed ]; then
+              echo "::error::Image run $run ended without handing over the image (see that run)"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Download the image
+        if: steps.reuse.outputs.run == '' && steps.image.outputs.run != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: arka-build-image
+          path: /mnt/handoff
+          run-id: ${{ steps.image.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Load the image
+        if: steps.reuse.outputs.run == '' && steps.image.outputs.run != ''
+        run: |
+          sudo skopeo copy oci-archive:/mnt/handoff/arka-build.tar containers-storage:localhost/arka:build
+          sudo rm -rf /mnt/handoff
+
+      - name: Build the ArkaOS image from this branch
+        if: steps.reuse.outputs.run == '' && steps.image.outputs.run == ''
         run: sudo podman build --pull=newer -t localhost/arka:build .
 
       - name: Save it as an OCI directory and read its release name
