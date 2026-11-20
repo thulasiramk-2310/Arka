@@ -526,6 +526,9 @@ RUN for look in Dark Light; do for acc in "" -Blue; do \
     done; done && \
     printf '[Wallpapers]\ndefaultWallpaperTheme=ArkaOS-Dark\ndefaultFileSuffix=.png\ndefaultWidth=3840\ndefaultHeight=2160\n' > /etc/xdg/plasmarc
 
+# The ArkaWM desktop's pictures as KDE wallpapers too (System Settings > Wallpaper).
+COPY wallpapers/arkawm/ /usr/share/wallpapers/
+
 # Setup helper and first-login script (here so editing them is a cheap rebuild).
 COPY arkaos-oobe-apply /usr/libexec/arkaos-oobe-apply
 COPY arka-plasma-firstrun /usr/libexec/arka-plasma-firstrun
