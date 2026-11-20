@@ -108,6 +108,11 @@ jobs:
             sleep 30
           done
 
+      # /mnt belongs to root on the runner; the download step runs as the runner's user.
+      - name: Make a folder for the image
+        if: steps.reuse.outputs.run == '' && steps.image.outputs.run != ''
+        run: sudo install -d -o "$USER" /mnt/handoff
+
       - name: Download the image
         if: steps.reuse.outputs.run == '' && steps.image.outputs.run != ''
         uses: actions/download-artifact@v4
