@@ -1,7 +1,14 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Authors": [{ "Name": "ArkaOS" }],
+        "Authors": [
+            {
+                "Name": "Thulasi Ram K"
+            },
+            {
+                "Name": "ArkaOS contributors"
+            }
+        ],
         "Description": "A dock: pinned and open apps, icons that grow under the pointer",
         "Icon": "preferences-desktop-icons",
         "Id": "org.arkaos.dock",

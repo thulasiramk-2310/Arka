@@ -3,7 +3,10 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "ArkaOS"
+                "Name": "Thulasi Ram K"
+            },
+            {
+                "Name": "ArkaOS contributors"
             }
         ],
         "Description": "Adds the ArkaOS top bar to a screen when it is connected",

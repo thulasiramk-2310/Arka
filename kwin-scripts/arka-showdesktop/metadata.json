@@ -3,7 +3,14 @@
         "Id": "arka-showdesktop",
         "Name": "Show Desktop (keeps the dock)",
         "Description": "Meta+D puts every window away and brings them back on the second press, without hiding the dock.",
-        "Authors": [{ "Name": "ArkaOS" }],
+        "Authors": [
+            {
+                "Name": "Thulasi Ram K"
+            },
+            {
+                "Name": "ArkaOS contributors"
+            }
+        ],
         "EnabledByDefault": true,
         "License": "MIT",
         "Version": "1.0"

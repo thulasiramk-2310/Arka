@@ -1,7 +1,14 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Authors": [{ "Name": "ArkaOS" }],
+        "Authors": [
+            {
+                "Name": "Thulasi Ram K"
+            },
+            {
+                "Name": "ArkaOS contributors"
+            }
+        ],
         "Category": "System Information",
         "Description": "Wi-Fi, Bluetooth, Do Not Disturb, volume and brightness in one panel",
         "Icon": "configure",

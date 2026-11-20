@@ -522,7 +522,7 @@ RUN for look in Dark Light; do for acc in "" -Blue; do \
       l=$(echo $look | tr A-Z a-z); s=$(echo "$acc" | tr A-Z a-z); d=/usr/share/wallpapers/ArkaOS-$look$acc; \
       mkdir -p $d/contents/images && \
       ln -sf /usr/share/arka/wallpapers/default-$l$s.png $d/contents/images/3840x2160.png && \
-      printf '{"KPlugin":{"Id":"ArkaOS-%s%s","Name":"ArkaOS %s%s","License":"GPL-3.0-or-later","Authors":[{"Name":"ArkaOS"}]}}\n' "$look" "$acc" "$look" "$(echo "$acc" | tr - ' ')" > $d/metadata.json; \
+      printf '{"KPlugin":{"Id":"ArkaOS-%s%s","Name":"ArkaOS %s%s","License":"GPL-3.0-or-later","Authors":[{"Name":"Thulasi Ram K"},{"Name":"ArkaOS contributors"}]}}\n' "$look" "$acc" "$look" "$(echo "$acc" | tr - ' ')" > $d/metadata.json; \
     done; done && \
     printf '[Wallpapers]\ndefaultWallpaperTheme=ArkaOS-Dark\ndefaultFileSuffix=.png\ndefaultWidth=3840\ndefaultHeight=2160\n' > /etc/xdg/plasmarc
 
