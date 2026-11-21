@@ -615,7 +615,7 @@ fn page_privacy() -> gtk4::Widget {
     let group = adw::PreferencesGroup::new();
     for (title, subtitle, program) in [
         ("Privacy dashboard", "Which privacy settings are in place right now, as last checked.", "arka-dashboard"),
-        ("App permissions", "What apps installed with Capsule are allowed to use.", "arka-perms"),
+        ("App permissions", "What apps installed from App Library are allowed to use.", "arka-perms"),
     ] {
         let row = adw::ActionRow::new();
         row.set_title(title);

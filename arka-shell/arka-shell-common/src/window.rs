@@ -5,8 +5,8 @@
 //! arrives it implements the same trait and every app keeps working unchanged:
 //!
 //! ```text
-//!     Capsule ─▶ WindowService ─▶ KWin        (today)
-//!     Capsule ─▶ WindowService ─▶ KWin/ArkaWM (tomorrow)
+//!     shell apps ─▶ WindowService ─▶ KWin        (today)
+//!     shell apps ─▶ WindowService ─▶ KWin/ArkaWM (tomorrow)
 //! ```
 //!
 //! This is deliberately the boundary that lets ArkaOS eventually replace the

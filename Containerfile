@@ -158,6 +158,7 @@ COPY --from=shell-builder /build/target/release/arka-wifi      /usr/bin/arka-wif
 COPY --from=shell-builder /build/target/release/arka-update    /usr/bin/arka-update
 COPY --from=shell-builder /build/target/release/arka-hotkeys   /usr/bin/arka-hotkeys
 COPY --from=shell-builder /build/target/release/arka-capsule   /usr/bin/arka-capsule
+COPY --from=shell-builder /build/arka-capsule/icons /usr/share/arka-capsule/icons
 COPY --from=shell-builder /build/target/release/arka-perms    /usr/bin/arka-perms
 COPY --from=shell-builder /build/target/release/arka-settings /usr/bin/arka-settings-gtk
 COPY --from=shell-builder /build/target/release/arka-welcome  /usr/bin/arka-welcome

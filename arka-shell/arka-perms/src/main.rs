@@ -74,7 +74,7 @@ fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let header = arka_shell_common::theme::page_header(
         "App permissions",
-        "See and change what apps installed with Capsule are allowed to use, such as folders, audio and devices.",
+        "See and change what apps installed from App Library are allowed to use, such as folders, audio and devices.",
     );
     header.set_margin_start(24);
     header.set_margin_end(24);
@@ -95,8 +95,8 @@ fn build_app_list_page(nav: &adw::NavigationView) -> gtk4::Widget {
     if apps.is_empty() {
         let empty = adw::StatusPage::new();
         empty.set_icon_name(Some("application-x-executable-symbolic"));
-        empty.set_title("No apps from Capsule yet");
-        empty.set_description(Some("Apps you install with Capsule appear here, with what each one can access."));
+        empty.set_title("No apps from App Library yet");
+        empty.set_description(Some("Apps you install from App Library appear here, with what each one can access."));
         content.append(&empty);
         return;
     }

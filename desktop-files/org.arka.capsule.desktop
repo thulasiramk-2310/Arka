@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Install Apps
-Comment=Install additional applications via Flatpak
+Name=App Library
+Comment=Find and install apps from Flathub
 Exec=arka-capsule
 Icon=arka-capsule
-Keywords=capsule;install;apps;software;flatpak;store;package;
+Keywords=app library;capsule;install;apps;software;flatpak;flathub;store;package;update;
 Categories=System;PackageManager;
