@@ -60,7 +60,7 @@
     "category": "Office"
   },
   {
-    "id": "org.mozilla.Thunderbird",
+    "id": "org.mozilla.thunderbird",
     "name": "Thunderbird",
     "about": "Email.",
     "category": "Internet"
