@@ -44,11 +44,11 @@ a:focus-visible, button:focus-visible, video:focus-visible { outline: 2px solid 
 header.site { border-bottom: 1px solid var(--line); }
 header.site .wrap { display: flex; align-items: center; gap: 24px; height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
-.brand svg { width: 22px; height: 22px; }
+.brand img { width: 24px; height: 24px; display: block; }
 nav.main { margin-left: auto; display: flex; gap: 22px; font-size: 15px; }
-nav.main a { text-decoration: none; color: var(--ink-2); }
+nav.main a { text-decoration: none; color: var(--ink-2); white-space: nowrap; }
 nav.main a:hover { color: var(--ink); }
-.theme { background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 999px; padding: 4px 12px; font: 13px var(--sans); cursor: pointer; }
+.theme { background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; padding: 4px 12px; font: 13px var(--sans); cursor: pointer; }
 
 h1, h2 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.01em; margin: 0; }
 h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.08; }
@@ -62,9 +62,10 @@ section { padding: 88px 0; border-bottom: 1px solid var(--line); }
 .hero { padding-top: 72px; padding-bottom: 56px; }
 .hero .lead { margin-top: 18px; }
 .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; align-items: center; }
-.pill { display: inline-block; background: var(--pill-bg); color: var(--pill-fg); border-radius: 999px; padding: 11px 22px; font-weight: 600; text-decoration: none; }
+.pill { display: inline-block; background: var(--pill-bg); color: var(--pill-fg); border-radius: 10px; padding: 10px 18px; font-weight: 600; text-decoration: none; }
 .pill.quiet { background: none; color: var(--ink); border: 1px solid var(--line); }
-.tag { display: inline-block; font: 12px var(--mono); color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; margin-bottom: 20px; }
+.st { font-weight: 500; color: var(--ink); }
+.tag { display: block; font: 13px/1.5 var(--mono); color: var(--warn); margin-bottom: 16px; }
 .shot { margin: 48px 0 0; }
 .shot img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); }
 .shot figcaption { margin-top: 10px; }
@@ -103,10 +104,6 @@ footer.site .end { margin-left: auto; }
 /* Hero reveal: pure CSS, so the page is readable at once and nothing covers it. */
 html { overflow-x: clip; }
 .hero { position: relative; isolation: isolate; }
-.hero::before { content: ""; position: absolute; z-index: -1; left: -30%; right: -30%; top: -10%; height: 80%; pointer-events: none;
-  background: radial-gradient(50% 50% at 30% 40%, rgba(77,180,145,.10), transparent 70%), radial-gradient(40% 40% at 75% 30%, rgba(120,140,170,.10), transparent 70%);
-  animation: drift 32s ease-in-out infinite alternate; }
-@keyframes drift { from { transform: translate3d(-3%, 0, 0); } to { transform: translate3d(3%, 4%, 0); } }
 .hw { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .14em; margin-bottom: -.14em; }
 .hw > span { display: inline-block; animation: wup .9s cubic-bezier(.16,1,.3,1) both; animation-delay: calc(.1s + var(--i) * .055s); }
 @keyframes wup { from { transform: translateY(112%); } }
@@ -115,14 +112,14 @@ html { overflow-x: clip; }
 .hero .lead { animation: fup .8s cubic-bezier(.16,1,.3,1) .75s both; }
 .hero .ctas { animation: fup .8s cubic-bezier(.16,1,.3,1) .95s both; }
 .hero .shot { animation: fup 1s cubic-bezier(.16,1,.3,1) 1.1s both; }
-.hero2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 56px; align-items: center; }
+.hero2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 48px; align-items: center; }
 .hero2 h1 { font-size: clamp(34px, 4.4vw, 54px); }
 .hvis { container-type: inline-size; }
-.hd { background: #fff; color: #111317; border: 1px solid #e3e6eb; border-radius: 3cqw; padding: 5cqw 5.5cqw 4.5cqw; box-shadow: 0 5cqw 10cqw rgba(17,19,23,.16); font-family: var(--sans);
+.hd { background: #fff; color: #111317; border: 1px solid #e3e6eb; border-radius: 3cqw; padding: 5cqw 5.5cqw 4.5cqw; box-shadow: 0 8px 24px rgba(17,19,23,.08); font-family: var(--sans);
   animation: hdrise 1.1s cubic-bezier(.16,1,.3,1) .9s both; }
 @keyframes hdrise { from { opacity: 0; transform: translateY(8cqw) scale(.985); } }
 .hd .hb { display: flex; align-items: center; gap: 2cqw; font-size: 2.5cqw; font-weight: 600; margin-bottom: 4cqw; }
-.hd .hb svg { width: 3.6cqw; height: 3.6cqw; }
+.hd .hb img { width: 3.8cqw; height: 3.8cqw; display: block; }
 .hd h2 { font: 500 6.4cqw/1.1 var(--serif); margin: 0; color: #111317; }
 .hd .hsub { font-size: 2.6cqw; line-height: 1.4; color: #4a505b; margin: 1.4cqw 0 3cqw; }
 .hd .r { display: grid; grid-template-columns: 1fr auto; gap: 2cqw; padding: 2.1cqw 0; border-top: 1px solid #edf0f3; animation: fup .6s ease both; animation-delay: calc(1.7s + var(--i) * .1s); }
@@ -138,7 +135,7 @@ html { overflow-x: clip; }
 .hd .hn { font-size: 2.3cqw; color: #4a505b; margin: 2.6cqw 0 0; animation: fup .6s ease 4.2s both; }
 @media (max-width: 900px) { .hero2 { grid-template-columns: 1fr; gap: 36px; } .hero2 h1 { font-size: clamp(34px, 7vw, 48px); } }
 @media (prefers-reduced-motion: reduce) {
-  .hero::before, .hw > span, .hero .tag, .hero .lead, .hero .ctas, .hero .shot, .hd, .hd .r, .hd .r b::before, .hd .s1, .hd .s2s, .hd .hn { animation: none !important; }
+  .hw > span, .hero .tag, .hero .lead, .hero .ctas, .hero .shot, .hd, .hd .r, .hd .r b::before, .hd .s1, .hd .s2s, .hd .hn { animation: none !important; }
 }
 button.pill { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
 :root[data-theme="light"] { color-scheme: light; } :root[data-theme="dark"] { color-scheme: dark; }
@@ -153,7 +150,7 @@ main { overflow-x: clip; }
 <header class="site">
   <div class="wrap">
     <a class="brand" href="./" aria-label="ArkaOS home">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#4db491" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#4db491"/></svg>
+      <img src="img/logo.png" alt="" width="24" height="24">
       ArkaOS
     </a>
     <nav class="main" aria-label="Main">
@@ -173,14 +170,14 @@ main { overflow-x: clip; }
   <div class="wrap hero hero2">
     <div class="hcopy">
     <span class="tag">Developer preview — not ready for everyday use</span>
-    <h1><span class="hw"><span style="--i:0">A</span></span> <span class="hw"><span style="--i:1">Linux</span></span> <span class="hw"><span style="--i:2">desktop</span></span> <span class="hw"><span style="--i:3">that</span></span> <span class="hw"><span style="--i:4">sets</span></span> <span class="hw"><span style="--i:5">up</span></span> <span class="hw"><span style="--i:6">your</span></span> <span class="hw"><span style="--i:7">privacy,</span></span> <span class="hw"><span style="--i:8">and</span></span> <span class="hw"><span style="--i:9">shows</span></span> <span class="hw"><span style="--i:10">you</span></span> <span class="hw"><span style="--i:11">where</span></span> <span class="hw"><span style="--i:12">it</span></span> <span class="hw"><span style="--i:13">stands.</span></span></h1>
+    <h1><span class="hw"><span style="--i:0">A</span></span> <span class="hw"><span style="--i:1">Linux</span></span> <span class="hw"><span style="--i:2">desktop</span></span> <span class="hw"><span style="--i:3">that</span></span> <span class="hw"><span style="--i:4">sets</span></span> <span class="hw"><span style="--i:5">up</span></span> <span class="hw"><span style="--i:6">your</span></span> <span class="hw"><span style="--i:7">privacy,</span></span> <span class="hw"><span style="--i:8">and</span></span> <span class="hw"><span style="--i:9">shows</span></span> <span class="hw"><span style="--i:10">you</span></span> <span class="hw"><span style="--i:11">where</span></span> <span class="hw"><span style="--i:12">it</span></span> <span class="hw"><span style="--i:13">stands</span></span></h1>
     <p class="lead">ArkaOS turns on common privacy settings for you, tells you plainly whether each one is in place, and keeps your previous system on disk when it updates. It’s built on Fedora and KDE Plasma.</p>
     <div class="ctas">
       <a class="pill" href="#try">Try it in a virtual machine</a>
-      <a class="pill quiet" href="#honest">What we can and can’t show</a>
+      <a class="pill quiet" href="#honest">What we can show</a>
     </div>
     </div>
-    <div class="hvis"><div class="hd" aria-hidden="true"><div class="hb"><svg viewBox="0 0 24 24"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="#4db491" stroke-width="2" stroke-linejoin="round"/><path d="M12 10 L17 18.5 H7 Z" fill="#4db491"/></svg>Privacy Dashboard</div><h2>Privacy</h2><p class="hsub">What ArkaOS has set up on this computer. Covers only what’s listed here.</p><div class="r" style="--i:0"><div><b>Encrypted DNS</b><i>Requires system DNS lookups to be encrypted.</i></div><span class="stw"><span class="s1" style="--i:0">Checking</span><span class="s2s" style="--i:0">Configured</span></span></div><div class="r" style="--i:1"><div><b>Private network address</b><i>Uses a random hardware address on network connections.</i></div><span class="stw"><span class="s1" style="--i:1">Checking</span><span class="s2s" style="--i:1">Configured</span></span></div><div class="r" style="--i:2"><div><b>Computer name</b><i>Keeps the name chosen in setup: “arka” unless you picked your own.</i></div><span class="stw"><span class="s1" style="--i:2">Checking</span><span class="s2s" style="--i:2">Configured</span></span></div><div class="r" style="--i:3"><div><b>Temporary IPv6 addresses</b><i>Uses temporary IPv6 addresses that change over time.</i></div><span class="stw"><span class="s1" style="--i:3">Checking</span><span class="s2s" style="--i:3">Configured</span></span></div><div class="r" style="--i:4"><div><b>Sandboxed browser</b><i>Opens Firefox in a sandbox that sees only your Downloads folder.</i></div><span class="stw"><span class="s1" style="--i:4">Checking</span><span class="s2s" style="--i:4">Configured</span></span></div><div class="r" style="--i:5"><div><b>Firewall</b><i>Rejects connections other computers try to open to this one.</i></div><span class="stw"><span class="s1" style="--i:5">Checking</span><span class="s2s" style="--i:5">Configured</span></span></div><p class="hn">Checked just now.</p></div></div>
+    <div class="hvis"><div class="hd" aria-hidden="true"><div class="hb"><img src="img/logo.png" alt="">Privacy Dashboard</div><h2>Privacy</h2><p class="hsub">What ArkaOS has set up on this computer. Covers only what’s listed here.</p><div class="r" style="--i:0"><div><b>Encrypted DNS</b><i>Requires system DNS lookups to be encrypted.</i></div><span class="stw"><span class="s1" style="--i:0">Checking</span><span class="s2s" style="--i:0">Configured</span></span></div><div class="r" style="--i:1"><div><b>Private network address</b><i>Uses a random hardware address on network connections.</i></div><span class="stw"><span class="s1" style="--i:1">Checking</span><span class="s2s" style="--i:1">Configured</span></span></div><div class="r" style="--i:2"><div><b>Computer name</b><i>Keeps the name chosen in setup: “arka” unless you picked your own.</i></div><span class="stw"><span class="s1" style="--i:2">Checking</span><span class="s2s" style="--i:2">Configured</span></span></div><div class="r" style="--i:3"><div><b>Temporary IPv6 addresses</b><i>Uses temporary IPv6 addresses that change over time.</i></div><span class="stw"><span class="s1" style="--i:3">Checking</span><span class="s2s" style="--i:3">Configured</span></span></div><div class="r" style="--i:4"><div><b>Sandboxed browser</b><i>Opens Firefox in a sandbox that sees only your Downloads folder.</i></div><span class="stw"><span class="s1" style="--i:4">Checking</span><span class="s2s" style="--i:4">Configured</span></span></div><div class="r" style="--i:5"><div><b>Firewall</b><i>Rejects connections other computers try to open to this one.</i></div><span class="stw"><span class="s1" style="--i:5">Checking</span><span class="s2s" style="--i:5">Configured</span></span></div><p class="hn">Checked just now.</p></div></div>
   </div>
   <div class="wrap" style="padding-bottom:56px">
     <figure class="shot">
@@ -193,7 +190,7 @@ main { overflow-x: clip; }
     <div class="wrap">
       <h2>See it in a minute</h2>
       <p class="lead" style="margin-top:14px">From switching it on to the Privacy dashboard: setup, choosing light or dark, and your desktop. Recorded in a virtual machine; nothing is sped up except waiting.</p>
-      <p style="margin-top:20px"><button class="pill" type="button" data-film>Watch the 43-second film</button></p>
+      <p style="margin-top:20px"><button class="pill" type="button" data-film>Watch the film (84 s, with sound)</button></p>
       <figure class="shot">
         <video controls preload="none" playsinline width="1440" height="900" poster="img/desktop-light.png" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
           <source src="media/arkaos-tour.mp4" type="video/mp4">
@@ -227,7 +224,7 @@ main { overflow-x: clip; }
         </div>
         <div>
           <h3>Plain answers, no score</h3>
-          <p>The Privacy dashboard lists each setting as <em>Configured</em> or <em>Needs attention</em> and when it was last checked. It never gives you a percentage or says you’re “protected”.</p>
+          <p>The Privacy dashboard lists each setting as <b class="st">Configured</b> or <b class="st">Needs attention</b> and when it was last checked. It never gives you a percentage or says you’re “protected”.</p>
         </div>
       </div>
     </div>
@@ -305,6 +302,7 @@ main { overflow-x: clip; }
             <li>Read-only system files at runtime</li>
             <li>Going back to the previous version on its own after a broken update, keeping a good update, and going back by hand with one command (in a VM on 11 October 2026; the first two also on one real laptop on 12 October 2026)</li>
             <li>Booting from USB on one laptop (an earlier version)</li>
+            <li>Installing next to Windows from our own installer, with Secure Boot on: on one laptop (Windows 11 Home, no BitLocker) on 21 November 2026, and in virtual machines on every test run. Windows still starts. In the virtual machines, a check also confirms its partitions were not changed.</li>
             <li>Converting, shrinking and cleaning files, and the format and edit wheels (in a VM)</li>
           </ul>
         </div>
@@ -313,6 +311,7 @@ main { overflow-x: clip; }
           <ul>
             <li>Updates and going back on real laptops</li>
             <li>More real laptops</li>
+            <li>Unlocking the disk with the TPM chip and a PIN, with a recovery key shown once (in virtual machines so far)</li>
             <li>The newer file tools: annotate, split, join, bleep, and reading text from pictures</li>
             <li>arka-pulse, which watches system health locally. Its predictions are estimates and it takes no action on its own.</li>
           </ul>
@@ -320,7 +319,8 @@ main { overflow-x: clip; }
         <div>
           <h3>Not yet</h3>
           <ul>
-            <li>A downloadable installer. One with disk encryption on by default is built and works in a VM, but isn’t published yet.</li>
+            <li>A downloadable installer. Ours is built and has installed ArkaOS on one laptop, but isn’t published yet.</li>
+            <li>Installing next to Windows when BitLocker is on</li>
             <li>Secure Boot with ArkaOS’s own keys</li>
             <li>Support for a wide range of hardware</li>
             <li>Anonymity of any kind. ArkaOS doesn’t hide who you are online.</li>
