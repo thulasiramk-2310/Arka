@@ -78,6 +78,13 @@ RUN dnf install -y -q --setopt=retries=25 grub2-tools-extra rsms-inter-fonts Ima
 COPY grub-theme-arkaos/ /src/
 RUN sh /src/make-theme.sh "" /out && ls /out/theme.txt /out/sans-18.pf2 /out/select_c.png
 
+# The boot splash pictures (drawn with Pillow and numpy, which the image doesn't need).
+FROM docker.io/library/fedora:${FEDORA_VERSION} AS plymouth-builder
+RUN dnf install -y -q --setopt=retries=25 python3-pillow python3-numpy rsms-inter-fonts fontconfig
+COPY plymouth-theme-arkaos/ /src/
+RUN python3 /src/make-assets.py /src /out && ls /out/arkaos.script /out/fill15.png /out/glint15.png /out/l3.png && \
+    ! grep -q '@LETTERS@' /out/arkaos.script
+
 FROM scratch AS files
 COPY firewalld/arkaos.xml /usr/lib/firewalld/zones/arkaos.xml
 COPY kernel/10-arkaos-hardening.toml /usr/lib/bootc/kargs.d/10-arkaos-hardening.toml
@@ -402,8 +409,8 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 
 # ArkaCursor: white pointer with green outline, generated at build; every
 # other shape inherits from breeze_cursors. ArkaSound: soft sine-based event
-# sounds. Plymouth splash images. All need ImageMagick/xcursorgen/sox once.
-COPY plymouth-theme-arkaos/ /usr/share/plymouth/themes/arkaos/
+# sounds. Both need ImageMagick/xcursorgen/sox once. (The boot splash is drawn in plymouth-builder.)
+COPY --from=plymouth-builder /out/ /usr/share/plymouth/themes/arkaos/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y -q ImageMagick xcursorgen sox liberation-sans-fonts && \
     # -- cursor ---------------------------------------------------------------
     mkdir -p /tmp/cur /usr/share/icons/ArkaCursor/cursors && \
@@ -442,10 +449,6 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
     cp message-new-instant.wav bell.wav && \
     printf '[Sound Theme]\nName=Arka\nComment=ArkaOS sound theme\nInherits=freedesktop\nDirectories=stereo\n\n[stereo]\nOutputProfile=stereo\n' \
       > /usr/share/sounds/Arka/index.theme && \
-    # -- plymouth splash images ------------------------------------------------
-    cd /usr/share/plymouth/themes/arkaos && \
-    sh make-assets.sh && \
-    rm make-assets.sh && \
     rm -rf /tmp/cur && \
     dnf remove -y -q ImageMagick xcursorgen sox
 

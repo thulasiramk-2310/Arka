@@ -1,22 +1,52 @@
-// ArkaOS boot splash. Starting: a blade of green light crosses the screen and leaves the logo
-// behind it, the ARKA wordmark decodes letter by letter, and the glow keeps
-// breathing. Shutting down or restarting: the logo is
-// there at once and glows once; nothing dims. Design tokens: bg #07080e,
-// accent #4DB491. No sound: the user chose a silent start.
+// ArkaOS boot splash, "prism of light". Design tokens: accent #4DB491, ink #ECF4F0. No sound.
 //
-// Normal boot shows an activity indicator, not a progress bar: Plymouth's
-// boot "progress" is an estimate from the previous boot and can stall or
-// jump, so we don't present it as a measurement. System updates report real
+// Starting: a spark of white light drifts in from the top left and lands on the tip of a dark
+// glass crystal (the logo). The crystal fills with light from the tip down, then a green beam
+// leaves its base and sweeps across, lighting ARKA letter by letter (3.6 s). After that it rests:
+// the glow breathes and a glint crosses the glass every 3.6 s, so a slow start still shows that
+// something is happening.
+// Shutting down or restarting: the beam sweeps back and turns the letters off, the light drains up
+// into the tip and stays there as the spark, breathing, until the power goes.
+//
+// Normal boot shows no progress bar: Plymouth's boot "progress" is an estimate from the previous
+// boot and can stall or jump, so we don't present it as a measurement. System updates report real
 // progress, so there we draw a real bar and say not to power off.
-// Images are rendered at 2x (make-assets.sh) and scaled to the screen.
+//
+// make-assets.py draws the pictures at A pixels a unit, where a unit is one pixel of a 1080-line
+// screen; everything here is laid out in units and scaled to the screen. Anything that needs a mask
+// (the light filling the crystal, the glint) is a run of frames that this script crossfades.
 
 Window.SetBackgroundTopColor(0.027, 0.031, 0.055);
-Window.SetBackgroundBottomColor(0.020, 0.024, 0.035);
+Window.SetBackgroundBottomColor(0.016, 0.019, 0.028);
 
-// Screen geometry. The display often changes size during boot (firmware
-// framebuffer -> real GPU driver at native resolution), so everything is laid
-// out by layout() and re-laid out whenever the size changes; computing it once
-// left the logo off-centre on the new, larger screen.
+global.A = 1.5;
+global.FRAMES = 16;
+global.S = 260;
+global.CRYSTAL_DY = -105;
+global.WORD_DY = 165;
+global.BEAM_DY = global.CRYSTAL_DY - global.S / 2 + 0.80 * global.S;
+global.APEX_DY = global.CRYSTAL_DY - global.S / 2 + 9 / 184 * global.S;
+global.PROMPT_DY = 300;
+global.BOX_DY = 364;
+global.STATUS_DY = 300;
+global.MSG_DY = 440;
+global.STORY = 3.6;
+// Plymouth's Image.Rotate turns the other way from the angles used here (checked in a VM).
+global.ROT = -1;
+
+// The letters' angles from the point the beam leaves the crystal, measured by make-assets.py.
+// @LETTERS@
+
+// The spark's path, in units from the screen's centre: a curve from beyond the top left to the
+// crystal's tip.
+global.P0x = -1065; global.P0y = -450;
+global.P1x = -465;  global.P1y = -600;
+global.P2x = -120;  global.P2y = -480;
+global.P3x = 0;     global.P3y = global.APEX_DY;
+global.IN0 = 0.15;  global.IN1 = 1.40;
+
+// Screen geometry. The display often changes size during boot (firmware framebuffer -> real GPU
+// driver at native resolution), so layout() runs again whenever the size changes.
 global.sw = 0;
 global.sh = 0;
 
@@ -25,80 +55,176 @@ fun geometry() {
     global.wy = Window.GetY();
     global.sw = Window.GetWidth();
     global.sh = Window.GetHeight();
-    global.f = Math.Clamp(global.sh / 1080, 0.6, 2.4);   // 1.0 at 1080p
-    global.k = global.f / 2;                             // assets are 2x
-    global.cy = global.sh / 2 - 40 * global.f;
+    global.f = Math.Clamp(Math.Min(global.sh / 1080, global.sw / 1100), 0.5, 2.4);
+    global.k = global.f / global.A;
+    global.cx = global.wx + global.sw / 2;
+    global.cy = global.wy + global.sh / 2;
 }
 
 fun scaled(img) {
-    return img.Scale(Math.Int(img.GetWidth() * global.k), Math.Int(img.GetHeight() * global.k));
+    return img.Scale(Math.Int(img.GetWidth() * global.k + 0.5), Math.Int(img.GetHeight() * global.k + 0.5));
 }
 
-fun place(sprite, img, cy) {
-    sprite.SetX(Math.Int(global.wx + global.sw / 2 - img.GetWidth() / 2));
-    sprite.SetY(Math.Int(global.wy + cy - img.GetHeight() / 2));
+// Centre IMG's sprite on the point UX, UY units from the screen's centre.
+fun put(sprite, img, ux, uy) {
+    sprite.SetX(Math.Int(global.cx + ux * global.f - img.GetWidth() / 2));
+    sprite.SetY(Math.Int(global.cy + uy * global.f - img.GetHeight() / 2));
 }
 
-// Text scales with the screen too ("Sans N" is a Pango font description).
 fun label(text, size, r, g, b) {
     return Image.Text(text, r, g, b, 1, "Inter, Inter Variable, Sans " + Math.Int(size * global.f));
 }
 
+// --- text helpers. Plymouth strings have CharAt and SubString (bytes); Length is too new to rely on.
+// Plymouth looks a name up in the global scope before making a local one, and this script's top
+// level uses i, n and the like, so these helpers keep their counters in local. explicitly.
+fun str_len(s) {
+    local.n = 0;
+    while (s.CharAt(local.n) != "") local.n = local.n + 1;
+    return local.n;
+}
+fun str_find(s, sub, from) {
+    local.ls = str_len(s);
+    local.lsub = str_len(sub);
+    for (local.j = from; local.j + local.lsub <= local.ls; local.j = local.j + 1) {
+        if (s.SubString(local.j, local.j + local.lsub) == sub) return local.j;
+    }
+    return -1;
+}
+global.ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+// systemd puts an emoji in front of some messages (the low-battery one at boot). The splash font
+// has no emoji, so it would show as an empty box: start the line at its first letter or digit.
+fun clean_message(text) {
+    local.len = str_len(text);
+    local.k = 0;
+    while (local.k < local.len && str_find(global.ALNUM, text.CharAt(local.k), 0) < 0) local.k = local.k + 1;
+    return text.SubString(local.k, local.len);
+}
+// systemd-cryptsetup asks "Please enter passphrase for disk arka-root (luks-<uuid>):", which runs
+// off the screen and says nothing a person needs. Say the same thing in plain words; any other
+// prompt is shown as it is.
+fun prompt_words(text) {
+    if (text.SubString(0, 13) != "Please enter ") return text;
+    local.e = str_find(text, " for disk ", 13);
+    if (local.e < 0) local.e = str_find(text, ":", 13);
+    if (local.e < 0) return text;
+    local.what = text.SubString(13, local.e);
+    if (local.what == "LUKS2 token PIN") local.what = "PIN";
+    return "Enter the " + local.what + " to unlock the disk";
+}
+
+fun clamp01(v) { return Math.Clamp(v, 0, 1); }
+fun seg(t, a, b) { return Math.Clamp((t - a) / (b - a), 0, 1); }
+fun ease(x) { x = clamp01(x); y = 1 - x; return 1 - y * y * y; }
+fun inout(x) { x = clamp01(x); return 0.5 - 0.5 * Math.Cos(Math.Pi * x); }
+fun bump(x, w) {
+    v = 1 - (x / w) * (x / w);
+    if (v < 0) v = 0;
+    return v * v;
+}
+
+// Where the spark is when it has come X of the way (0 off screen, 1 on the tip). It slows as it
+// lands, and a small sideways flutter, like something alive, dies away as it arrives.
+fun path(x) {
+    x = clamp01(x);
+    v = 1 - x;
+    s = 1 - 0.6 * v * v - 0.4 * v * v * v;
+    u = 1 - s;
+    b0 = u * u * u; b1 = 3 * u * u * s; b2 = 3 * u * s * s; b3 = s * s * s;
+    px = b0 * global.P0x + b1 * global.P1x + b2 * global.P2x + b3 * global.P3x;
+    py = b0 * global.P0y + b1 * global.P1y + b2 * global.P2y + b3 * global.P3y;
+    dx = 3 * u * u * (global.P1x - global.P0x) + 6 * u * s * (global.P2x - global.P1x) + 3 * s * s * (global.P3x - global.P2x);
+    dy = 3 * u * u * (global.P1y - global.P0y) + 6 * u * s * (global.P2y - global.P1y) + 3 * s * s * (global.P3y - global.P2y);
+    n = Math.Sqrt(dx * dx + dy * dy);
+    if (n < 0.001) n = 1;
+    wob = 19.5 * u * Math.Sqrt(Math.Sqrt(u)) * Math.Sin(2 * Math.Pi * 1.7 * x + 0.5);
+    p.x = px - dy / n * wob;
+    p.y = py + dx / n * wob;
+    return p;
+}
+
 mode = Plymouth.GetMode();
-
-// --- logo (sources kept unscaled; layout() scales them for the screen) -------
-tri1.src = Image("tri1.png");
-tri2.src = Image("tri2.png");
-tri3.src = Image("tri3.png");
-mark.src = Image("wordmark.png");
-tri1.sprite = Sprite();
-tri2.sprite = Sprite();
-tri3.sprite = Sprite();
-mark.sprite = Sprite();
-tri1.sprite.SetOpacity(0);
-tri2.sprite.SetOpacity(0);
-// The opening, drawn ahead of time by make-assets.sh: the light streak that draws the logo,
-// then the wordmark decoding. The last frame of each equals the still image.
-global.streaks = 18;
-global.words = 22;
-for (i = 0; i < global.streaks; i++) streak[i].src = Image("streak" + i + ".png");
-for (i = 0; i < global.words; i++) word[i].src = Image("word" + i + ".png");
-streak.sprite = Sprite();
-streak.sprite.SetZ(5);
-streak.sprite.SetOpacity(0);
 global.leaving = (mode == "shutdown" || mode == "reboot");
-tri3.sprite.SetOpacity(0);
-mark.sprite.SetOpacity(0);
+global.updating_mode = (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade");
 
-// --- status line under the logo (shutdown / restart / updates) ---------------
+// --- pictures and sprites (sources kept unscaled; layout() scales them for the screen) -----------
+fun sprite_at(z) {
+    sp = Sprite();
+    sp.SetZ(z);
+    sp.SetOpacity(0);
+    return sp;
+}
+
+amb.src = Image("amb.png");      amb.sprite = sprite_at(1);
+dark.src = Image("dark.png");    dark.sprite = sprite_at(2);
+glow.src = Image("glow.png");    glow.sprite = sprite_at(3);
+for (i = 0; i < global.FRAMES; i++) {
+    fill[i].src = Image("fill" + i + ".png");
+    glint[i].src = Image("glint" + i + ".png");
+}
+fillA.sprite = sprite_at(4);  fillB.sprite = sprite_at(5);
+glintA.sprite = sprite_at(6); glintB.sprite = sprite_at(7);
+beam.src = Image("beam.png");    beam.sprite = sprite_at(8);
+for (i = 0; i < 4; i++) {
+    letter[i].src = Image("l" + i + ".png");
+    letter[i].gsrc = Image("lg" + i + ".png");
+    letter[i].gsprite = sprite_at(9);
+    letter[i].sprite = sprite_at(10);
+}
+global.NP = 200;
+pathdot.src = Image("pathdot.png");
+for (i = 0; i < global.NP; i++) pd[i] = sprite_at(11);
+global.NT = 30;
+trail.src = Image("trail.png");
+for (i = 0; i < global.NT; i++) tr[i] = sprite_at(12);
+spark.src = Image("spark.png");  spark.sprite = sprite_at(13);
+flash.src = Image("flash.png");  flash.sprite = sprite_at(14);
+
+// The faint line the spark leaves: NP dots at equal distances along its path, each shown once the
+// spark has passed it.
+fun build_path() {
+    n = 240;
+    prev = path(0);
+    acc = 0;
+    global.tabl[0] = 0;
+    for (j = 1; j <= n; j++) {
+        p = path(j / n);
+        acc = acc + Math.Sqrt((p.x - prev.x) * (p.x - prev.x) + (p.y - prev.y) * (p.y - prev.y));
+        global.tabl[j] = acc;
+        prev = p;
+    }
+    j = 0;
+    for (i = 0; i < global.NP; i++) {
+        want = acc * (i + 0.5) / global.NP;
+        while (j < n && global.tabl[j] < want) j++;
+        p = path(j / n);
+        global.pdx[i] = p.x;
+        global.pdy[i] = p.y;
+        global.pdat[i] = j / n;
+    }
+}
+build_path();
+
+// --- status line (shutdown / restart / updates) and the real bar for updates ---------------------
 status.text = "";
 if (mode == "shutdown") status.text = "Shutting down";
 if (mode == "reboot") status.text = "Restarting";
-if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade")
-    status.text = "Installing updates. Don't turn off your computer.";
-status.sprite = Sprite();
-
-// --- activity indicator / real progress bar ----------------------------------
+if (global.updating_mode) status.text = "Installing updates. Don't turn off your computer.";
+status.sprite = sprite_at(15);
 bar.backsrc = Image("barback.png");
-bar.back = Sprite();
-bar.back.SetOpacity(0);
-seg.src = Image("seg.png");
-seg.sprite = Sprite();
-seg.sprite.SetZ(2);
-seg.sprite.SetOpacity(0);
-fill.image = Image("bar.png");
-fill.sprite = Sprite();
-fill.sprite.SetZ(3);
+bar.back = sprite_at(15);
+fill_bar.image = Image("bar.png");
+fill_bar.sprite = sprite_at(16);
 global.updating = 0;   // 1 once a real system-update progress arrives
 global.progress = 0;
 
-// --- boot messages (e.g. a disk check), one line under the bar ---------------
-msg.sprite = Sprite();
-msg.sprite.SetZ(4);
+// --- boot messages (e.g. a disk check), one line under everything ---------------------------------
+msg.sprite = sprite_at(16);
 fun message_callback(text) {
-    global.msg.image = label(text, 17, 0.70, 0.73, 0.78);
+    global.msg.image = label(clean_message(text), 17, 0.70, 0.73, 0.78);
     msg.sprite.SetImage(global.msg.image);
-    place(msg.sprite, global.msg.image, global.bar.y - global.wy + 34 * global.f);
+    put(msg.sprite, global.msg.image, 0, global.MSG_DY);
+    msg.sprite.SetOpacity(1);
 }
 Plymouth.SetMessageFunction(message_callback);
 
@@ -107,113 +233,263 @@ fun hide_message_callback(text) {
 }
 Plymouth.SetHideMessageFunction(hide_message_callback);
 
-// --- layout: (re)scale and position everything for the current screen -------
+// --- passphrase prompt pieces ----------------------------------------------------------------------
+prompt.sprite = sprite_at(20);
+box.src = Image("entry.png");
+box.sprite = sprite_at(20);
+dots.sprite = sprite_at(21);
+global.dotmax = 32;
+dot.src = Image("dot.png");
+for (i = 0; i < global.dotmax; i++) dot[i] = sprite_at(21);
+global.dotcount = 0;
+
+// --- layout: (re)scale and position everything for the current screen ------------------------------
 fun layout() {
     geometry();
-    global.tri1.image = scaled(tri1.src);
-    global.tri2.image = scaled(tri2.src);
-    global.tri3.image = scaled(tri3.src);
-    global.mark.image = scaled(mark.src);
-    tri1.sprite.SetImage(tri1.image);
-    for (i = 0; i < global.streaks; i++) global.streak[i].image = scaled(streak[i].src);
-    for (i = 0; i < global.words; i++) global.word[i].image = scaled(word[i].src);
-    tri2.sprite.SetImage(tri2.image);
-    tri3.sprite.SetImage(tri3.image);
-    mark.sprite.SetImage(mark.image);
-    place(tri1.sprite, tri1.image, global.cy);
-    place(tri2.sprite, tri2.image, global.cy);
-    place(tri3.sprite, tri3.image, global.cy);
-    place(mark.sprite, mark.image, global.cy + 150 * global.f);
-    place(streak.sprite, streak[0].image, global.cy);
+    global.amb.image = scaled(amb.src);
+    amb.sprite.SetImage(global.amb.image);
+    put(amb.sprite, global.amb.image, 0, global.CRYSTAL_DY + 20);
+    global.dark.image = scaled(dark.src);
+    dark.sprite.SetImage(global.dark.image);
+    put(dark.sprite, global.dark.image, 0, global.CRYSTAL_DY);
+    global.glow.image = scaled(glow.src);
+    glow.sprite.SetImage(global.glow.image);
+    put(glow.sprite, global.glow.image, 0, global.CRYSTAL_DY);
+    for (i = 0; i < global.FRAMES; i++) {
+        global.fill[i].image = scaled(fill[i].src);
+        global.glint[i].image = scaled(glint[i].src);
+    }
+    put(fillA.sprite, global.fill[0].image, 0, global.CRYSTAL_DY);
+    put(fillB.sprite, global.fill[0].image, 0, global.CRYSTAL_DY);
+    put(glintA.sprite, global.glint[0].image, 0, global.CRYSTAL_DY);
+    put(glintB.sprite, global.glint[0].image, 0, global.CRYSTAL_DY);
+    global.beam.image = scaled(beam.src);
+    for (i = 0; i < 4; i++) {
+        global.letter[i].image = scaled(letter[i].src);
+        global.letter[i].gimage = scaled(letter[i].gsrc);
+        letter[i].sprite.SetImage(global.letter[i].image);
+        letter[i].gsprite.SetImage(global.letter[i].gimage);
+        put(letter[i].sprite, global.letter[i].image, 0, global.WORD_DY);
+        put(letter[i].gsprite, global.letter[i].gimage, 0, global.WORD_DY);
+    }
+    global.pathdot.image = scaled(pathdot.src);
+    for (i = 0; i < global.NP; i++) {
+        pd[i].SetImage(global.pathdot.image);
+        put(pd[i], global.pathdot.image, global.pdx[i], global.pdy[i]);
+    }
+    global.trail.image = scaled(trail.src);
+    for (i = 0; i < global.NT; i++) tr[i].SetImage(global.trail.image);
+    global.spark.image = scaled(spark.src);
+    spark.sprite.SetImage(global.spark.image);
+    global.flash.image = scaled(flash.src);
+    flash.sprite.SetImage(global.flash.image);
+    put(flash.sprite, global.flash.image, global.P3x, global.P3y);
+
     if (status.text != "") {
         global.status.image = label(status.text, 20, 0.85, 0.88, 0.92);
-        status.sprite.SetImage(status.image);
-        place(status.sprite, status.image, global.cy + 230 * global.f);
+        status.sprite.SetImage(global.status.image);
+        put(status.sprite, global.status.image, 0, global.STATUS_DY);
     }
     global.bar.w = Math.Int(260 * global.f);
     global.bar.h = Math.Max(3, Math.Int(4 * global.f));
-    global.bar.x = Math.Int(global.wx + global.sw / 2 - global.bar.w / 2);
-    global.bar.y = Math.Int(global.wy + global.sh * 0.82);
+    global.bar.x = Math.Int(global.cx - global.bar.w / 2);
+    global.bar.y = Math.Int(global.cy + (global.STATUS_DY + 50) * global.f);
     bar.back.SetImage(bar.backsrc.Scale(global.bar.w, global.bar.h));
     bar.back.SetX(global.bar.x);
     bar.back.SetY(global.bar.y);
-    global.seg.w = Math.Int(global.bar.w * 0.3);
-    seg.sprite.SetImage(seg.src.Scale(global.seg.w, global.bar.h));
-    seg.sprite.SetY(global.bar.y);
-    fill.sprite.SetX(global.bar.x);
-    fill.sprite.SetY(global.bar.y);
-    if (global.updating) draw_fill();
-    global.box.image = scaled(Image("entry.png"));
+    fill_bar.sprite.SetX(global.bar.x);
+    fill_bar.sprite.SetY(global.bar.y);
+    if (global.updating) draw_bar();
+
+    global.box.image = scaled(box.src);
     box.sprite.SetImage(global.box.image);
+    put(box.sprite, global.box.image, 0, global.BOX_DY);
     global.dot.image = scaled(dot.src);
-    global.promptY = global.cy + 260 * global.f;
+    if (global.prompt.image) put(prompt.sprite, global.prompt.image, 0, global.PROMPT_DY);
+    if (global.msg.image) put(msg.sprite, global.msg.image, 0, global.MSG_DY);
+    draw_dots(global.dotcount);
 }
 
-fun draw_fill() {
+fun draw_bar() {
     w = Math.Int(global.bar.w * Math.Clamp(global.progress / 100, 0, 1));
     if (w < 1) w = 1;
-    fill.sprite.SetImage(fill.image.Scale(w, global.bar.h));
+    fill_bar.sprite.SetImage(fill_bar.image.Scale(w, global.bar.h));
 }
 
-// --- animation ---------------------------------------------------------------
-global.counter = 0;
-fun clamp01(v) {
-    return Math.Clamp(v, 0, 1);
+// --- the scene's pieces ------------------------------------------------------------------------------
+// The crystal's light: POS runs from 0 (only the tip) to FRAMES-1 (all lit), crossfading frames.
+fun show_fill(pos, op) {
+    i = Math.Int(pos);
+    if (i > global.FRAMES - 2) i = global.FRAMES - 2;
+    if (i < 0) i = 0;
+    fr = Math.Clamp(pos - i, 0, 1);
+    fillA.sprite.SetImage(global.fill[i].image);
+    fillB.sprite.SetImage(global.fill[i + 1].image);
+    fillA.sprite.SetOpacity(op);
+    fillB.sprite.SetOpacity(fr * op);
 }
+
+fun show_glint(g) {
+    if (g <= 0 || g >= 1) {
+        glintA.sprite.SetOpacity(0);
+        glintB.sprite.SetOpacity(0);
+    } else {
+        pos = g * (global.FRAMES - 1);
+        i = Math.Int(pos);
+        if (i > global.FRAMES - 2) i = global.FRAMES - 2;
+        glintA.sprite.SetImage(global.glint[i].image);
+        glintB.sprite.SetImage(global.glint[i + 1].image);
+        glintA.sprite.SetOpacity(1);
+        glintB.sprite.SetOpacity(Math.Clamp(pos - i, 0, 1));
+    }
+}
+
+fun show_beam(theta, env) {
+    if (env <= 0.003) {
+        beam.sprite.SetOpacity(0);
+    } else {
+        img = global.beam.image.Rotate(global.ROT * theta);
+        beam.sprite.SetImage(img);
+        put(beam.sprite, img, 0, global.BEAM_DY);
+        beam.sprite.SetOpacity(Math.Min(1, env));
+    }
+}
+
+fun show_letter(i, lit, g) {
+    letter[i].sprite.SetOpacity(clamp01(lit));
+    letter[i].gsprite.SetOpacity(clamp01(g));
+}
+
+// The spark at story time T with its trail (where it was just before), at opacity KK.
+fun show_spark(T, kk) {
+    p = path(seg(T, global.IN0, global.IN1));
+    put(spark.sprite, global.spark.image, p.x, p.y);
+    spark.sprite.SetOpacity(clamp01(kk * (0.92 + 0.08 * Math.Sin(T * 23))));
+    for (i = 0; i < global.NT; i++) {
+        tt = T - (i + 1) * 0.014;
+        if (tt < global.IN0 || kk <= 0) {
+            tr[i].SetOpacity(0);
+        } else {
+            q = path(seg(tt, global.IN0, global.IN1));
+            put(tr[i], global.trail.image, q.x, q.y);
+            a = 1 - (i + 1) / global.NT;
+            tr[i].SetOpacity(kk * a * Math.Sqrt(a));
+        }
+    }
+}
+
+fun show_path(x, k) {
+    for (i = 0; i < global.NP; i++) {
+        if (k > 0 && global.pdat[i] <= x) pd[i].SetOpacity(k);
+        else pd[i].SetOpacity(0);
+    }
+}
+
+// Clear everything only the story uses, once.
+fun story_over() {
+    if (global.cleared != 1) {
+        show_path(0, 0);
+        show_spark(0, 0);
+        spark.sprite.SetOpacity(0);
+        flash.sprite.SetOpacity(0);
+        beam.sprite.SetOpacity(0);
+        dark.sprite.SetOpacity(1);
+        global.cleared = 1;
+    }
+}
+
+// --- starting: the story, then the rest ------------------------------------------------------------
+fun story(t) {
+    amb.sprite.SetOpacity(0.9 * ease(seg(t, 1.5, 2.6)));
+    dark.sprite.SetOpacity(ease(seg(t, 0, 0.7)));
+    if (t < 1.38) show_fill(0, 0);
+    else show_fill(inout(seg(t, 1.38, 2.25)) * (global.FRAMES - 1), 1);
+    glow.sprite.SetOpacity(clamp01(0.36 * ease(seg(t, 1.55, 2.4)) + 0.30 * Math.Sin(Math.Pi * seg(t, 2.1, 2.9))));
+
+    theta = -0.80 + 1.60 * inout(seg(t, 2.05, 3.0));
+    env = ease(seg(t, 1.95, 2.25)) * (1 - seg(t, 2.85, 3.25));
+    show_beam(theta, env);
+    for (i = 0; i < 4; i++) {
+        d = theta - letter[i].angle;
+        lit = ease(seg(d, -0.06, 0.10));
+        show_letter(i, lit, 0.30 * lit + 0.75 * bump(d, 0.22) * env);
+    }
+
+    if (t >= global.IN0) {
+        T = Math.Min(t, global.IN1);
+        show_spark(T, ease(seg(t, global.IN0, 0.35)) * (1 - seg(t, global.IN1, 1.58)));
+        show_path(seg(T, global.IN0, global.IN1), 1 - seg(t, 1.4, 2.1));
+        flash.sprite.SetOpacity(Math.Sin(Math.Pi * seg(t, 1.36, 1.80)));
+    }
+}
+
+fun rest(r) {
+    story_over();
+    amb.sprite.SetOpacity(0.9);
+    show_fill(global.FRAMES - 1, 1);
+    br = Math.Cos(2 * Math.Pi * r / 3.6);
+    glow.sprite.SetOpacity(0.36 + 0.10 * br);
+    g = -1;
+    if (r > 0.8) {
+        rr = r - 0.8;
+        g = (rr - 3.6 * Math.Int(rr / 3.6)) / 1.2;
+    }
+    show_glint(g);
+    for (i = 0; i < 4; i++) show_letter(i, 1, 0.30 + 0.06 * br);
+}
+
+// --- shutting down or restarting ------------------------------------------------------------------
+fun leave(t) {
+    story_over();
+    u = seg(t, 0.3, 2.1);
+    amb.sprite.SetOpacity(0.9 * (1 - seg(u, 0.3, 0.7)));
+    theta = 0.80 - 1.60 * inout(seg(u, 0, 0.42));
+    show_beam(theta, 0.6 * Math.Sin(Math.Pi * seg(u, 0, 0.42)));
+    for (i = 0; i < 4; i++) {
+        lit = 1 - ease(seg(letter[i].angle - theta, -0.06, 0.10));
+        show_letter(i, lit, 0.30 * lit);
+    }
+    show_fill((1 - inout(seg(u, 0.38, 0.68))) * (global.FRAMES - 1), 1 - seg(u, 0.66, 0.76));
+    glow.sprite.SetOpacity(0.36 * (1 - seg(u, 0.3, 0.7)));
+    show_glint(-1);
+    put(spark.sprite, global.spark.image, global.P3x, global.P3y);
+    spark.sprite.SetOpacity(ease(seg(u, 0.62, 0.72)) * (0.75 + 0.25 * Math.Sin(t * 2.4)));
+    status.sprite.SetOpacity(seg(u, 0.5, 0.8));
+}
+
+// --- the refresh loop (50 times a second) --------------------------------------------------------------
+// Time comes from Plymouth's boot clock (the progress callback, about 30 times a second) when it
+// runs, so the story keeps its pace when a slow machine draws fewer than 50 frames a second;
+// counting frames is the fallback.
+global.counter = 0;
+global.clock0 = -1;
+global.tlast = 0;
+fun boot_progress_callback(duration, progress) {
+    if (global.clock0 < 0) global.clock0 = duration - global.counter / 50.0;
+    global.clock = duration - global.clock0;
+    global.clock_at = global.counter;
+}
+Plymouth.SetBootProgressFunction(boot_progress_callback);
 
 fun refresh_callback() {
     if (Window.GetWidth() != global.sw || Window.GetHeight() != global.sh) layout();
     global.counter++;
-    t = global.counter / 50.0;   // refresh runs at 50 fps
-
-    if (global.leaving) {
-        // Shutting down or restarting: everything is there at once, the glow brightens once and
-        // settles, and the logo stays clear (not dimmed) until the power goes.
-        tri1.sprite.SetOpacity(1);
-        tri3.sprite.SetOpacity(0.25 + 0.35 * clamp01(1 - Math.Abs(t - 0.6) / 0.6));
-        mark.sprite.SetOpacity(1);
-        status.sprite.SetOpacity(1);
-        a = 1;
-    } else {
-        // Starting. 0.2-0.8s: the streak frames draw the logo (about 30 frames a second).
-        if (t < 0.2) {
-            streak.sprite.SetOpacity(0);
-        } else if (t < 0.8) {
-            n = Math.Int((t - 0.2) / 0.6 * global.streaks);
-            if (n > global.streaks - 1) n = global.streaks - 1;
-            streak.sprite.SetImage(streak[n].image);
-            streak.sprite.SetOpacity(1);
-        } else if (global.drawn != 1) {
-            // Hand over to the still logo; the last streak frame is the same image.
-            tri1.sprite.SetOpacity(1);
-            streak.sprite.SetOpacity(0);
-            global.drawn = 1;
-        }
-        // The glow flashes as the streak leaves, then settles into a slow breath.
-        if (t < 0.8) tri3.sprite.SetOpacity(0);
-        else if (t < 1.8) tri3.sprite.SetOpacity(0.25 + 0.3 * clamp01(1 - (t - 0.8) / 1.0));
-        else tri3.sprite.SetOpacity(0.25 + 0.15 * Math.Sin((t - 1.8) * 2.2));
-        // 0.9-1.6s: ARKA decodes from scrambled characters, left to right.
-        if (t >= 0.9 && t < 1.6) {
-            n = Math.Int((t - 0.9) / 0.7 * global.words);
-            if (n > global.words - 1) n = global.words - 1;
-            mark.sprite.SetImage(word[n].image);
-            mark.sprite.SetOpacity(clamp01((t - 0.9) / 0.12));
-        } else if (t >= 1.6 && global.marked != 1) {
-            mark.sprite.SetImage(mark.image);
-            mark.sprite.SetOpacity(1);
-            global.marked = 1;
-        }
-        a = clamp01((t - 1.3) / 0.6);
-        status.sprite.SetOpacity(a);
-    }
-
-    bar.back.SetOpacity(a);
-    if (global.updating == 0) {
-        // Indeterminate: a soft segment glides back and forth.
-        p = (Math.Sin(t * 1.6) + 1) / 2;
-        seg.sprite.SetX(Math.Int(global.bar.x + p * (global.bar.w - global.seg.w)));
-        seg.sprite.SetOpacity(a);
+    t = global.counter / 50.0;
+    if (global.clock0 >= 0) t = global.clock + (global.counter - global.clock_at) / 50.0;
+    if (t < global.tlast) t = global.tlast;
+    global.tlast = t;
+    // A prompt wins over shutting down. systemd's boot battery check switches the splash to
+    // shutdown mode while the disk prompt is still open (plugging in the charger lets the boot go
+    // on), so the prompt stays usable over the resting crystal and "Shutting down" waits.
+    if (global.leaving && global.prompting != 1) leave(t);
+    else if (global.leaving) rest(t);
+    else if (t < global.STORY) story(t);
+    else rest(t - global.STORY);
+    if (global.updating_mode && global.leaving == 0) {
+        a = seg(t, 3.0, 3.6);
+        if (global.prompting != 1) status.sprite.SetOpacity(a);
+        bar.back.SetOpacity(a);
+        fill_bar.sprite.SetOpacity(a * global.updating);
     }
 }
 Plymouth.SetRefreshFunction(refresh_callback);
@@ -222,49 +498,30 @@ Plymouth.SetRefreshFunction(refresh_callback);
 fun system_update_callback(progress) {
     global.updating = 1;
     global.progress = progress;
-    seg.sprite.SetOpacity(0);
-    draw_fill();
+    draw_bar();
 }
 Plymouth.SetSystemUpdateFunction(system_update_callback);
 
-// --- passphrase / question prompts -------------------------------------------
-prompt.sprite = Sprite();
-prompt.sprite.SetZ(10);
-box.sprite = Sprite();
-box.sprite.SetZ(10);
-box.sprite.SetOpacity(0);
-dots.sprite = Sprite();
-dots.sprite.SetZ(11);
-// Passphrase dots are sprites of dot.png, at most as many as fit in the box.
-global.dotmax = 32;
-dot.src = Image("dot.png");
-for (i = 0; i < global.dotmax; i++) {
-    dot[i] = Sprite();
-    dot[i].SetZ(11);
-    dot[i].SetOpacity(0);
-}
-global.dotcount = 0;
-layout();
-
+// --- passphrase / question prompts -------------------------------------------------------------------
 fun show_prompt(text) {
+    global.prompting = 1;
     global.prompt.image = label(text, 20, 0.96, 0.97, 0.98);
     prompt.sprite.SetImage(global.prompt.image);
-    place(prompt.sprite, global.prompt.image, global.promptY - 52 * global.f);
+    put(prompt.sprite, global.prompt.image, 0, global.PROMPT_DY);
     prompt.sprite.SetOpacity(1);
-    place(box.sprite, global.box.image, global.promptY);
     box.sprite.SetOpacity(1);
     status.sprite.SetOpacity(0);
 }
 
-// Draw n dots centred in the box. Past what fits, the row stops growing; it
-// only shows that typing is happening, never the passphrase length beyond that.
+// Draw n dots centred in the box. Past what fits, the row stops growing; it only shows that typing
+// is happening, never the passphrase length beyond that.
 fun draw_dots(n) {
     w = global.dot.image.GetWidth();
     step = Math.Int(w * 1.9);
     fit = Math.Int((global.box.image.GetWidth() - 48 * global.f - w) / step) + 1;
     n = Math.Min(n, Math.Min(fit, global.dotmax));
-    x0 = Math.Int(global.wx + global.sw / 2 - ((n - 1) * step + w) / 2);
-    y = Math.Int(global.wy + global.promptY - global.dot.image.GetHeight() / 2);
+    x0 = Math.Int(global.cx - ((n - 1) * step + w) / 2);
+    y = Math.Int(global.cy + global.BOX_DY * global.f - global.dot.image.GetHeight() / 2);
     for (i = 0; i < global.dotmax; i++) {
         if (i < n) {
             dot[i].SetImage(global.dot.image);
@@ -279,7 +536,7 @@ fun draw_dots(n) {
 }
 
 fun display_password_callback(prompt_text, bullets) {
-    text = prompt_text;
+    text = prompt_words(prompt_text);
     if (text == "") text = "Enter the passphrase to unlock this disk";
     show_prompt(text);
     dots.sprite.SetOpacity(0);
@@ -288,29 +545,24 @@ fun display_password_callback(prompt_text, bullets) {
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
 
 fun display_question_callback(prompt_text, entry) {
-    show_prompt(prompt_text);
+    show_prompt(prompt_words(prompt_text));
     draw_dots(0);
     global.dots.image = label(entry, 26, 0.09, 0.78, 0.52);
     dots.sprite.SetImage(global.dots.image);
-    place(dots.sprite, global.dots.image, global.promptY);
+    put(dots.sprite, global.dots.image, 0, global.BOX_DY);
     dots.sprite.SetOpacity(1);
 }
 Plymouth.SetDisplayQuestionFunction(display_question_callback);
 
 // After the answer is accepted: clear the prompt so it doesn't linger.
 fun display_normal_callback() {
+    global.prompting = 0;
     prompt.sprite.SetOpacity(0);
     box.sprite.SetOpacity(0);
     dots.sprite.SetOpacity(0);
     draw_dots(0);
-    if (status.text != "") status.sprite.SetOpacity(1);
+    if (status.text != "" && global.leaving) status.sprite.SetOpacity(1);
 }
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
-fun quit_callback() {
-    streak.sprite.SetOpacity(0);
-    tri1.sprite.SetOpacity(1);
-    mark.sprite.SetImage(mark.image);
-    mark.sprite.SetOpacity(1);
-}
-Plymouth.SetQuitFunction(quit_callback);
+layout();

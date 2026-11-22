@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=ArkaOS
-Description=ArkaOS boot splash — triangle glow into ARKA wordmark
+Description=ArkaOS boot splash — a spark lands on the crystal and its light spells ARKA
 ModuleName=script
 
 [script]
