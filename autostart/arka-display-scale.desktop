@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ArkaOS display scale
+Comment=Once per user, shows a 1080p laptop screen at 100% instead of KDE's 125%
+Exec=/usr/libexec/arka-display-scale
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=1
+NoDisplay=true

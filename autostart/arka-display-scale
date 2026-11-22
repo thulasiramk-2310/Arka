@@ -1,0 +1,36 @@
+#!/bin/bash
+# ArkaOS: once per user, show a 1080p or 1200p laptop screen at 100%.
+#
+# KWin picks a laptop panel's scale by aiming at 125 dpi, so a 14-inch 1920x1080 screen
+# (about 157 dpi) gets 125%, which looks zoomed in with ArkaOS's 10 pt Inter. Sharper panels
+# (1440 lines and up) keep KWin's choice, and so does any screen that isn't built in. This
+# runs once per user and then leaves a mark, so a scale picked later in System Settings stays.
+
+MARK="${XDG_STATE_HOME:-$HOME/.local/state}/arkaos/display-scale-checked"
+[ -e "$MARK" ] && exit 0
+
+# Give KWin a moment to finish its first output setup.
+sleep 2
+JSON=$(timeout 10 kscreen-doctor -j 2>/dev/null) || exit 0
+
+ARGS=$(printf '%s' "$JSON" | python3 -c '
+import json, sys
+PANEL = 7  # KScreen::Output::Panel, a built-in screen
+for o in json.load(sys.stdin).get("outputs", []):
+    name = o.get("name", "")
+    builtin = o.get("type") == PANEL or name.startswith(("eDP", "LVDS", "DSI"))
+    if not (o.get("enabled", o.get("connected")) and builtin):
+        continue
+    mode = next((m for m in o.get("modes", []) if m.get("id") == o.get("currentModeId")), None)
+    if not mode:
+        continue
+    lines = min(mode["size"]["width"], mode["size"]["height"])
+    if lines <= 1200 and 1.15 < o.get("scale", 1) < 1.45:
+        print(f"output.{name}.scale.1")
+') || exit 0
+
+if [ -n "$ARGS" ]; then
+    # shellcheck disable=SC2086 # one argument per output, none with spaces
+    timeout 10 kscreen-doctor $ARGS >/dev/null 2>&1 || exit 0
+fi
+mkdir -p "$(dirname "$MARK")" && touch "$MARK"

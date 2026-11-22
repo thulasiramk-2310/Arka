@@ -100,6 +100,8 @@ COPY crystal-dock/arka-dock-start /usr/libexec/arka-dock-start
 COPY kwin-scripts/arka-showdesktop /usr/share/kwin/scripts/arka-showdesktop
 COPY kwin-scripts/arka-showdesktop-keys /usr/libexec/arka-showdesktop-keys
 COPY autostart/arka-showdesktop-keys.desktop /etc/xdg/autostart/arka-showdesktop-keys.desktop
+COPY autostart/arka-display-scale /usr/libexec/arka-display-scale
+COPY autostart/arka-display-scale.desktop /etc/xdg/autostart/arka-display-scale.desktop
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/KDE/panel_1.conf
 COPY crystal-dock/appearance.conf /etc/skel/.config/crystal-dock/KDE/appearance.conf
 COPY crystal-dock/panel_1.conf /etc/skel/.config/crystal-dock/generic/panel_1.conf
