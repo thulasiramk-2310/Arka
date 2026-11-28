@@ -245,8 +245,10 @@ if [[ $COLS -ge 80 ]]; then
         "     ${D}silently modify the OS between reboots.${E}" \
         "" \
         "   ${G}*${E} ${B}Encrypted DNS${E}" \
-        "     ${D}Every DNS query goes over TLS to Quad9 (9.9.9.9:853).${E}" \
-        "     ${D}Your ISP cannot see what sites you look up.${E}" \
+        "     ${D}DNS lookups go over TLS to Quad9 (9.9.9.9:853), except${E}" \
+        "     ${D}on a network where you allow or pause it.${E}" \
+        "     ${D}Website name lookups are encrypted; your provider can${E}" \
+        "     ${D}still see which servers you reach.${E}" \
         "" \
         "   ${G}*${E} ${B}Private network address${E}" \
         "     ${D}Wi-Fi: one made-up address per network name. Cable: a new one each connection.${E}" \

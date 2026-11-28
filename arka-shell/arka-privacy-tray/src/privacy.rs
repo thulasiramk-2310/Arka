@@ -27,6 +27,12 @@ pub fn dns_user_off(value: &str) -> bool {
     DnsStatus::from(value) == DnsStatus::ForcedPlaintext
 }
 
+/// Encrypted DNS is switched off on the running connection only, for the
+/// network's sign-in page (arkad reports PausedForSignIn).
+pub fn dns_paused(value: &str) -> bool {
+    DnsStatus::from(value) == DnsStatus::PausedForSignIn
+}
+
 pub fn browser_active(mode: &str, sandbox: &str) -> bool {
     BrowserSandbox::from(mode).is_isolated() && SandboxStatus::from(sandbox).is_active()
 }
@@ -39,6 +45,8 @@ pub struct Enforcement {
     pub dns_ok: bool,
     /// DNS is unencrypted because the user chose that for this network.
     pub dns_user_off: bool,
+    /// Encrypted DNS is paused for this network's sign-in page.
+    pub dns_paused: bool,
     pub hostname: bool,
     pub ipv6: bool,
     pub firewall: bool,
@@ -63,6 +71,8 @@ impl Enforcement {
                 name: "Encrypted DNS",
                 detail: if self.dns_user_off {
                     "Unencrypted on this network (your choice)".into()
+                } else if self.dns_paused {
+                    "Paused for this network's sign-in page".into()
                 } else {
                     self.dns_detail.clone()
                 },
@@ -85,7 +95,7 @@ impl Enforcement {
     pub fn down(&self) -> Vec<&'static str> {
         self.rows()
             .into_iter()
-            .filter(|r| !r.active && !(r.name == "Encrypted DNS" && self.dns_user_off))
+            .filter(|r| !r.active && !(r.name == "Encrypted DNS" && (self.dns_user_off || self.dns_paused)))
             .map(|r| r.name)
             .collect()
     }
@@ -297,6 +307,101 @@ impl Notifier {
     }
 }
 
+// ── sign-in pages (captive portals) ──────────────────────────────────────────
+
+/// NetworkManager's NMConnectivityState values the tray cares about.
+pub const CONNECTIVITY_PORTAL: u32 = 2;
+pub const CONNECTIVITY_LIMITED: u32 = 3;
+pub const CONNECTIVITY_FULL: u32 = 4;
+
+/// What the tray does when NetworkManager's Connectivity changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PortalAction {
+    Nothing,
+    /// Ask whether to use the network's own DNS until the sign-in is done.
+    Offer,
+}
+
+/// `new` is the Manager's Connectivity now, `dns` the status arkad reports,
+/// `primary_is_vpn` whether the primary connection is a VPN, `activation` the
+/// D-Bus path of the primary active connection and `offered_for` the activation
+/// the tray last offered on.
+///
+/// PORTAL asks once per activation. Under strict encrypted DNS NetworkManager
+/// often reports LIMITED first and PORTAL later, so nothing is keyed on the
+/// previous value: LIMITED then PORTAL still asks, and a repeated PORTAL on the
+/// same activation does not. It asks only while DNS is reported Encrypted, so
+/// it never offers to pause what is already off or paused, and never over a VPN.
+/// LIMITED and FULL ask nothing.
+pub fn portal_action(new: u32, dns: &DnsStatus, primary_is_vpn: bool, activation: &str, offered_for: Option<&str>) -> PortalAction {
+    if new == CONNECTIVITY_PORTAL
+        && !primary_is_vpn
+        && dns.is_encrypted()
+        && offered_for != Some(activation)
+    {
+        PortalAction::Offer
+    } else {
+        PortalAction::Nothing
+    }
+}
+
+/// A paused connection goes back to encrypted DNS when the paused device itself
+/// has full access on IPv4 or IPv6 (its own Ip4Connectivity / Ip6Connectivity,
+/// not the Manager's overall value: a working ethernet link must not restore
+/// Wi-Fi that is still waiting for its sign-in).
+pub fn device_is_full(ip4: u32, ip6: u32) -> bool {
+    ip4 == CONNECTIVITY_FULL || ip6 == CONNECTIVITY_FULL
+}
+
+/// The notification that offers the pause. Not subject to NOTIFY_MIN_GAP_SECS.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PortalOffer {
+    pub summary: String,
+    pub body: String,
+    /// (key, label) pairs in the order the notification shows them.
+    pub actions: Vec<(&'static str, &'static str)>,
+}
+
+pub const ACTION_PAUSE: &str = "pause";
+pub const ACTION_DECLINE: &str = "no";
+
+pub fn portal_offer(connection: &str) -> PortalOffer {
+    PortalOffer {
+        summary: "This network needs a sign-in page".to_string(),
+        body: format!(
+            "Use the network\u{2019}s own DNS on \u{201c}{}\u{201d} until you sign in? Until then, the network can see the names you look up.",
+            shown_name(connection)
+        ),
+        actions: vec![(ACTION_PAUSE, "Use network DNS"), (ACTION_DECLINE, "Not now")],
+    }
+}
+
+/// A connection name as shown in a notification. The name is chosen by the
+/// network, so control characters are replaced and the length is bounded.
+fn shown_name(name: &str) -> String {
+    let mut out: String = name.chars().take(64).map(|c| if c.is_control() { '?' } else { c }).collect();
+    if name.chars().count() > 64 { out.push_str("..."); }
+    out
+}
+
+/// Arguments for `nmcli` that switch encrypted DNS off on the running
+/// connection only. The saved profile is not touched, and the setting ends when
+/// the link goes down. (resolvectl is not used: NetworkManager overwrites it.)
+pub fn pause_args(iface: &str) -> Vec<String> {
+    ["device", "modify", iface, "connection.dns-over-tls", "no"].map(String::from).to_vec()
+}
+
+/// Arguments for `nmcli` that re-apply the saved profile to the running connection.
+pub fn reapply_args(iface: &str) -> Vec<String> {
+    ["device", "reapply", iface].map(String::from).to_vec()
+}
+
+/// The sign-in check address to open, or None when there is nothing safe to open.
+pub fn sign_in_uri(connectivity_check_uri: &str) -> Option<&str> {
+    let uri = connectivity_check_uri.trim();
+    (uri.starts_with("http://") || uri.starts_with("https://")).then_some(uri)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +468,7 @@ mod tests {
             dns_detail: "Quad9 (DoT)".into(),
             dns_ok: true,
             dns_user_off: false,
+            dns_paused: false,
             hostname: true,
             ipv6: true,
             firewall: true,
@@ -513,5 +619,96 @@ mod tests {
         // A later, lasting failure still alarms.
         assert_eq!(n.evaluate(&[], &down, 700), None);
         assert!(n.evaluate(&[], &down, 730).unwrap().body.contains("Firewall"));
+    }
+
+    #[test]
+    fn a_paused_dns_is_shown_amber_and_never_alarms() {
+        let mut e = enf_all_on();
+        e.dns_ok = dns_active("PausedForSignIn");
+        e.dns_user_off = dns_user_off("PausedForSignIn");
+        e.dns_paused = dns_paused("PausedForSignIn");
+        assert!(!e.dns_ok && !e.dns_user_off && e.dns_paused);
+        assert!(!e.all_active(), "never claims everything is in place");
+        assert!(e.down().is_empty(), "a pause the user chose is not a failure");
+        assert_eq!(level(&e, false), Level::Warn);
+        let mut n = Notifier::new(60, 0);
+        assert!(n.evaluate(&[], &e, 1000).is_none());
+        assert!(n.evaluate(&[], &e, 1100).is_none());
+        assert!(e.rows().iter().any(|r| r.name == "Encrypted DNS" && r.detail.contains("sign-in")));
+        assert!(!dns_paused("ForcedPlaintext") && !dns_paused("Encrypted"));
+    }
+
+    #[test]
+    fn connectivity_changes_decide_the_portal_action() {
+        use DnsStatus::*;
+        use PortalAction::*;
+        let (p, l, f) = (CONNECTIVITY_PORTAL, CONNECTIVITY_LIMITED, CONNECTIVITY_FULL);
+        let act = "/org/freedesktop/NetworkManager/ActiveConnection/7";
+        let other = "/org/freedesktop/NetworkManager/ActiveConnection/8";
+        // (new, dns, primary is a VPN, activation last offered on, expected)
+        let table: Vec<(u32, DnsStatus, bool, Option<&str>, PortalAction)> = vec![
+            (p, Encrypted, false, None, Offer),
+            // LIMITED came first (nothing offered), then PORTAL on the same activation: asks.
+            (l, Encrypted, false, None, Nothing),
+            (p, Encrypted, false, None, Offer),
+            // The same activation reports PORTAL again: no second offer.
+            (p, Encrypted, false, Some(act), Nothing),
+            // A new activation (another network, or the same one reconnected) asks again.
+            (p, Encrypted, false, Some(other), Offer),
+            (p, ForcedPlaintext, false, None, Nothing),
+            (p, PausedForSignIn, false, None, Nothing),
+            (p, Encrypted, true, None, Nothing),
+            (p, Degraded, false, None, Nothing),
+            (p, Unknown("Initializing".into()), false, None, Nothing),
+            (l, PausedForSignIn, false, None, Nothing),
+            (f, Encrypted, false, None, Nothing),
+            (f, PausedForSignIn, false, None, Nothing),
+            (1, Encrypted, false, None, Nothing),
+            (0, Encrypted, false, None, Nothing),
+        ];
+        for (new, dns, vpn, offered, want) in table {
+            assert_eq!(portal_action(new, &dns, vpn, act, offered), want, "{new}, {dns:?}, vpn={vpn}, offered={offered:?}");
+        }
+    }
+
+    #[test]
+    fn a_paused_device_is_restored_only_by_its_own_full_access() {
+        let (p, l, f) = (CONNECTIVITY_PORTAL, CONNECTIVITY_LIMITED, CONNECTIVITY_FULL);
+        assert!(device_is_full(f, 0));
+        assert!(device_is_full(0, f));
+        assert!(device_is_full(f, p));
+        assert!(!device_is_full(p, l));
+        assert!(!device_is_full(p, 0));
+        assert!(!device_is_full(l, l));
+        assert!(!device_is_full(1, 1));
+    }
+
+    #[test]
+    fn the_portal_offer_says_what_the_network_can_see_and_never_promises_protection() {
+        let o = portal_offer("Cafe Free WiFi");
+        assert_eq!(o.summary, "This network needs a sign-in page");
+        assert_eq!(o.body, "Use the network\u{2019}s own DNS on \u{201c}Cafe Free WiFi\u{201d} until you sign in? Until then, the network can see the names you look up.");
+        assert_eq!(o.actions, vec![("pause", "Use network DNS"), ("no", "Not now")]);
+        let text = format!("{} {}", o.summary, o.body).to_lowercase();
+        for banned in ["secure", "safe", "private", "protect", "anonymous", "100%"] {
+            assert!(!text.contains(banned), "{banned}");
+        }
+        assert!(portal_offer("a\nb").body.contains("a?b"), "a name cannot add lines");
+    }
+
+    #[test]
+    fn pausing_changes_the_running_connection_only_and_restoring_reapplies() {
+        assert_eq!(pause_args("wlp2s0"), ["device", "modify", "wlp2s0", "connection.dns-over-tls", "no"]);
+        assert_eq!(reapply_args("wlp2s0"), ["device", "reapply", "wlp2s0"]);
+        assert!(!pause_args("wlp2s0").iter().any(|a| a == "connection" || a == "resolvectl"), "no saved-profile edit");
+    }
+
+    #[test]
+    fn nothing_is_opened_without_a_web_address() {
+        assert_eq!(sign_in_uri("http://fedoraproject.org/static/hotspot.txt"), Some("http://fedoraproject.org/static/hotspot.txt"));
+        assert_eq!(sign_in_uri(" https://example.org/x \n"), Some("https://example.org/x"));
+        for bad in ["", "   ", "file:///etc/passwd", "ftp://x", "--help", "javascript:alert(1)"] {
+            assert_eq!(sign_in_uri(bad), None, "{bad:?}");
+        }
     }
 }

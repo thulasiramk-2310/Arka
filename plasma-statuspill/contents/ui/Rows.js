@@ -19,7 +19,7 @@ function stateOf(kind, value) {
     if (kind === "bool") return value === true ? CONFIGURED : NOT_SET
     if (kind === "dns") {
         if (value === "Encrypted") return CONFIGURED
-        if (value === "Plaintext" || value === "Degraded" || value === "ForcedPlaintext") return ATTENTION
+        if (value === "Plaintext" || value === "Degraded" || value === "ForcedPlaintext" || value === "PausedForSignIn") return ATTENTION
         return UNAVAILABLE
     }
     if (kind === "sandbox") {

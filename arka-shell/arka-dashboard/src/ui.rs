@@ -106,7 +106,7 @@ fn page(title: &str, sub: &str, body: &impl IsA<gtk4::Widget>) -> gtk4::Scrolled
 const ROW_MIN_WIDTH: i32 = 360;
 
 #[derive(Clone, Copy, PartialEq)]
-enum Row { Checking, Configured, Attention, Unavailable, Stale, OffHere }
+enum Row { Checking, Configured, Attention, Unavailable, Stale, OffHere, Paused }
 
 /// One setting: what it does (never a promise of protection) + its status.
 struct SettingRow { dot: gtk4::Box, state: gtk4::Label, act: gtk4::Label }
@@ -159,15 +159,18 @@ impl SettingRow {
             Row::Unavailable => ("Unavailable", None),
             Row::Stale => ("Not recently checked", None),
             Row::OffHere => ("Off on this network", Some("warn")),
+            Row::Paused => ("Paused for sign-in", Some("warn")),
         };
         self.state.set_text(text);
         if let Some(c) = class {
             self.dot.add_css_class(c);
             self.state.add_css_class(c);
         }
-        self.act.set_visible(matches!(st, Row::Attention | Row::OffHere));
+        self.act.set_visible(matches!(st, Row::Attention | Row::OffHere | Row::Paused));
         self.act.set_text(if st == Row::OffHere {
             "You allowed unencrypted DNS on the network you're connected to. Other networks still require encryption."
+        } else if st == Row::Paused {
+            "Encrypted DNS is paused on this network so its sign-in page can load. It goes back on when NetworkManager reports full internet access on this network, when you disconnect, or when you turn it back on here."
         } else {
             "Try Re-apply settings below. If it stays this way, the Activity page shows what ArkaOS saw."
         });
@@ -180,7 +183,7 @@ struct Summary { dot: gtk4::Box, title: gtk4::Label, segs: Vec<gtk4::Box> }
 impl Summary {
     fn set(&self, states: &[Row]) {
         let in_place = states.iter().filter(|s| **s == Row::Configured).count();
-        let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere)).count();
+        let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere | Row::Paused)).count();
         let unknown = states.iter().all(|s| matches!(s, Row::Unavailable));
         self.title.set_text(&summary_title(states));
         for c in ["ok", "warn"] { self.dot.remove_css_class(c); }
@@ -191,7 +194,7 @@ impl Summary {
             for c in ["ok", "warn"] { seg.remove_css_class(c); }
             match st {
                 Row::Configured => seg.add_css_class("ok"),
-                Row::Attention | Row::OffHere => seg.add_css_class("warn"),
+                Row::Attention | Row::OffHere | Row::Paused => seg.add_css_class("warn"),
                 _ => {}
             }
         }
@@ -208,7 +211,7 @@ fn summary_title(states: &[Row]) -> String {
     }
     let n = states.len();
     let in_place = states.iter().filter(|s| **s == Row::Configured).count();
-    let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere)).count();
+    let attention = states.iter().filter(|s| matches!(s, Row::Attention | Row::OffHere | Row::Paused)).count();
     match attention {
         0 if in_place == n => format!("{n} of {n} settings in place"),
         0 => format!("{in_place} of {n} settings in place"),
@@ -608,19 +611,24 @@ pub fn build(
     dns_box.append(&dns_note);
     dns_box.append(&dns_btn);
     rows_box.append(&dns_box);
-    // (allow?, connection name) for the button, set by update_dns_box.
+    // (what the button does, connection name), set by update_dns_box.
     let dns_target: DnsTarget = std::rc::Rc::new(std::cell::RefCell::new(None));
     {
         let (note, btn, target) = (dns_note.clone(), dns_btn.clone(), dns_target.clone());
         dns_btn.connect_clicked(move |b| {
-            let Some((allow, conn)) = target.borrow().clone() else { return };
+            let Some((mode, conn)) = target.borrow().clone() else { return };
             b.set_sensitive(false);
             let (note, btn) = (note.clone(), btn.clone());
             glib::spawn_future_local(async move {
-                let result = gtk4::gio::spawn_blocking(move || set_dns_exception(&conn, allow)).await
+                let result = gtk4::gio::spawn_blocking(move || match mode {
+                    DnsMode::Allow => set_dns_exception(&conn, true),
+                    DnsMode::Restore => set_dns_exception(&conn, false),
+                    DnsMode::Resume => resume_encrypted_dns(&conn),
+                }).await
                     .unwrap_or_else(|_| Err("Could not confirm whether the DNS setting changed. Recheck before retrying.".into()));
                 btn.set_sensitive(true);
                 match result {
+                    Ok(()) if mode == DnsMode::Resume => note.set_text("Encrypted DNS turned back on. Waiting for the privacy service to check it."),
                     Ok(()) => note.set_text("Setting saved. Waiting for the privacy service to check it."),
                     Err(message) => note.set_text(&message),
                 }
@@ -951,6 +959,7 @@ fn apply_privacy(s: &DashboardState, rows: [&SettingRow; 6], summary: &Summary, 
     let dns = match &s.dns_status {
         DnsStatus::Unknown(_) => Row::Checking,
         DnsStatus::ForcedPlaintext => Row::OffHere,
+        DnsStatus::PausedForSignIn => Row::Paused,
         d => b(d.is_encrypted()),
     };
     let sandbox = match (&s.sandbox_status, &s.browser_sandbox) {
@@ -1038,6 +1047,48 @@ fn active_connection() -> Option<String> {
     })
 }
 
+/// nmcli's terse output writes ':' as "\\:" and a backslash as "\\\\".
+fn unescape_nmcli(field: &str) -> String {
+    let mut out = String::with_capacity(field.len());
+    let mut chars = field.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(n) = chars.next() { out.push(n); }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The network interface a connection is active on.
+fn connection_device(conn: &str) -> Option<String> {
+    let out = std::process::Command::new("nmcli")
+        .args(["-t", "-f", "NAME,DEVICE", "connection", "show", "--active"]).output().ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
+        let (name, dev) = l.rsplit_once(':')?;
+        (unescape_nmcli(name) == conn && !dev.is_empty()).then(|| unescape_nmcli(dev))
+    })
+}
+
+/// Turn encrypted DNS back on for a connection paused for its sign-in page:
+/// re-apply the saved profile to the running connection.
+fn resume_encrypted_dns(conn: &str) -> Result<(), String> {
+    let dev = connection_device(conn).ok_or_else(|| "Could not find the network interface for this connection.".to_string())?;
+    resume_encrypted_dns_with(&dev, |args| {
+        std::process::Command::new("nmcli").args(args)
+            .status().map(|s| s.success()).unwrap_or(false)
+    })
+}
+
+fn resume_encrypted_dns_with(dev: &str, mut run: impl FnMut(&[&str]) -> bool) -> Result<(), String> {
+    if run(&["device", "reapply", dev]) {
+        Ok(())
+    } else {
+        Err("Could not turn encrypted DNS back on. Recheck the connection before retrying.".into())
+    }
+}
+
 /// Allow (or stop allowing) unencrypted DNS on one connection. NetworkManager
 /// asks for permission itself; arkad keeps every other network strict.
 fn set_dns_exception(conn: &str, allow: bool) -> Result<(), String> {
@@ -1056,6 +1107,33 @@ fn set_dns_exception_with(conn: &str, allow: bool, mut run: impl FnMut(&[&str]) 
         return Err("The DNS setting was saved, but reconnecting failed. It will apply when this connection next activates. Check the network settings.".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod dns_resume_tests {
+    use super::{resume_encrypted_dns_with, summary_title, unescape_nmcli, Row};
+
+    #[test]
+    fn nmcli_escapes_are_undone() {
+        assert_eq!(unescape_nmcli("Cafe\\: Free"), "Cafe: Free");
+        assert_eq!(unescape_nmcli("a\\\\b"), "a\\b");
+        assert_eq!(unescape_nmcli("plain"), "plain");
+    }
+
+    #[test]
+    fn turning_encrypted_dns_back_on_reapplies_the_running_connection() {
+        let mut calls = Vec::new();
+        assert!(resume_encrypted_dns_with("wlp2s0", |a| { calls.push(a.join(" ")); true }).is_ok());
+        assert_eq!(calls, ["device reapply wlp2s0"]);
+        assert!(resume_encrypted_dns_with("wlp2s0", |_| false).is_err());
+    }
+
+    #[test]
+    fn a_paused_dns_row_needs_attention_and_is_never_counted_as_in_place() {
+        use Row::*;
+        assert_eq!(summary_title(&[Paused, Configured, Configured, Configured, Configured, Configured]),
+                   "5 of 6 in place, 1 needs attention");
+    }
 }
 
 #[cfg(test)]
@@ -1088,7 +1166,10 @@ mod dns_exception_tests {
     }
 }
 
-type DnsTarget = std::rc::Rc<std::cell::RefCell<Option<(bool, String)>>>;
+#[derive(Clone, Copy, PartialEq)]
+enum DnsMode { Allow, Restore, Resume }
+
+type DnsTarget = std::rc::Rc<std::cell::RefCell<Option<(DnsMode, String)>>>;
 
 /// Does a name lookup through the system resolver work right now? A strict
 /// encrypted-DNS configuration can be fully in place while the network blocks
@@ -1102,23 +1183,27 @@ fn lookups_work() -> bool {
 fn update_dns_box(s: &DashboardState, bx: &gtk4::Box, note: &gtk4::Label, btn: &gtk4::Button, target: &DnsTarget) {
     if !s.available || matches!(s.dns_status, DnsStatus::Unknown(_)) { bx.set_visible(false); return; }
     let forced = s.dns_status == DnsStatus::ForcedPlaintext;
+    let paused = s.dns_status == DnsStatus::PausedForSignIn;
     // A live lookup at most every 30 s, not on every refresh.
-    thread_local!(static LAST: std::cell::Cell<(u64, bool)> = const { std::cell::Cell::new((0, false)) });
+    thread_local!(static LAST: std::cell::Cell<(u64, bool, bool)> = const { std::cell::Cell::new((0, false, false)) });
     let now = now_secs();
-    if LAST.with(|l| { let (t, f) = l.get(); now.saturating_sub(t) < 30 && f == forced }) { return; }
-    LAST.with(|l| l.set((now, forced)));
+    if LAST.with(|l| { let (t, f, p) = l.get(); now.saturating_sub(t) < 30 && f == forced && p == paused }) { return; }
+    LAST.with(|l| l.set((now, forced, paused)));
     let (bx, note, btn, target) = (bx.clone(), note.clone(), btn.clone(), target.clone());
     glib::spawn_future_local(async move {
         // Offer the exception only when lookups actually fail; offer to undo it
         // whenever it's in use.
         let (conn, failing) = gtk4::gio::spawn_blocking(move || {
             let conn = active_connection();
-            let failing = !forced && conn.is_some() && !lookups_work();
+            let failing = !forced && !paused && conn.is_some() && !lookups_work();
             (conn, failing)
         }).await.unwrap_or((None, false));
-        let mode = if forced { "restore" } else if failing { "allow" } else { bx.set_visible(false); return };
+        let mode = if paused { DnsMode::Resume } else if forced { DnsMode::Restore } else if failing { DnsMode::Allow } else { bx.set_visible(false); return };
         let Some(conn) = conn else { bx.set_visible(false); return };
-        if mode == "allow" {
+        if mode == DnsMode::Resume {
+            note.set_text(&format!("Encrypted DNS paused on \u{201c}{conn}\u{201d} for its sign-in page."));
+            btn.set_label("Turn encrypted DNS back on");
+        } else if mode == DnsMode::Allow {
             note.set_text(&format!(
                 "Website names aren't resolving on \u{201c}{conn}\u{201d}. Some networks (hotels, cafés, \
                  sign-in pages) block encrypted DNS. You can allow unencrypted DNS on this network only; \
@@ -1128,7 +1213,7 @@ fn update_dns_box(s: &DashboardState, bx: &gtk4::Box, note: &gtk4::Label, btn: &
             note.set_text(&format!("Unencrypted DNS is allowed on \u{201c}{conn}\u{201d}."));
             btn.set_label("Require encryption here again");
         }
-        *target.borrow_mut() = Some((mode == "allow", conn));
+        *target.borrow_mut() = Some((mode, conn));
         bx.set_visible(true);
     });
 }

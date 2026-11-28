@@ -106,6 +106,7 @@ name = "arka-privacy-tray"
 version = "0.1.0"
 dependencies = [
  "arka-shell-common",
+ "futures-util",
  "ksni",
  "serde",
  "serde_json",

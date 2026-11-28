@@ -13,7 +13,12 @@
 
 mod privacy;
 
-use privacy::{browser_active, check_is_fresh, dns_active, dns_user_off, drifts_since, level, parse_log, Enforcement, Event, Level, Notification, Notifier};
+use arka_shell_common::DnsStatus;
+use privacy::{
+    browser_active, check_is_fresh, dns_active, dns_paused, dns_user_off, drifts_since, level, parse_log, pause_args,
+    device_is_full, portal_action, portal_offer, reapply_args, sign_in_uri, Enforcement, Event, Level, Notification, Notifier,
+    PortalAction, ACTION_PAUSE,
+};
 
 use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Tray, TrayMethods};
@@ -55,6 +60,9 @@ impl ArkaTray {
         }
         if self.level == Level::Warn && self.enf.dns_user_off {
             return "DNS isn't encrypted on this network — you allowed it".to_string();
+        }
+        if self.level == Level::Warn && self.enf.dns_paused {
+            return "Encrypted DNS is paused for this network's sign-in page".to_string();
         }
         self.level.header(self.drifts_today)
     }
@@ -186,11 +194,13 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
         || !check_is_fresh(Some(last_check), now(), POLL_SECS) { return None; }
     let dns_ok = dns_active(&dns);
     let dns_off_by_choice = dns_user_off(&dns);
+    let dns_is_paused = dns_paused(&dns);
     let browser_ok = browser_active(&browser, &sandbox);
     Some(Enforcement {
         mac,
         dns_ok,
         dns_user_off: dns_off_by_choice,
+        dns_paused: dns_is_paused,
         dns_detail: dns,
         hostname,
         ipv6,
@@ -232,6 +242,11 @@ trait Notifications {
         hints: std::collections::HashMap<&str, zbus::zvariant::Value<'_>>,
         expire_timeout: i32,
     ) -> zbus::Result<u32>;
+
+    fn close_notification(&self, id: u32) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn action_invoked(&self, id: u32, action_key: String) -> zbus::Result<()>;
 }
 
 async fn send_notification(p: &NotificationsProxy<'_>, n: &Notification) {
@@ -243,6 +258,202 @@ async fn send_notification(p: &NotificationsProxy<'_>, n: &Notification) {
     let _ = p
         .notify("ArkaOS Privacy", 0, icon, &n.summary, &n.body, &[], hints, 8000)
         .await;
+}
+
+
+// ── sign-in pages (captive portals) ──────────────────────────────────────────
+//
+// NetworkManager reports Connectivity PORTAL (2) when a network answers its
+// check with a sign-in page. The tray then offers, once per activation, to use
+// the network's own DNS until the sign-in is done. It changes only the running
+// connection (`nmcli device modify`) and puts it back with `nmcli device
+// reapply` when Connectivity is FULL (4). The decisions are in `privacy`.
+
+#[zbus::proxy(
+    interface = "org.freedesktop.NetworkManager",
+    default_service = "org.freedesktop.NetworkManager",
+    default_path = "/org/freedesktop/NetworkManager",
+    gen_blocking = false
+)]
+trait NmManager {
+    #[zbus(property)]
+    fn connectivity(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn connectivity_check_uri(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn primary_connection(&self) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+    fn get_device_by_ip_iface(&self, iface: &str) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.NetworkManager.Connection.Active",
+    default_service = "org.freedesktop.NetworkManager",
+    gen_blocking = false
+)]
+trait NmActive {
+    #[zbus(property)]
+    fn id(&self) -> zbus::Result<String>;
+    #[zbus(property, name = "Type")]
+    fn connection_type(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn vpn(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn devices(&self) -> zbus::Result<Vec<zbus::zvariant::OwnedObjectPath>>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.NetworkManager.Device",
+    default_service = "org.freedesktop.NetworkManager",
+    gen_blocking = false
+)]
+trait NmDevice {
+    #[zbus(property)]
+    fn interface(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn ip4_connectivity(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn ip6_connectivity(&self) -> zbus::Result<u32>;
+}
+
+/// The connection the machine is currently using for its default route.
+struct Primary {
+    /// D-Bus path of the active connection: one value per activation.
+    activation: String,
+    name: String,
+    iface: String,
+    is_vpn: bool,
+}
+
+async fn read_primary(sys: &zbus::Connection) -> Option<Primary> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let mgr = NmManagerProxy::builder(sys).cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        let path = mgr.primary_connection().await.ok()?;
+        if path.as_str() == "/" { return None; }
+        let activation = path.as_str().to_string();
+        let act = NmActiveProxy::builder(sys).path(path).ok()?
+            .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        let kind = act.connection_type().await.ok()?;
+        let is_vpn = act.vpn().await.unwrap_or(false) || kind == "vpn" || kind == "wireguard";
+        let dev = act.devices().await.ok()?.into_iter().next()?;
+        let dev = NmDeviceProxy::builder(sys).path(dev).ok()?
+            .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        Some(Primary { activation, name: act.id().await.ok()?, iface: dev.interface().await.ok()?, is_vpn })
+    }).await.ok().flatten()
+}
+
+/// The paused interface's own (Ip4Connectivity, Ip6Connectivity). None when unreadable.
+async fn read_device_connectivity(sys: &zbus::Connection, iface: &str) -> Option<(u32, u32)> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let mgr = NmManagerProxy::builder(sys).cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        let path = mgr.get_device_by_ip_iface(iface).await.ok()?;
+        let dev = NmDeviceProxy::builder(sys).path(path).ok()?
+            .cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        Some((dev.ip4_connectivity().await.ok()?, dev.ip6_connectivity().await.ok()?))
+    }).await.ok().flatten()
+}
+
+/// arkad's DNS status right now (not the 30 s snapshot), Unknown when unreadable.
+async fn read_dns_status(sys: &zbus::Connection) -> DnsStatus {
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        let proxy = ArkadProxy::builder(sys).cache_properties(zbus::proxy::CacheProperties::No).build().await.ok()?;
+        proxy.dns_status().await.ok()
+    }).await.ok().flatten().map(DnsStatus::from).unwrap_or_default()
+}
+
+async fn run_nmcli(args: Vec<String>) -> bool {
+    let child = tokio::process::Command::new("nmcli").args(&args).env("LC_ALL", "C").kill_on_drop(true).status();
+    match tokio::time::timeout(std::time::Duration::from_secs(10), child).await {
+        Ok(Ok(status)) => status.success(),
+        _ => false,
+    }
+}
+
+async fn send_offer(p: &NotificationsProxy<'_>, connection: &str) -> Option<u32> {
+    let offer = portal_offer(connection);
+    let actions: Vec<&str> = offer.actions.iter().flat_map(|(k, l)| [*k, *l]).collect();
+    let mut hints = std::collections::HashMap::new();
+    hints.insert("urgency", zbus::zvariant::Value::U8(1));
+    p.notify("Arka Privacy", 0, "network-wireless", &offer.summary, &offer.body, &actions, hints, 0).await.ok()
+}
+
+async fn portal_watch(sys: zbus::Connection, ses: zbus::Connection) {
+    use futures_util::StreamExt;
+    let (Ok(mgr), Ok(np)) = (NmManagerProxy::new(&sys).await, NotificationsProxy::new(&ses).await) else { return };
+    let Ok(mut actions) = np.receive_action_invoked().await else { return };
+    let mut changes = mgr.receive_connectivity_changed().await;
+    // The offer on screen: (notification id, interface to pause).
+    let mut offer: Option<(u32, String)> = None;
+    // The activation the last offer was made for: one offer per activation.
+    let mut offered_for: Option<String> = None;
+    // An interface this tray paused. Restoring it waits for that device's own
+    // full access, which is polled while it is paused (the Manager's overall
+    // value may already be FULL through another link).
+    let mut paused_iface: Option<String> = None;
+    let mut pending = mgr.connectivity().await.ok();
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(5));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        let mut new = None;
+        if let Some(v) = pending.take() {
+            new = Some(v);
+        } else {
+            tokio::select! {
+                Some(change) = changes.next() => match change.get().await { Ok(v) => new = Some(v), Err(_) => continue },
+                Some(signal) = actions.next() => {
+                    let Ok(args) = signal.args() else { continue };
+                    let Some((id, iface)) = offer.clone() else { continue };
+                    if args.id != id { continue }
+                    offer = None;
+                    if args.action_key == ACTION_PAUSE && run_nmcli(pause_args(&iface)).await {
+                        paused_iface = Some(iface);
+                        let uri = mgr.connectivity_check_uri().await.unwrap_or_default();
+                        if let Some(uri) = sign_in_uri(&uri) {
+                            let _ = tokio::process::Command::new("xdg-open").arg(uri).spawn();
+                        }
+                    }
+                    continue
+                },
+                _ = tick.tick(), if paused_iface.is_some() => {}
+                else => return,
+            }
+        }
+
+        if let Some(new) = new {
+            let dns = read_dns_status(&sys).await;
+            let primary = read_primary(&sys).await;
+            if let Some(p) = primary.as_ref() {
+                let action = portal_action(new, &dns, p.is_vpn, &p.activation, offered_for.as_deref());
+                if action == PortalAction::Offer {
+                    if let Some(id) = send_offer(&np, &p.name).await {
+                        if let Some((old, _)) = offer.replace((id, p.iface.clone())) { let _ = np.close_notification(old).await; }
+                        offered_for = Some(p.activation.clone());
+                    }
+                }
+            }
+            if new == privacy::CONNECTIVITY_FULL { offered_for = None; }
+            // Drop the offer together with its notification (it has no timeout), so no dead button stays on screen.
+            if new != privacy::CONNECTIVITY_PORTAL {
+                if let Some((id, _)) = offer.take() { let _ = np.close_notification(id).await; }
+            }
+            // Every link is down: the pause ended with it.
+            if new <= 1 { paused_iface = None; }
+            // Paused by a tray that was restarted, or by something else: arkad says so.
+            if paused_iface.is_none() && dns == DnsStatus::PausedForSignIn {
+                paused_iface = primary.map(|p| p.iface);
+            }
+        }
+
+        // Restore: the interface this tray paused wins over whatever is primary now.
+        if let Some(iface) = paused_iface.clone() {
+            if let Some((ip4, ip6)) = read_device_connectivity(&sys, &iface).await {
+                if device_is_full(ip4, ip6) {
+                    run_nmcli(reapply_args(&iface)).await;
+                    paused_iface = None;
+                }
+            }
+        }
+    }
 }
 
 // ── main loop ────────────────────────────────────────────────────────────────
@@ -305,6 +516,10 @@ async fn main() {
         Some(c) => NotificationsProxy::new(c).await.ok(),
         None => None,
     };
+
+    if let (Some(ses), Ok(sys)) = (ses.clone(), zbus::Connection::system().await) {
+        tokio::spawn(portal_watch(sys, ses));
+    }
 
     // start_ts = now so pre-existing log lines from earlier boots never fire.
     let mut notifier = Notifier::new(NOTIFY_MIN_GAP_SECS, now());

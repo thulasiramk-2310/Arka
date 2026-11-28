@@ -10,8 +10,11 @@ impl ArkadState {
             "mac" => self.mac_randomization,
             // A per-network exception the user chose isn't a failure: there is
             // nothing to re-apply, and retrying would log a "drift" every cycle.
-            // The dashboard and tray still show DNS as unencrypted there.
-            "dns" => self.dns_status.is_encrypted() || self.dns_status == DnsStatus::ForcedPlaintext,
+            // The dashboard and tray still show DNS as unencrypted there. The same
+            // holds while encrypted DNS is paused for a sign-in page: the pause
+            // ends by itself (or is lifted), and re-applying cannot help.
+            "dns" => self.dns_status.is_encrypted()
+                || matches!(self.dns_status, DnsStatus::ForcedPlaintext | DnsStatus::PausedForSignIn),
             "hostname" => self.hostname_privacy,
             "ipv6" => self.ipv6_privacy,
             "firewall" => self.firewall,
@@ -79,6 +82,8 @@ mod tests {
     fn a_user_dns_exception_needs_no_retry_but_other_plaintext_does() {
         let mut s = ArkadState::default();
         s.dns_status = DnsStatus::ForcedPlaintext;
+        assert!(s.control_healthy("dns"));
+        s.dns_status = DnsStatus::PausedForSignIn;
         assert!(s.control_healthy("dns"));
         for d in [DnsStatus::Plaintext, DnsStatus::Degraded, DnsStatus::Error] {
             s.dns_status = d;
