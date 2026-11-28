@@ -216,7 +216,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
     --exclude=plasma-workspace-wallpapers \
     @kde-desktop-environment sddm \
     pipewire wireplumber pipewire-pulseaudio xorg-x11-server-Xwayland \
-    libadwaita flatpak xdg-user-dirs brightnessctl \
+    libadwaita flatpak toolbox xdg-user-dirs brightnessctl \
     bluez bluez-tools zram-generator-defaults
 
 # Enable SDDM (started once firstboot flips the default to graphical.target).

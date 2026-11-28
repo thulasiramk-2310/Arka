@@ -371,6 +371,7 @@ exactly that: we haven't tried it.
   merge conflicts, a fix for undo, and a redesigned Hub). The older v0.4.4 build was tested in a VM
   (2026-10-20). v0.4.5 passed VARA's tests on Linux, macOS and Windows and a Hub and merge test on
   its published files on 2026-11-03, but has not yet been booted in ArkaOS. Not yet on hardware.
+- **Toolbx.** Toolbx gives you a Fedora container for command-line tools; it shares your home folder and is not a sandbox. Added to the image, not yet tested in a VM.
 
 Still a developer preview: the installer is new and VM-tested only, we have one
 hardware data point, and the known rough edges are in the release validation notes and the field notes.
