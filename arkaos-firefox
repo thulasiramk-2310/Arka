@@ -60,8 +60,9 @@ cleanup() {
 start_portal_proxy() {
     [[ -x /usr/bin/xdg-dbus-proxy && -S "$HOST_BUS" ]] || return 0
     [[ ! -L "$PROXY_DIR" ]] || return 0
-    mkdir -p -m 0700 -- "$PROXY_DIR" 2>/dev/null || return 0
+    mkdir -m 0700 -- "$PROXY_DIR" 2>/dev/null || [[ -d "$PROXY_DIR" ]] || return 0
     [[ -d "$PROXY_DIR" && -O "$PROXY_DIR" ]] || return 0
+    chmod 0700 -- "$PROXY_DIR" 2>/dev/null || return 0
     # Sockets left behind by launches that were killed.
     local old pid
     for old in "$PROXY_DIR"/proxy-*; do
