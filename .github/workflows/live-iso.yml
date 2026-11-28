@@ -130,7 +130,7 @@ jobs:
 
       - name: Build the ArkaOS image from this branch
         if: steps.reuse.outputs.run == '' && steps.image.outputs.run == ''
-        run: sudo podman build --pull=newer -t localhost/arka:build .
+        run: sudo podman build --network=host --pull=newer -t localhost/arka:build .
 
       - name: Save it as an OCI directory and read its release name
         if: steps.reuse.outputs.run == ''
@@ -147,7 +147,7 @@ jobs:
       - name: Build the live system
         if: steps.reuse.outputs.run == ''
         run: |
-          sudo podman build --build-arg BASE=localhost/arka:build -t localhost/arka:live "$HOME/live-ctx"
+          sudo podman build --network=host --build-arg BASE=localhost/arka:build -t localhost/arka:live "$HOME/live-ctx"
           sudo rm -rf "$HOME/live-ctx"
           df -h / /mnt
 
