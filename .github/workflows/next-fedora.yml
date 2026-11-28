@@ -1,0 +1,54 @@
+name: Next Fedora
+
+# Early warning only. Builds the ArkaOS image on the next Fedora releases (45 and the
+# rawhide-based 46 tag) so a break shows up weeks before a rebase is needed.
+# Nothing is pushed or signed, and no secrets are used.
+
+on:
+  schedule:
+    - cron: "43 4 * * 3"   # weekly, Wednesdays
+  workflow_dispatch:
+
+concurrency:
+  group: next-fedora-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build on Fedora ${{ matrix.v }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        v: [45, 46]
+    steps:
+      - name: Make room (the image is about 12 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/containers /var/lib/containers
+          sudo mount --bind /mnt/containers /var/lib/containers
+          df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        id: build
+        run: |
+          sudo podman build --pull=newer \
+            --build-arg FEDORA_VERSION=${{ matrix.v }} \
+            -t localhost/arka:next-${{ matrix.v }} .
+
+      - name: Summary
+        if: always()
+        env:
+          RESULT: ${{ steps.build.outcome }}
+        run: |
+          {
+            echo "### Fedora ${{ matrix.v }}: build $RESULT"
+            echo
+            echo "Build only. Nothing was pushed, signed or booted, so a passing build does not show the image works on that release."
+          } >> "$GITHUB_STEP_SUMMARY"
