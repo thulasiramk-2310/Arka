@@ -595,7 +595,7 @@ pub fn build(
     let mac = SettingRow::new(&grid, "Private network address", "On Wi-Fi, a made-up hardware address for each network name, the same one each time you return to it. On a cable, a new made-up address each time you connect.");
     let host = SettingRow::new(&grid, "Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own.");
     let ipv6 = SettingRow::new(&grid, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
-    let sandbox = SettingRow::new(&grid, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");
+    let sandbox = SettingRow::new(&grid, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder and files you have picked in the file dialog.");
     let fw = SettingRow::new(&grid, "Firewall", "Rejects connections other computers try to open to this one.");
 
     // Per-network exception for networks that block encrypted DNS (hotels,

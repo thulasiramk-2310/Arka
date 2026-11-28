@@ -11,7 +11,8 @@ swaps with rollback. A Rust daemon (**arkad**) enforces privacy invariants
 continuously and exposes state over D-Bus. The desktop is **KDE Plasma** branded
 into the Arka design system, with a set of first-party GTK4 privacy apps
 (dashboard, capsule, permissions, settings) that talk to arkad. Firefox runs
-inside a bubblewrap sandbox that hides the real home, /etc secrets, and D-Bus.
+inside a bubblewrap sandbox that hides the real home, /etc secrets, and the host D-Bus (the browser gets only a
+filtered portal socket for the file dialog).
 
 ## Why these foundations
 
@@ -79,8 +80,10 @@ auditable and boring on purpose. Config: `/etc/arkad/arkad.toml`
 
 `/usr/bin/firefox` → wrapper → bubblewrap → `/usr/bin/firefox-unwrapped`.
 Home is a tmpfs (real home invisible), /etc is an allowlist (no NetworkManager
-creds, no arkad config, no machine-id), /run is a tmpfs (no D-Bus), only
-~/Downloads is re-exposed rw. Wayland and audio sockets are passed through;
+creds, no arkad config, no machine-id), /run is a tmpfs (the host session and
+system buses are not bound; a filtering proxy gives the browser only the file
+chooser), ~/Downloads is re-exposed rw, and files you have picked in
+the file dialog arrive through the document portal. Wayland and audio sockets are passed through;
 direct audio-server access includes recording capability. The wrapper ships
 in the system image, but administrators and other browser installations can
 bypass it. Test its boundary with a sentinel file in the real home:

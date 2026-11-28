@@ -1138,7 +1138,7 @@ fn build_ui(app: &adw::Application) {
                 ("Private network address", "On Wi-Fi, a made-up hardware address for each network name, the same one each time you return to it. On a cable, a new made-up address each time you connect."),
                 ("Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own."),
                 ("Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time."),
-                ("Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder."),
+                ("Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder and files you have picked in the file dialog."),
                 ("Firewall", "Rejects connections other computers try to open to this one."),
             ];
             for ((t, s), st) in items.into_iter().zip(states) {

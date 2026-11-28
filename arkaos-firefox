@@ -8,10 +8,23 @@
 #   firefox --shell -c 'cmd'  — run cmd in the identical sandbox non-interactively
 #
 # Isolation model:
-#   - /home entirely hidden (tmpfs); only ~/Downloads re-exposed via bind
+#   - /home entirely hidden (tmpfs); ~/Downloads re-exposed via bind, and files
+#     you pick in the file dialog appear through the document portal
 #   - /etc allowlisted: resolv.conf, ssl, pki, fonts, localtime, nsswitch — no
 #     NM profiles, no arkad config, no machine-id
-#   - /run: tmpfs (no D-Bus session access; headless Firefox doesn't need it)
+#   - /run: tmpfs. The host session D-Bus socket is never bound and the system
+#     bus is never reachable. When xdg-dbus-proxy and the session bus are
+#     present, the browser gets a socket from a filtering proxy instead. The
+#     proxy runs in its own small bubblewrap with a /.flatpak-info naming the app
+#     org.arka.SandboxedFirefox, so the desktop portal treats the browser as a
+#     sandboxed app: the file dialog runs outside the sandbox and only the files
+#     you pick are handed back (through the document portal folder bound at
+#     /run/user/UID/doc). The proxy allows only the file chooser, one property
+#     read, the portal's reply signals and Firefox's own org.mozilla.firefox.*
+#     names (how a second launch reaches the running window). Everything else on
+#     the bus, notifications and screen sharing included, is refused. Without the
+#     proxy, the bus or the document portal folder the browser starts with no
+#     D-Bus and uses its own file dialog. Firefox itself never sees /.flatpak-info.
 #   - New PID, IPC, UTS namespaces; die-with-parent
 
 set -euo pipefail
@@ -29,6 +42,120 @@ mkdir -p -- "$DOWNLOADS"
 WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 [[ "$WAYLAND_DISPLAY" =~ ^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$ ]] || {
     echo 'Unsupported Wayland socket name' >&2; exit 1;
+}
+
+# Desktop portal access through a filtering D-Bus proxy (see the header).
+# Sets PORTAL_ARGS (extra sandbox arguments) and PROXY_PID. Any failure leaves
+# both empty, and the browser then starts without D-Bus, as it did before.
+APP_ID=org.arka.SandboxedFirefox
+HOST_BUS="/run/user/${UID}/bus"
+PROXY_DIR="/run/user/${UID}/arkaos-firefox"
+PORTAL_ARGS=()
+PROXY_PID=
+PROXY_SOCK=
+cleanup() {
+    [[ -z "$PROXY_PID" ]] || kill "$PROXY_PID" 2>/dev/null || true
+    [[ -z "$PROXY_SOCK" ]] || rm -f -- "$PROXY_SOCK"
+}
+start_portal_proxy() {
+    [[ -x /usr/bin/xdg-dbus-proxy && -S "$HOST_BUS" ]] || return 0
+    [[ ! -L "$PROXY_DIR" ]] || return 0
+    mkdir -p -m 0700 -- "$PROXY_DIR" 2>/dev/null || return 0
+    [[ -d "$PROXY_DIR" && -O "$PROXY_DIR" ]] || return 0
+    # Sockets left behind by launches that were killed.
+    local old pid
+    for old in "$PROXY_DIR"/proxy-*; do
+        [[ -S "$old" ]] || continue
+        pid="${old##*/proxy-}"
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        kill -0 "$pid" 2>/dev/null || rm -f -- "$old"
+    done
+    # The document portal folder for this app id must exist, or picked files
+    # would not reach the browser. Asking the portal for its mount point starts
+    # it if it is not running; the by-app folder is made when it is looked up.
+    timeout 5 busctl --user call org.freedesktop.portal.Documents /org/freedesktop/portal/documents \
+        org.freedesktop.portal.Documents GetMountPoint >/dev/null 2>&1 || true
+    if [[ ! -d "/run/user/${UID}/doc/by-app/$APP_ID" ]]; then
+        echo 'firefox: the document portal folder is missing; using the browser file dialog' >&2
+        return 0
+    fi
+    local sock="$PROXY_DIR/proxy-$$"
+    rm -f -- "$sock"
+    local rules=(
+        --filter
+        '--call=org.freedesktop.portal.Desktop=org.freedesktop.portal.FileChooser.*@/org/freedesktop/portal/desktop'
+        '--call=org.freedesktop.portal.Desktop=org.freedesktop.DBus.Properties.Get@/org/freedesktop/portal/desktop'
+        '--broadcast=org.freedesktop.portal.Desktop=org.freedesktop.portal.Request.*@/org/freedesktop/portal/desktop/request/*'
+    )
+    rules+=('--own=org.mozilla.firefox.*')
+    # The portal decides what an app is by reading /.flatpak-info in the
+    # process that holds the bus connection. Only the proxy has this file.
+    exec 6<<<"[Application]
+name=$APP_ID
+
+[Instance]
+instance-id=$$
+"
+    local proxy_bwrap=(
+        --clearenv
+        --ro-bind /usr /usr
+        --ro-bind /lib /lib
+        --ro-bind /lib64 /lib64
+        --ro-bind /bin /bin
+        --ro-bind /sbin /sbin
+        --tmpfs /run
+        --dir "/run/user/${UID}"
+        --ro-bind "$HOST_BUS" "$HOST_BUS"
+        --bind "$PROXY_DIR" "$PROXY_DIR"
+        --ro-bind-data 6 /.flatpak-info
+        --unshare-pid
+        --unshare-ipc
+        --unshare-uts
+        --unshare-net
+        --cap-drop ALL
+        --new-session
+        --die-with-parent
+    )
+    # The proxy writes one byte to stdout (--fd=1) when it is listening and
+    # stops when this end of the pipe closes, which happens when we exit.
+    exec 7< <(exec bwrap "${proxy_bwrap[@]}" /usr/bin/xdg-dbus-proxy --fd=1 \
+              "unix:path=$HOST_BUS" "$sock" "${rules[@]}")
+    PROXY_PID=$!
+    exec 6<&-
+    PROXY_SOCK="$sock"
+    if ! read -r -N1 -t 5 -u 7 _; then
+        echo 'firefox: the portal proxy did not start; using the browser file dialog' >&2
+        cleanup
+        PROXY_PID=
+        PROXY_SOCK=
+        exec 7<&-
+        return 0
+    fi
+    PORTAL_ARGS=(
+        --bind "$sock" "$HOST_BUS"
+        --setenv DBUS_SESSION_BUS_ADDRESS "unix:path=$HOST_BUS"
+        # Files picked in the dialog show up here and nowhere else.
+        --bind "/run/user/${UID}/doc/by-app/$APP_ID" "/run/user/${UID}/doc"
+    )
+}
+trap cleanup EXIT
+start_portal_proxy
+
+# Run the sandbox. With a proxy running this wrapper stays alive to clean up and
+# passes termination signals on; without one it replaces itself, as before.
+launch() {
+    if [[ -z "$PROXY_PID" ]]; then
+        exec bwrap "${BWRAP_ARGS[@]}" "$@"
+    fi
+    # Descriptor 7 is the proxy's lifeline and must not reach the browser.
+    bwrap "${BWRAP_ARGS[@]}" "$@" <&0 7<&- &
+    local child=$! rc=0
+    trap 'kill -TERM "$child" 2>/dev/null || true' TERM INT HUP
+    wait "$child" || rc=$?
+    while kill -0 "$child" 2>/dev/null; do
+        wait "$child" || rc=$?
+    done
+    return "$rc"
 }
 
 # Single source of truth for sandbox args.
@@ -65,7 +192,8 @@ BWRAP_ARGS=(
     # Writable scratch areas
     --tmpfs /tmp
     # /run: fresh tmpfs, then thread the Wayland socket back through so Firefox
-    # can connect to the compositor. D-Bus session bus stays hidden.
+    # can connect to the compositor. The host session bus stays hidden; only the
+    # filtered portal socket (PORTAL_ARGS) is added.
     --tmpfs /run
     --dir /run/user
     --dir /run/user/"${UID}"
@@ -83,6 +211,8 @@ BWRAP_ARGS=(
     # Select the mounted socket explicitly; do not inherit a launcher server
     # or rely on client configuration hidden by the isolated home and /etc.
     --setenv PULSE_SERVER unix:/run/user/"${UID}"/pulse/native
+    # Filtered portal bus socket and document-portal folder, when available.
+    "${PORTAL_ARGS[@]}"
     --setenv XDG_RUNTIME_DIR /run/user/"${UID}"
     --setenv WAYLAND_DISPLAY "${WAYLAND_DISPLAY:-wayland-0}"
     --setenv MOZ_ENABLE_WAYLAND 1
@@ -104,7 +234,8 @@ BWRAP_ARGS=(
 
 if [[ "${1:-}" == "--shell" ]]; then
     shift
-    exec bwrap "${BWRAP_ARGS[@]}" /bin/bash "${@:--i}"
+    launch /bin/bash "${@:--i}"
+    exit
 fi
 
-exec bwrap "${BWRAP_ARGS[@]}" "${BROWSER}" "$@"
+launch "${BROWSER}" "$@"

@@ -45,6 +45,18 @@ session and terminates with its parent. It starts in the sandbox home. The host
 network is shared. Wayland, PipeWire and PulseAudio access is deliberately exposed.
 Direct audio-server access can include microphone recording; this is not a
 playback-only or portal-mediated grant. Downloads are readable and writable.
+The host session D-Bus is not bound. The browser gets a socket from xdg-dbus-proxy
+that allows the file chooser portal, a property read on the portal, and Firefox's own
+org.mozilla.firefox.* names; other bus calls are refused. Because that proxy is the
+only thing between the browser and the host session bus, a flaw in its filter would
+expose the bus. Picked-file grants persist until revoked (`flatpak documents
+--app=org.arka.SandboxedFirefox`, unverified until the VM test).
+
+Two limits of the portal path. (a) `--own=org.mozilla.firefox.*` lets the browser
+hand a URL to any other Firefox on the session bus, including a Flathub one; that
+Firefox is not sandboxed by this wrapper. (b) The browser chooses the title and
+button label of the file dialog, so a compromised browser can make the dialog look
+like something else. Files you have picked in the dialog stay granted until revoked.
 
 This does not provide VM isolation or a complete defense against kernel,
 compositor or audio-server exploits, malicious programs already running as the

@@ -207,7 +207,7 @@ async fn read_enforcement(p: &ArkadProxy<'_>) -> Option<Enforcement> {
         firewall,
         browser_ok,
         browser_detail: if browser_ok {
-            "Firefox sees only your Downloads folder".to_string()
+            "Firefox sees only your Downloads folder and files you have picked in the file dialog".to_string()
         } else {
             "Not confirmed".to_string()
         },

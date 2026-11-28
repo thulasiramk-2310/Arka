@@ -34,7 +34,8 @@ Filesystem binds (all read-only unless noted):
   /dev (dev)                     — device nodes
   /proc (proc)                   — process info
   /tmp (tmpfs)                   — ephemeral scratch
-  /run (tmpfs)                   — no D-Bus session access
+  /run (tmpfs)                   — no host D-Bus session access; only a filtered
+                                   portal socket (file dialog only)
   /home (tmpfs)                  — real home HIDDEN
   /root (tmpfs)                  — real root home HIDDEN
   ~/Downloads (bind rw)          — only home subdir re-exposed
@@ -134,7 +135,10 @@ There is no gap between what was tested and what ships.
 **Not yet implemented (known scope boundaries):**
 - Persistent encrypted browser profile (Downloads are unencrypted)
 - Wayland/X11 socket isolation (no display server in headless test)
-- D-Bus session isolation (--tmpfs /run hides session bus; GUI use would need portals)
+- D-Bus session isolation: --tmpfs /run hides the host session bus. The browser gets only an
+  xdg-dbus-proxy socket that allows the file chooser portal and
+  org.mozilla.firefox.* names (the portal sees an app named org.arka.SandboxedFirefox);
+  that filter has not been audited beyond the tests in scripts/test-firefox-wrapper.py
 - Per-app sandboxing beyond Firefox (Phase 4 scopes to one reference app)
 - TPM-sealed browser profile (requires PCRs 11-15, which are blocked by Phase 3
   platform limitation — see PHASE3-FINDINGS.md)

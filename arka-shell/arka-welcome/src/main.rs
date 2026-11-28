@@ -95,7 +95,7 @@ fn build_ui(app: &adw::Application) {
     rows.set_margin_top(28);
     let items: &[(&str, &str, &str, &str)] = &[
         ("network-wireless-symbolic", "Connect to Wi-Fi", "Choose a network and sign in.", "arka-wifi"),
-        ("applications-internet-symbolic", "Open Firefox", "Runs in a sandbox that sees only your Downloads folder.", "firefox"),
+        ("applications-internet-symbolic", "Open Firefox", "Runs in a sandbox that sees only your Downloads folder and files you have picked in the file dialog.", "firefox"),
         ("system-software-install-symbolic", "Install apps", "Find and install apps from Flathub in App Library.", "arka-capsule"),
         ("security-high-symbolic", "Review privacy settings", "See which privacy settings ArkaOS has in place right now.", "arka-dashboard"),
     ];

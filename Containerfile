@@ -201,7 +201,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --se
 RUN printf 'layout=uki\nuki_generator=ukify\n' > /etc/kernel/install.conf
 
 # Phase 4: bubblewrap-sandboxed Firefox
-RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y firefox bubblewrap
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked dnf install --setopt=keepcache=True -y firefox bubblewrap xdg-dbus-proxy
 
 # Graphical session: full KDE Plasma spin + SDDM login manager.
 # Plasma provides the panel, launcher, settings, file manager, window
