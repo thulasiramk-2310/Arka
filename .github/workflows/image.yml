@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: Refuse to publish without the signing key
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/test/')
         env:
           SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
         run: |
@@ -107,13 +107,26 @@ jobs:
           sudo podman push localhost/arka:chunked "docker://$IMAGE:sha-${GITHUB_SHA::7}"
           echo "DIGEST=$(sudo cat digest)" >> "$GITHUB_ENV"
 
+      # test/* branches publish only to the candidate tags, never to latest, so an image can be made
+      # into a disk (Stick image, tag: candidate) and booted before it is merged. Installed machines
+      # follow latest and never move to a candidate on their own.
+      - name: Push candidate
+        if: startsWith(github.ref, 'refs/heads/test/')
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman push --digestfile digest localhost/arka:chunked "docker://$IMAGE:candidate"
+          sudo podman push localhost/arka:chunked "docker://$IMAGE:candidate-${GITHUB_SHA::7}"
+          echo "DIGEST=$(sudo cat digest)" >> "$GITHUB_ENV"
+
       - uses: sigstore/cosign-installer@v3
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/test/')
         with:
           cosign-release: v2.4.1
 
       - name: Sign and verify
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/test/')
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_PASSWORD: ""
