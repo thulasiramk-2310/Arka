@@ -58,7 +58,7 @@ fn build_ui(app: &adw::Application) {
     content.set_margin_top(12);  content.set_margin_bottom(24);
     content.append(&arka_shell_common::theme::page_header(
         "Wi-Fi",
-        "Choose a network. Each network sees a random hardware address when ArkaOS privacy settings are in place.",
+        "Choose a network. Each network name gets its own made-up hardware address when ArkaOS privacy settings are in place.",
     ));
     content.append(&list);
     scroll.set_child(Some(&content));

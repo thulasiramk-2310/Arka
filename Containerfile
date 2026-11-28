@@ -187,7 +187,7 @@ COPY --from=vara-ui /out/hub /usr/share/vara/hub
 FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
 
 RUN mkdir -p /etc/NetworkManager/conf.d && \
-    printf '[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n' \
+    printf '[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=stable-ssid\nethernet.cloned-mac-address=random\n' \
       > /etc/NetworkManager/conf.d/00-arkaos-mac-random.conf
 
 RUN mkdir -p /usr/lib/bootc/install && \

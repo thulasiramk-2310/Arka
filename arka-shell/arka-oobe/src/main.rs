@@ -1135,7 +1135,7 @@ fn build_ui(app: &adw::Application) {
             // whether it is in place. "Configured" is not a promise of protection.
             let items: [(&str, &str); 6] = [
                 ("Encrypted DNS", "Requires system DNS lookups to be encrypted."),
-                ("Private network address", "Uses a random hardware address on network connections."),
+                ("Private network address", "On Wi-Fi, a made-up hardware address for each network name, the same one each time you return to it. On a cable, a new made-up address each time you connect."),
                 ("Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own."),
                 ("Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time."),
                 ("Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder."),

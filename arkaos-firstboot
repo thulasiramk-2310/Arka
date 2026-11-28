@@ -248,9 +248,9 @@ if [[ $COLS -ge 80 ]]; then
         "     ${D}Every DNS query goes over TLS to Quad9 (9.9.9.9:853).${E}" \
         "     ${D}Your ISP cannot see what sites you look up.${E}" \
         "" \
-        "   ${G}*${E} ${B}MAC randomisation${E}" \
-        "     ${D}Hardware address changes on every new connection.${E}" \
-        "     ${D}Prevents tracking you across different networks.${E}" \
+        "   ${G}*${E} ${B}Private network address${E}" \
+        "     ${D}Wi-Fi: one made-up address per network name. Cable: a new one each connection.${E}" \
+        "     ${D}Networks with different names see different addresses.${E}" \
         "" \
         "   ${G}*${E} ${B}Browser sandbox${E}" \
         "     ${D}Firefox runs isolated. It cannot read your home folder,${E}" \

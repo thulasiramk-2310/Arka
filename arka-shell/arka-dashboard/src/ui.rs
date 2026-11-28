@@ -589,7 +589,7 @@ pub fn build(
     grid.add_css_class("dash-grid");
     rows_box.append(&grid);
     let dns = SettingRow::new(&grid, "Encrypted DNS", "Requires system DNS lookups to be encrypted.");
-    let mac = SettingRow::new(&grid, "Private network address", "Uses a random hardware address on network connections.");
+    let mac = SettingRow::new(&grid, "Private network address", "On Wi-Fi, a made-up hardware address for each network name, the same one each time you return to it. On a cable, a new made-up address each time you connect.");
     let host = SettingRow::new(&grid, "Computer name", "Keeps the name chosen in setup: \"arka\" unless you picked your own.");
     let ipv6 = SettingRow::new(&grid, "Temporary IPv6 addresses", "Uses temporary IPv6 addresses that change over time.");
     let sandbox = SettingRow::new(&grid, "Sandboxed browser", "Opens Firefox in a sandbox that sees only your Downloads folder.");

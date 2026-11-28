@@ -58,7 +58,8 @@ does not prove every browser path works.
   scopes. It does not inspect every packet, prove reachability or govern every
   application's resolver. Destination IPs, other hostname disclosures and
   traffic patterns can remain visible.
-- **MAC:** checks randomization defaults and changed locally administered
+- **MAC:** checks the address settings (Wi-Fi: a per-network address, cable: a new
+  address each connection) and changed locally administered
   addresses on active physical interfaces. Reconnection can be required.
   Accounts, cookies and other signals can still identify devices or users.
 - **Hostname:** checks the configured static hostname, not every discovery

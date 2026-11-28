@@ -4,7 +4,7 @@ use crate::state::SharedState;
 use super::AsyncEnforcer;
 
 const NM_CONF: &str = "/etc/NetworkManager/conf.d/00-arkaos-mac-random.conf";
-const NM_CONF_CONTENT: &str = "[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n";
+const NM_CONF_CONTENT: &str = "[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=stable-ssid\nethernet.cloned-mac-address=random\n";
 
 pub struct MacEnforcer;
 
@@ -97,5 +97,20 @@ mod tests {
         assert!(!private_address("01:11:22:33:44:55", "00:11:22:33:44:55"));
         assert!(!private_address("02:11:22:33:44:55", ""));
         assert!(!private_address("random", "permanent"));
+    }
+
+    #[test]
+    fn wifi_is_stable_per_network_and_ethernet_is_random() {
+        assert!(NM_CONF_CONTENT.contains("wifi.cloned-mac-address=stable-ssid\n"));
+        assert!(NM_CONF_CONTENT.contains("ethernet.cloned-mac-address=random\n"));
+        assert!(NM_CONF_CONTENT.contains("wifi.scan-rand-mac-address=yes\n"));
+        assert!(!NM_CONF_CONTENT.contains("wifi.cloned-mac-address=random"));
+        assert!(!NM_CONF_CONTENT.contains("ethernet.cloned-mac-address=stable"));
+    }
+
+    #[test]
+    fn old_random_wifi_config_counts_as_drift() {
+        let old = "[device]\nwifi.scan-rand-mac-address=yes\n\n[connection]\nwifi.cloned-mac-address=random\nethernet.cloned-mac-address=random\n";
+        assert_ne!(old, NM_CONF_CONTENT);
     }
 }
